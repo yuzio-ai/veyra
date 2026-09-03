@@ -1,4 +1,9 @@
-# Codex Monitor
+# Veyra
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/veyra-logo-preview-dark.png">
+  <img src="assets/brand/veyra-logo-preview.png" alt="Veyra" width="360">
+</picture>
 
 使用 Swift 6 和 SwiftUI 编写的原生 macOS 菜单栏应用。顶部显示当前 Codex 账号的剩余额度与本机运行任务数，点击查看额度窗口、重置时间、任务模型、运行时长和累计 token 明细。
 
@@ -9,10 +14,10 @@
 构建完成后，打开：
 
 ```sh
-open 'build/Build/Products/Release/Codex Monitor.app'
+open 'build/Build/Products/Release/Veyra.app'
 ```
 
-应用只出现在屏幕顶部菜单栏，不显示 Dock 图标。也可以将生成的 `.app` 拖到自己的“应用程序”目录。菜单栏始终使用白底 Codex 图标。弹窗采用控制中心风格的系统毛玻璃背景和大圆角面板，背景、文字和进度条跟随系统浅色／深色外观，包括自动切换；macOS 26 使用原生 Liquid Glass，旧系统使用原生材质回退，并支持“减少透明度”。点击图标后，首先显示运行任务及累计、输入、输出 token；任务标题前不显示图标，点击累计用量展开缓存和推理明细。向下滚动可查看全部额度窗口，底部齿轮打开设置，电源按钮退出应用。
+应用只出现在屏幕顶部菜单栏，不显示 Dock 图标。也可以将生成的 `.app` 拖到自己的“应用程序”目录。菜单栏使用 Veyra 标志，并随系统背景自动调整深浅；面板和设置保留原始米灰色标志。弹窗采用控制中心风格的系统毛玻璃背景和大圆角面板，背景、文字和进度条跟随系统浅色／深色外观，包括自动切换；macOS 26 使用原生 Liquid Glass，旧系统使用原生材质回退，并支持“减少透明度”。点击图标后，首先显示运行任务及累计、输入、输出 token；任务标题前不显示图标，点击累计用量展开缓存和推理明细。向下滚动可查看全部额度窗口，底部齿轮打开设置，电源按钮退出应用。
 
 设置中的路径留空时会自动发现 Codex：优先检查已安装桌面应用，再检查 PATH 和常见 CLI 安装位置。默认数据目录为 `CODEX_HOME`，未设置时使用 `~/.codex`；从 Finder 启动通常不会继承终端中的环境变量，自定义目录请在设置中指定。
 
@@ -25,13 +30,28 @@ open 'build/Build/Products/Release/Codex Monitor.app'
 ./scripts/test.sh
 ```
 
-也可以打开 `CodexMonitor.xcodeproj`，选择 `CodexMonitor` scheme 后运行。工程使用本地 ad-hoc 签名，无需配置开发者团队。Release 默认构建 Apple Silicon 和 Intel 通用应用；此交付用于个人本机使用，不含 Developer ID 签名或公证。
+也可以打开 `Veyra.xcodeproj`，选择 `Veyra` scheme 后运行。工程使用本地 ad-hoc 签名，无需配置开发者团队。Release 默认构建 Apple Silicon 和 Intel 通用应用；此交付用于个人本机使用，不含 Developer ID 签名或公证。
 
 添加或移除 Swift 源文件后，可用以下脚本更新工程引用：
 
 ```sh
 python3 scripts/generate_project.py
 ```
+
+## 品牌素材
+
+原始矢量素材为 `assets/brand/veyra-icon.svg` 和 `assets/brand/veyra-logo.svg`。界面使用从 SVG 导出的透明标志和字标，应用图标为 `Veyra/AppIcon.icns`。导出仅裁掉透明留白并调整尺寸，保留矢量路径和渐变；菜单栏和字标随系统深浅色显示，面板图标保留原始配色。Logo 中的文字使用 SVG 指定的本机字体（优先 Avenir Next）。
+
+修改 SVG 后，在项目根目录重新生成素材和标准尺寸的 macOS 图标：
+
+```sh
+swift scripts/prepare_brand.swift
+swift scripts/make_icon.swift Veyra/Resources/VeyraMark.png build/Veyra.iconset
+iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
+python3 scripts/generate_project.py
+```
+
+应用、工程和 scheme 均名为 Veyra。Bundle ID 沿用 `local.codexmonitor.app`，以保留已有的路径设置。
 
 ## 数据口径
 
@@ -54,16 +74,16 @@ Codex 本地数据库与会话格式属于实现细节，升级后可能发生�
 
 ```sh
 # 一次真实只读联调，输出不含邮箱、凭据、标题或会话正文的 JSON，然后退出
-'build/Build/Products/Release/Codex Monitor.app/Contents/MacOS/Codex Monitor' --diagnose
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --diagnose
 
 # 用示例数据渲染布局与空状态，不启动 Codex；图片使用“减少透明度”外观
-'build/Build/Products/Release/Codex Monitor.app/Contents/MacOS/Codex Monitor' --render-previews "$PWD/build/previews"
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --render-previews "$PWD/build/previews"
 
 # 在独立窗口中检查与菜单相同的界面，使用真实数据
-'build/Build/Products/Release/Codex Monitor.app/Contents/MacOS/Codex Monitor' --show-panel
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --show-panel
 
 # 启动后点击菜单栏，捕获真实菜单内容，用于检查弹窗尺寸
-'build/Build/Products/Release/Codex Monitor.app/Contents/MacOS/Codex Monitor' --capture-menu-to "$PWD/build/menu.png"
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --capture-menu-to "$PWD/build/menu.png"
 ```
 
 核心测试覆盖额度窗口、缺失数据、登录／网络失败缓存、累计 token、增量／半行日志、文件替换／截断、子任务、完成／中断、进程证据、只读 SQLite，以及真实子进程上的 RPC 初始化和超时。

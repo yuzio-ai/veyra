@@ -22,24 +22,28 @@ def add(name, body):
     return ident(name)
 
 
-core = sorted(ROOT.glob('CodexMonitor/Core/*.swift'))
-app = sorted(ROOT.glob('CodexMonitor/App/*.swift'))
-tests = sorted(ROOT.glob('CodexMonitorTests/*.swift'))
+core = sorted(ROOT.glob('Veyra/Core/*.swift'))
+app = sorted(ROOT.glob('Veyra/App/*.swift'))
+tests = sorted(ROOT.glob('VeyraTests/*.swift'))
 all_files = core + app + tests
 for path in all_files:
     relative = str(path.relative_to(ROOT))
     add(relative, f'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {quoted(relative)}; sourceTree = "<group>";')
-add('info', 'isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = CodexMonitor/Info.plist; sourceTree = "<group>";')
-add('icon', 'isa = PBXFileReference; lastKnownFileType = image.icns; path = CodexMonitor/AppIcon.icns; sourceTree = "<group>";')
+add('info', 'isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Veyra/Info.plist; sourceTree = "<group>";')
+add('icon', 'isa = PBXFileReference; lastKnownFileType = image.icns; path = Veyra/AppIcon.icns; sourceTree = "<group>";')
 add('icon-build', f'isa = PBXBuildFile; fileRef = {ident("icon")};')
-for variant in ['Light', 'Dark']:
-    add(f'codex-mark-{variant}', f'isa = PBXFileReference; lastKnownFileType = image.png; path = CodexMonitor/Resources/CodexMark{variant}.png; sourceTree = "<group>";')
-    add(f'codex-mark-build-{variant}', f'isa = PBXBuildFile; fileRef = {ident(f"codex-mark-{variant}")};')
-add('product-app', 'isa = PBXFileReference; explicitFileType = wrapper.application; path = "Codex Monitor.app"; sourceTree = BUILT_PRODUCTS_DIR;')
-add('product-test', 'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = CodexMonitorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
+resources = sorted(ROOT.glob('Veyra/Resources/*.png'))
+resource_refs = []
+resource_builds = [ident('icon-build')]
+for path in resources:
+    relative = str(path.relative_to(ROOT))
+    resource_refs.append(add(relative, f'isa = PBXFileReference; lastKnownFileType = image.png; path = {quoted(relative)}; sourceTree = "<group>";'))
+    resource_builds.append(add(f'resource-{relative}', f'isa = PBXBuildFile; fileRef = {ident(relative)};'))
+add('product-app', 'isa = PBXFileReference; explicitFileType = wrapper.application; path = "Veyra.app"; sourceTree = BUILT_PRODUCTS_DIR;')
+add('product-test', 'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = VeyraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
 add('products', f'isa = PBXGroup; name = Products; children = ({ident("product-app")}, {ident("product-test")},); sourceTree = "<group>";')
 children = ', '.join(ident(str(p.relative_to(ROOT))) for p in all_files)
-add('main-group', f'isa = PBXGroup; children = ({children}, {ident("info")}, {ident("icon")}, {ident("codex-mark-Light")}, {ident("codex-mark-Dark")}, {ident("products")},); sourceTree = "<group>";')
+add('main-group', f'isa = PBXGroup; children = ({children}, {ident("info")}, {ident("icon")}, {", ".join(resource_refs)}, {ident("products")},); sourceTree = "<group>";')
 
 common = '''SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 6.0;
 SWIFT_STRICT_CONCURRENCY = complete; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Manual;
@@ -53,14 +57,15 @@ for target, files in [('app', core + app), ('test', core + tests)]:
         build_files.append(add(f'{target}-{name}', f'isa = PBXBuildFile; fileRef = {ident(name)};'))
     add(f'{target}-sources', f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ({", ".join(build_files)},); runOnlyForDeploymentPostprocessing = 0;')
     add(f'{target}-frameworks', 'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
-    resources = ', '.join(ident(name) for name in ['icon-build', 'codex-mark-build-Light', 'codex-mark-build-Dark']) + ',' if target == 'app' else ''
-    add(f'{target}-resources', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({resources}); runOnlyForDeploymentPostprocessing = 0;')
+    bundled_resources = ', '.join(resource_builds) + ',' if target == 'app' else ''
+    add(f'{target}-resources', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({bundled_resources}); runOnlyForDeploymentPostprocessing = 0;')
     for config in ['Debug', 'Release']:
+        # Keep the existing bundle IDs so a rename preserves saved user preferences.
         flags = 'SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;' if config == 'Debug' else 'SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";'
-        settings = 'PRODUCT_NAME = "Codex Monitor"; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.app; INFOPLIST_FILE = CodexMonitor/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";' if target == 'app' else 'PRODUCT_NAME = CodexMonitorTests; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.tests; GENERATE_INFOPLIST_FILE = YES; TEST_HOST = ""; BUNDLE_LOADER = "";'
+        settings = 'PRODUCT_NAME = "Veyra"; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.app; INFOPLIST_FILE = Veyra/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";' if target == 'app' else 'PRODUCT_NAME = VeyraTests; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.tests; GENERATE_INFOPLIST_FILE = YES; TEST_HOST = ""; BUNDLE_LOADER = "";'
         add(f'{target}-{config}', f'isa = XCBuildConfiguration; buildSettings = {{ {common} {flags} {settings} }}; name = {config};')
     add(f'{target}-configs', f'isa = XCConfigurationList; buildConfigurations = ({ident(f"{target}-Debug")}, {ident(f"{target}-Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
-    name = 'CodexMonitor' if target == 'app' else 'CodexMonitorTests'
+    name = 'Veyra' if target == 'app' else 'VeyraTests'
     product_type = 'com.apple.product-type.application' if target == 'app' else 'com.apple.product-type.bundle.unit-test'
     phases = ', '.join(ident(f'{target}-{phase}') for phase in ['sources', 'frameworks', 'resources'])
     add(f'target-{target}', f'isa = PBXNativeTarget; buildConfigurationList = {ident(f"{target}-configs")}; buildPhases = ({phases},); buildRules = (); dependencies = (); name = {name}; productName = {name}; productReference = {ident(f"product-{target}")}; productType = {quoted(product_type)};')
@@ -74,7 +79,7 @@ developmentRegion = zh_CN; hasScannedForEncodings = 0; knownRegions = (zh_CN, en
 mainGroup = {ident('main-group')}; productRefGroup = {ident('products')}; projectDirPath = "";
 projectRoot = ""; targets = ({ident('target-app')}, {ident('target-test')},);''')
 
-project = ROOT / 'CodexMonitor.xcodeproj'
+project = ROOT / 'Veyra.xcodeproj'
 project.mkdir(exist_ok=True)
 (project / 'project.pbxproj').write_text('// !$*UTF8*$!\n{ archiveVersion = 1; classes = {}; objectVersion = 56;\nobjects = {\n' + '\n'.join(objects) + f'\n}}; rootObject = {ident("project")};\n}}\n')
 
@@ -83,12 +88,12 @@ scheme.mkdir(parents=True, exist_ok=True)
 
 
 def reference(target):
-    name = 'CodexMonitor' if target == 'app' else 'CodexMonitorTests'
-    product = 'Codex Monitor.app' if target == 'app' else 'CodexMonitorTests.xctest'
-    return f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{ident(f"target-{target}")}" BuildableName="{product}" BlueprintName="{name}" ReferencedContainer="container:CodexMonitor.xcodeproj"/>'
+    name = 'Veyra' if target == 'app' else 'VeyraTests'
+    product = 'Veyra.app' if target == 'app' else 'VeyraTests.xctest'
+    return f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{ident(f"target-{target}")}" BuildableName="{product}" BlueprintName="{name}" ReferencedContainer="container:Veyra.xcodeproj"/>'
 
 
-(scheme / 'CodexMonitor.xcscheme').write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
+(scheme / 'Veyra.xcscheme').write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
 <Scheme LastUpgradeVersion="2600" version="1.3">
   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries>
     <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{reference('app')}</BuildActionEntry>
@@ -103,4 +108,4 @@ def reference(target):
   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
 </Scheme>
 ''')
-print('Generated CodexMonitor.xcodeproj')
+print('Generated Veyra.xcodeproj')

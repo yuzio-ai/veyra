@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct CodexMonitorApp: App {
+struct VeyraApp: App {
     @NSApplicationDelegateAdaptor(MonitorAppDelegate.self) private var delegate
     @State private var store = MonitorStore.shared
 
@@ -11,10 +11,10 @@ struct CodexMonitorApp: App {
             MonitorPanel(store: store)
         } label: {
             HStack(spacing: 4) {
-                CodexIcon()
+                VeyraIcon(isTemplate: true)
                 Text(store.menuLabel).monospacedDigit()
             }
-            .accessibilityLabel("Codex Monitor，\(store.menuLabel)")
+            .accessibilityLabel("Veyra，\(store.menuLabel)")
         }
         .menuBarExtraStyle(.window)
 
@@ -49,7 +49,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             let view = NSHostingView(rootView: MonitorPanel(store: MonitorStore.shared))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 660),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "Codex Monitor"
+            window.title = "Veyra"
             window.contentView = view
             window.center(); window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

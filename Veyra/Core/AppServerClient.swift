@@ -88,7 +88,7 @@ actor AppServerClient {
         process = child
         do { try child.run() } catch { shutdown(); throw MonitorFailure("无法启动 Codex：\(error.localizedDescription)") }
         _ = try await request("initialize", params: .object([
-            "clientInfo": .object(["name": .string("codex_monitor"), "title": .string("Codex Monitor"), "version": .string("1.0.0")]),
+            "clientInfo": .object(["name": .string("veyra"), "title": .string("Veyra"), "version": .string("1.0.0")]),
             "capabilities": .object(["experimentalApi": .bool(false)])
         ]))
         try send(.object(["method": .string("initialized")]))

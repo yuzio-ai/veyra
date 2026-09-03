@@ -45,9 +45,9 @@ struct MonitorPanel: View {
 
     private var header: some View {
         HStack(spacing: 11) {
-            CodexIcon(size: 38)
+            VeyraIcon(size: 38)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Codex Monitor").font(.system(size: 17, weight: .semibold))
+                VeyraWordmark()
                 HStack(spacing: 5) {
                     Circle().fill(store.taskError == nil ? monitorAccent : .orange).frame(width: 5, height: 5)
                     Text("本机活动").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -172,7 +172,7 @@ struct MonitorPanel: View {
             }
             .buttonStyle(.plain)
             .modifier(ControlCenterTile(cornerRadius: 17, interactive: true))
-            .help("退出 Codex Monitor").accessibilityLabel("退出")
+            .help("退出 Veyra").accessibilityLabel("退出")
         }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 14)
     }
 
