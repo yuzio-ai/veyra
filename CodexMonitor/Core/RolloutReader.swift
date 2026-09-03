@@ -1,0 +1,116 @@
+import Foundation
+
+struct TurnBoundary: Equatable, Sendable {
+    let turnID: String?
+    let isRunning: Bool
+    let date: Date?
+}
+
+struct RolloutState: Sendable {
+    var usage: TokenUsage?
+    var usageDate: Date?
+    var boundary: TurnBoundary?
+    var model: String?
+}
+
+/// Only inspects top-level lifecycle and token events, never transcript text or tool output.
+enum RolloutEvent {
+    static func apply(_ line: Data, to state: inout RolloutState, newestFirst: Bool = false) {
+        guard let event = try? JSONValue.decode(line) else { return }
+        let payload = event["payload"]
+        if event["type"].string == "turn_context" {
+            if !newestFirst || state.model == nil { state.model = payload["model"].string ?? state.model }
+            return
+        }
+        guard event["type"].string == "event_msg" else { return }
+        let kind = payload["type"].string
+        if kind == "token_count", payload["info"]["total_token_usage"].object != nil {
+            if !newestFirst || state.usage == nil {
+                state.usage = TokenUsage(json: payload["info"]["total_token_usage"])
+                state.usageDate = timestamp(event["timestamp"].string)
+            }
+        }
+        if ["task_started", "task_complete", "task_completed", "turn_aborted", "task_failed", "turn_failed"].contains(kind) {
+            if !newestFirst || state.boundary == nil {
+                state.boundary = TurnBoundary(turnID: payload["turn_id"].string, isRunning: kind == "task_started",
+                                              date: timestamp(event["timestamp"].string))
+            }
+        }
+    }
+    static func timestamp(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = parser.date(from: value) { return date }
+        parser.formatOptions = [.withInternetDateTime]
+        return parser.date(from: value)
+    }
+}
+
+struct RolloutReader {
+    private struct Cursor {
+        var identity: String
+        var offset: UInt64
+        var modified: Date?
+        var partial: Data
+        var state: RolloutState
+    }
+    private var cursors: [String: Cursor] = [:]
+    private let chunkSize = 256 * 1_024
+
+    mutating func read(_ url: URL, requireBoundary: Bool = true) throws -> RolloutState {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+        let identity = "\(attributes[.systemNumber] ?? 0):\(attributes[.systemFileNumber] ?? 0)"
+        let modified = attributes[.modificationDate] as? Date
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        if var cursor = cursors[url.path], cursor.identity == identity, size >= cursor.offset,
+           (!requireBoundary || cursor.state.boundary != nil),
+           !(size == cursor.offset && modified != cursor.modified) {
+            if size > cursor.offset {
+                try file.seek(toOffset: cursor.offset)
+                var remaining = size - cursor.offset
+                while remaining > 0 {
+                    let data = try file.read(upToCount: Int(min(UInt64(chunkSize), remaining))) ?? Data()
+                    if data.isEmpty { break }
+                    remaining -= UInt64(data.count); cursor.offset += UInt64(data.count)
+                    cursor.partial.append(data)
+                    consumeLines(from: &cursor.partial, state: &cursor.state)
+                }
+            }
+            cursor.modified = modified
+            cursors[url.path] = cursor
+            return cursor.state
+        }
+        var state = RolloutState(), carry = Data(), partial = Data()
+        var position = size
+        var firstChunk = true
+        while position > 0 {
+            let start = position > UInt64(chunkSize) ? position - UInt64(chunkSize) : 0
+            try file.seek(toOffset: start)
+            var data = try file.read(upToCount: Int(position - start)) ?? Data()
+            data.append(carry)
+            var parts: [Data] = data.split(separator: UInt8(0x0a), omittingEmptySubsequences: false).map { Data($0) }
+            if firstChunk {
+                partial = parts.removeLast()
+                firstChunk = false
+            }
+            carry = parts.isEmpty ? Data() : parts.removeFirst()
+            for line in parts.reversed() { RolloutEvent.apply(line, to: &state, newestFirst: true) }
+            if start == 0 { RolloutEvent.apply(carry, to: &state, newestFirst: true) }
+            position = start
+            if state.usage != nil && (!requireBoundary || state.boundary != nil) { break }
+        }
+        cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial, state: state)
+        return state
+    }
+
+    private func consumeLines(from data: inout Data, state: inout RolloutState) {
+        while let newline = data.firstIndex(of: 0x0a) {
+            RolloutEvent.apply(Data(data[..<newline]), to: &state)
+            data.removeSubrange(...newline)
+        }
+    }
+    mutating func keepOnly(paths: Set<String>) { cursors = cursors.filter { paths.contains($0.key) } }
+}
