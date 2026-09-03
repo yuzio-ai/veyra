@@ -82,7 +82,8 @@ enum Diagnostics {
                 }), let view = window.contentView else { continue }
                 try? await Task.sleep(for: .milliseconds(600))
                 view.layoutSubtreeIfNeeded()
-                print("Menu window: \(window.windowNumber), size: \(window.frame.size), screen: \(window.screen.map { String(describing: $0.visibleFrame) } ?? "unknown")")
+                let description = "Menu window: \(window.windowNumber), size: \(window.frame.size), screen: \(window.screen.map { String(describing: $0.visibleFrame) } ?? "unknown")\n"
+                FileHandle.standardOutput.write(Data(description.utf8))
                 if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     if let data = bitmap.representation(using: .png, properties: [:]) {
@@ -102,20 +103,27 @@ enum Diagnostics {
             let location = MonitorStore.shared.location
             let client = AppServerClient(), reader = LocalTaskReader()
             let clock = ContinuousClock(), start = clock.now
-            async let quotaRead = client.fetch(location: location)
             do {
                 let initial = try await reader.fetch(home: location.home)
                 let firstDuration = start.duration(to: clock.now)
                 let secondStart = clock.now
                 let incremental = try await reader.fetch(home: location.home)
                 let secondDuration = secondStart.duration(to: clock.now)
-                let quota = await quotaRead
+                let quota = CommandLine.arguments.contains("--network")
+                    ? await client.fetch(location: location) : QuotaRefresh(snapshot: incremental.localQuota)
                 let result: [String: JSONValue] = [
                     "quotaError": quota.error.map { .string($0.message) } ?? .null,
                     "quotaErrorCode": quota.error.map { .string($0.rawValue) } ?? .null,
                     "taskWarning": initial.warning.map(JSONValue.string) ?? .null,
                     "initialRead": .string(String(describing: firstDuration)),
                     "incrementalRead": .string(String(describing: secondDuration)),
+                    "quotaSource": quota.snapshot.map { .string($0.source.rawValue) } ?? .null,
+                    "metadataQueries": .number(Double(incremental.metrics.metadataQueries)),
+                    "historyQueries": .number(Double(incremental.metrics.historyQueries)),
+                    "rolloutBytes": .number(Double(incremental.metrics.rolloutBytes)),
+                    "rolloutOpens": .number(Double(incremental.metrics.rolloutOpens)),
+                    "quotaHTTPStatus": quota.failureDetails?.httpStatus.map { .number(Double($0)) } ?? .null,
+                    "quotaRetryAfterSeconds": quota.failureDetails?.retryAfter.map(JSONValue.number) ?? .null,
                     "windows": .array((quota.snapshot?.windows ?? []).map { .object([
                         "bucket": .string($0.bucketID), "window": .string($0.durationLabel),
                         "remainingPercent": $0.remainingPercent.map(JSONValue.number) ?? .null

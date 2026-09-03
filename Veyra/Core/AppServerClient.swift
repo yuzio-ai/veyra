@@ -26,6 +26,7 @@ actor AppServerClient {
         location = newLocation
         authStamp = stamp
         var account: AccountSnapshot?
+        var didRequestQuota = false
         do {
             if process == nil { try await start(at: newLocation) }
             let auth = try await request("account/read", params: .object(["refreshToken": .bool(false)]))
@@ -39,6 +40,7 @@ actor AppServerClient {
                 lastAccount = account
                 return QuotaRefresh(account: account, error: .unsupportedAuthentication, invalidatePrevious: true)
             }
+            didRequestQuota = true
             let data = try await request("account/rateLimits/read")
             let snapshot = QuotaSnapshot.parse(data)
             account = AccountSnapshot(json: rawAccount, accountID: snapshot.accountID)
@@ -48,14 +50,16 @@ actor AppServerClient {
             authStamp = Self.authenticationStamp(at: newLocation.home)
             return QuotaRefresh(account: account, snapshot: snapshot,
                                 error: snapshot.windows.isEmpty ? .noQuotaWindows : nil,
-                                invalidatePrevious: changed || identityChanged)
+                                invalidatePrevious: changed || identityChanged, didRequestQuota: true)
         } catch {
             shutdown()
             // Keep the full account identity when the account is unchanged but quota networking fails.
             if !changed, let old = lastAccount, old.email == account?.email, old.authType == account?.authType {
                 account = old
             }
-            return QuotaRefresh(account: account, error: .classify(error), invalidatePrevious: changed)
+            let details = error as? QuotaFailureDetails
+            return QuotaRefresh(account: account, error: details?.category ?? .classify(error), invalidatePrevious: changed,
+                                failureDetails: details, didRequestQuota: didRequestQuota)
         }
     }
 
@@ -143,7 +147,7 @@ actor AppServerClient {
             guard let id = value["id"].integer, pending[id] != nil else { continue }
             if value["error"].object != nil {
                 // Neither message nor data is retained: both can contain private account data.
-                finish(id: id, result: .failure(QuotaFailure.rpcFailed))
+                finish(id: id, result: .failure(QuotaFailureDetails(rpcError: value["error"])))
             } else if object["result"] != nil {
                 finish(id: id, result: .success(value["result"]))
             } else {
@@ -175,7 +179,7 @@ actor AppServerClient {
         process = nil; input = nil; output = nil; errors = nil; buffer = Data()
         for id in Array(pending.keys) { finish(id: id, result: .failure(reason)) }
     }
-    private static func authenticationStamp(at home: URL) -> String {
+    static func authenticationStamp(at home: URL) -> String {
         let attrs = try? FileManager.default.attributesOfItem(atPath: home.appendingPathComponent("auth.json").path)
         let modified = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         return "\(attrs?[.systemFileNumber] ?? "missing"):\(modified):\(attrs?[.size] ?? 0)"

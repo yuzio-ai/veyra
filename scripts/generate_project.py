@@ -50,7 +50,7 @@ SWIFT_STRICT_CONCURRENCY = complete; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE
 CODE_SIGN_IDENTITY = "-"; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = NO;
 OTHER_LDFLAGS = "$(inherited) -lsqlite3"; COMBINE_HIDPI_IMAGES = YES;'''
 
-for target, files in [('app', core + app), ('test', core + tests)]:
+for target, files in [('app', core + app), ('test', core + [ROOT / 'Veyra/App/MonitorStore.swift'] + tests)]:
     build_files = []
     for path in files:
         name = str(path.relative_to(ROOT))

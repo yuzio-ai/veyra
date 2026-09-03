@@ -1,7 +1,10 @@
 import XCTest
 import Foundation
+import Darwin
 
 final class AppServerClientTests: XCTestCase {
+    // Allow cold subprocess launch under testmanagerd; timeout behavior has a
+    // separate short-deadline regression in CoreTests.
     private func home() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -46,7 +49,7 @@ final class AppServerClientTests: XCTestCase {
               esac
             fi
             """#)
-            let client = AppServerClient(requestTimeout: .seconds(2))
+            let client = AppServerClient(requestTimeout: .seconds(5))
             var display = QuotaDisplayState()
             if phase == "account/read" {
                 let first = await client.fetch(location: location)
@@ -79,7 +82,7 @@ final class AppServerClientTests: XCTestCase {
             continue ;;
         esac
         """#)
-        let client = AppServerClient(requestTimeout: .seconds(2))
+        let client = AppServerClient(requestTimeout: .seconds(5))
         let result = await client.fetch(location: location)
         await client.shutdown()
         XCTAssertEqual(result.error, .rpcFailed)
@@ -96,7 +99,7 @@ final class AppServerClientTests: XCTestCase {
         let home = try home(), executable = home.appendingPathComponent("private-executable")
         try "#!/nonexistent/PRIVATE_INTERPRETER\n".write(to: executable, atomically: false, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-        let client = AppServerClient(requestTimeout: .seconds(2))
+        let client = AppServerClient(requestTimeout: .seconds(5))
         let failed = await client.fetch(location: CodexLocation(home: home, executable: executable))
         XCTAssertEqual(failed.error, .launchFailed)
         XCTAssertFalse(failed.error?.message.contains(home.path) == true)
@@ -107,10 +110,37 @@ final class AppServerClientTests: XCTestCase {
         await client.shutdown()
     }
 
+    func testStructuredRateLimitMetadataAndSidecarCleanupAfterSuccessOrFailure() async throws {
+        for failure in [false, true] {
+            let home = try home()
+            let response = failure ? #"""
+            case "$request" in
+              *'"method":"account/rateLimits/read"'*)
+                printf '%s\n' '{"id":'"$rpc_id"',"error":{"code":-32000,"message":"PRIVATE","data":{"http_status":429,"retry_after_seconds":3600}}}'
+                continue ;;
+            esac
+            """# : ""
+            let location = try fakeCodex(home: home, onRequest: "printf '%s' \"$$\" > \"$CODEX_HOME/pid\"\n" + response)
+            let client = AppServerClient(requestTimeout: .seconds(5))
+            let result = await client.fetch(location: location)
+            await client.shutdown()
+            XCTAssertTrue(result.didRequestQuota)
+            XCTAssertEqual(result.error, failure ? .rateLimited : nil)
+            XCTAssertEqual(result.failureDetails?.httpStatus, failure ? 429 : nil)
+            XCTAssertEqual(result.failureDetails?.retryAfter, failure ? 3600 : nil)
+            let pid = try XCTUnwrap(Int32(String(contentsOf: home.appendingPathComponent("pid"), encoding: .utf8)))
+            for _ in 0..<100 {
+                if kill(pid, 0) == -1 { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(kill(pid, 0), -1, "The manual calibration sidecar must exit")
+        }
+    }
+
     func testMalformedResponsesFailWithSafeProtocolError() async throws {
         for response in ["not-json PRIVATE_RESPONSE", #"{"id":1}"#] {
             let location = try fakeCodex(home: home(), onRequest: "printf '%s\\n' '\(response)'\ncontinue")
-            let client = AppServerClient(requestTimeout: .seconds(2))
+            let client = AppServerClient(requestTimeout: .seconds(5))
             let result = await client.fetch(location: location)
             XCTAssertEqual(result.error, .protocolError)
             await client.shutdown()
@@ -124,7 +154,7 @@ final class AppServerClientTests: XCTestCase {
         XCTAssertEqual(failure, .unknown)
         var display = QuotaDisplayState()
         display.apply(QuotaRefresh(error: failure))
-        XCTAssertEqual(display.error, "额度读取遇到未知错误，稍后将自动重试。")
+        XCTAssertEqual(display.error, "额度读取遇到未知错误，请稍后手动校准。")
         XCTAssertEqual(QuotaFailure.classify(QuotaFailure.timeout), .timeout)
     }
 }

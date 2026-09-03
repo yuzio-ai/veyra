@@ -59,7 +59,7 @@ for line in sys.stdin:
 '''
 
 
-def run_case(app, mode, expected_code):
+def run_case(app, mode, expected_code, network=True):
     with tempfile.TemporaryDirectory(prefix="veyra-diagnostics-") as directory:
         home = Path(directory)
         with sqlite3.connect(home / "state_5.sqlite") as db:
@@ -76,6 +76,8 @@ def run_case(app, mode, expected_code):
         environment = dict(os.environ, CODEX_HOME=str(home))
         # NSArgumentDomain overrides saved settings without persisting any preferences.
         command = [str(app), "--diagnose", "-codexHome", str(home), "-codexExecutable", str(executable)]
+        if network:
+            command.append("--network")
         # Python restores SIGPIPE to its default in the app, exposing missing descriptor protection.
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                               env=environment, restore_signals=True, start_new_session=True) as process:
@@ -97,14 +99,18 @@ def run_case(app, mode, expected_code):
         assert payload["tasks"] == [], f"{mode}: expected the isolated empty task database"
         if expected_code is None:
             assert payload["quotaError"] is None
-            assert payload["windows"][0]["remainingPercent"] == 75
+            if network:
+                assert payload["windows"][0]["remainingPercent"] == 75
+            else:
+                assert payload["windows"] == []
+                assert not (home / "requests").exists(), "Local diagnostics started the quota sidecar"
         else:
             assert isinstance(payload["quotaError"], str) and payload["quotaError"]
-        if mode != "launch_failed":
+        if mode != "launch_failed" and network:
             requests = (home / "requests").read_text().splitlines()
             assert requests[0] == "initialize"
             assert set(requests) <= {"initialize", "initialized", "account/read", "account/rateLimits/read"}
-        print(f"PASS diagnostics: {mode}")
+        print(f"PASS diagnostics: {mode} ({'network fixture' if network else 'local only'})")
 
 
 def main():
@@ -121,7 +127,8 @@ def main():
     ]
     for mode, expected_code in cases:
         run_case(app, mode, expected_code)
-    print(f"Passed {len(cases)} isolated app diagnostics checks")
+    run_case(app, "success", None, network=False)
+    print(f"Passed {len(cases) + 1} isolated app diagnostics checks")
 
 
 if __name__ == "__main__":

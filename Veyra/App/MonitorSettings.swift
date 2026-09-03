@@ -16,7 +16,7 @@ struct MonitorSettings: View {
             }
             pathField("Codex 数据目录", value: $home, placeholder: CodexLocation.resolve().home.path, folder: true)
             pathField("Codex 可执行文件", value: $executable, placeholder: CodexLocation.resolve().executable?.path ?? "自动查找", folder: false)
-            Text("留空即可自动查找。任务每 5 秒刷新，账号额度每 60 秒刷新。应用只读取任务，不会启动模型请求。")
+            Text("留空即可自动查找。菜单打开或有运行任务时每 5 秒检查，空闲时每 30 秒检查。额度默认读取本地快照，仅点击「联网校准」时请求账号额度。应用不会启动模型请求。")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Divider()
             HStack {

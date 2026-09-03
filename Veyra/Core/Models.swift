@@ -2,6 +2,7 @@ import Foundation
 
 struct AccountSnapshot: Equatable, Sendable {
     let identity: String
+    let accountID: String?
     let email: String?
     let plan: String?
     let authType: String
@@ -10,7 +11,13 @@ struct AccountSnapshot: Equatable, Sendable {
         email = json["email"].string
         plan = json["planType"].string
         authType = json["type"].string ?? "unknown"
-        identity = accountID ?? json["accountId"].string ?? "\(authType):\(email ?? "unknown"):\(plan ?? "")"
+        self.accountID = accountID ?? json["accountId"].string
+        identity = self.accountID ?? "\(authType):\(email ?? "unknown"):\(plan ?? "")"
+    }
+
+    func matches(_ other: AccountSnapshot) -> Bool {
+        if let accountID, let otherID = other.accountID { return accountID == otherID }
+        return email != nil && email == other.email && authType == other.authType && plan == other.plan
     }
 }
 
@@ -34,10 +41,20 @@ struct QuotaWindow: Identifiable, Equatable, Sendable {
     }
 }
 
+enum QuotaSource: String, Sendable { case local, network }
+
 struct QuotaSnapshot: Equatable, Sendable {
     let windows: [QuotaWindow]
     let fetchedAt: Date
     let accountID: String?
+    var source: QuotaSource = .network
+    var bucketDates: [String: Date] = [:]
+    func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
+    func isStale(bucketID: String, at now: Date) -> Bool {
+        guard source == .local else { return false }
+        return now.timeIntervalSince(recordedAt(for: bucketID)) > 300
+            || windows.contains { $0.bucketID == bucketID && ($0.resetsAt.map { $0 <= now } ?? false) }
+    }
     var menuWindow: QuotaWindow? {
         windows.first { $0.bucketID == "codex" && $0.isPrimary }
             ?? windows.first { $0.bucketID == "codex" } ?? windows.first
@@ -81,6 +98,9 @@ enum QuotaFailure: String, Error, LocalizedError, Sendable, CaseIterable {
     case timeout
     case protocolError = "protocol_error"
     case rpcFailed = "rpc_failed"
+    case rateLimited = "rate_limited"
+    case unauthorized
+    case serviceUnavailable = "service_unavailable"
     case notLoggedIn = "not_logged_in"
     case unsupportedAuthentication = "unsupported_authentication"
     case noQuotaWindows = "no_quota_windows"
@@ -91,14 +111,17 @@ enum QuotaFailure: String, Error, LocalizedError, Sendable, CaseIterable {
         case .missingExecutable: "未找到 Codex 可执行文件，请在设置中指定。"
         case .missingHome: "Codex 数据目录不存在，请检查设置。"
         case .launchFailed: "无法启动 Codex，请检查可执行文件和数据目录。"
-        case .disconnected: "Codex 连接已断开，稍后将自动重试。"
-        case .timeout: "连接 Codex 超时，稍后将自动重试。"
+        case .disconnected: "Codex 连接已断开，请稍后手动校准。"
+        case .timeout: "连接 Codex 超时，请稍后手动校准。"
         case .protocolError: "Codex 返回了无法识别的数据，请检查版本兼容性。"
         case .rpcFailed: "额度读取失败，请检查 Codex 登录与网络连接后重试。"
+        case .rateLimited: "额度接口暂时限流，请等待冷却结束后再校准。"
+        case .unauthorized: "额度请求未获授权，请检查 Codex 登录状态。"
+        case .serviceUnavailable: "额度服务暂时不可用，请稍后手动校准。"
         case .notLoggedIn: "尚未登录 Codex。请先在 Codex 桌面端或 CLI 中登录。"
         case .unsupportedAuthentication: "当前登录方式不提供 ChatGPT 订阅额度。"
         case .noQuotaWindows: "账号暂未返回可用额度窗口。"
-        case .unknown: "额度读取遇到未知错误，稍后将自动重试。"
+        case .unknown: "额度读取遇到未知错误，请稍后手动校准。"
         }
     }
 
@@ -113,19 +136,47 @@ struct QuotaRefresh: Sendable {
     var error: QuotaFailure?
     /// Set when auth is absent/changed, even if the subsequent network request fails.
     var invalidatePrevious: Bool = false
+    var failureDetails: QuotaFailureDetails?
+    var didRequestQuota = false
 }
 
 struct QuotaDisplayState: Sendable {
     var account: AccountSnapshot?
     var snapshot: QuotaSnapshot?
     var error: String?
-    mutating func apply(_ result: QuotaRefresh) {
-        if result.invalidatePrevious || (account != nil && result.account != nil && account?.identity != result.account?.identity) {
-            snapshot = nil
-            account = nil
+    private(set) var localSnapshot: QuotaSnapshot?
+    private var networkSnapshot: QuotaSnapshot?
+    private var networkAccount: AccountSnapshot?
+
+    mutating func updateLocal(_ value: QuotaSnapshot?) {
+        localSnapshot = value
+        selectSource()
+    }
+    mutating func invalidateAccount() {
+        networkSnapshot = nil; networkAccount = nil
+        account = nil; snapshot = localSnapshot
+    }
+    private mutating func selectSource() {
+        if let localSnapshot, networkSnapshot == nil || localSnapshot.fetchedAt > networkSnapshot!.fetchedAt {
+            snapshot = localSnapshot; account = nil
+        } else {
+            snapshot = networkSnapshot; account = networkSnapshot == nil ? nil : networkAccount
         }
-        if let newAccount = result.account { account = newAccount }
-        if let newSnapshot = result.snapshot { snapshot = newSnapshot }
+    }
+    mutating func apply(_ result: QuotaRefresh) {
+        let changedAccount = networkAccount.flatMap { previous in result.account.map { !previous.matches($0) } } ?? false
+        if result.invalidatePrevious || changedAccount {
+            invalidateAccount()
+        }
+        if let newAccount = result.account {
+            // A fresh sidecar's account/read lacks the quota account ID. If its quota
+            // request fails, retain the previously verified identity for this account.
+            if result.snapshot != nil || networkAccount?.matches(newAccount) != true {
+                networkAccount = newAccount
+            }
+        }
+        if let newSnapshot = result.snapshot { networkSnapshot = newSnapshot }
+        selectSource()
         error = result.error?.message
     }
 }
@@ -172,6 +223,9 @@ struct TaskReadResult: Sendable {
     let tasks: [TaskSnapshot]
     let fetchedAt: Date
     let warning: String?
+    var localQuota: QuotaSnapshot?
+    var quotaWarning: String?
+    var metrics = TaskReadMetrics()
 }
 
 enum DisplayFormat {

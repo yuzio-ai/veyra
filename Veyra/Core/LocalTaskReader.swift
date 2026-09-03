@@ -8,6 +8,7 @@ struct ThreadMetadata: Sendable {
     let source: String
     let updatedAt: Date
     let tokens: Int64?
+    var archived = false
     var parentID: String? {
         guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return nil }
         return value["subagent"]["thread_spawn"]["parent_thread_id"].string
@@ -53,15 +54,13 @@ enum TaskResolver {
         return .ambiguous
     }
 
-    static func resolve(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, evidence: ProcessEvidence) -> TaskSnapshot? {
+    static func resolve(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, evidence: ProcessEvidence, processMatch: Bool? = nil) -> TaskSnapshot? {
         guard !metadata.isInternal else { return nil }
         let resolution = mergeBoundaries(rollout: rollout.boundary, stored: storedTurn)
         let boundary: TurnBoundary?
         if case .known(let value) = resolution { boundary = value } else { boundary = nil }
         guard boundary?.isRunning != false else { return nil }
-        let canonicalPath = URL(fileURLWithPath: metadata.rolloutPath).resolvingSymlinksInPath().path
-        let hasProcess = evidence.threadIDs.contains(metadata.id) || evidence.rolloutPaths.contains(metadata.rolloutPath)
-            || evidence.rolloutPaths.contains(canonicalPath)
+        let hasProcess = processMatch ?? evidence.matches(threadID: metadata.id, path: metadata.rolloutPath)
         guard hasProcess || boundary?.isRunning == true || resolution == .ambiguous else { return nil }
         let activity: TaskActivity = boundary?.isRunning == true && hasProcess && evidence.reliable ? .running : .unknown
         let usage = rollout.usage ?? TokenUsage(total: metadata.tokens)
@@ -75,69 +74,130 @@ enum TaskResolver {
 actor LocalTaskReader {
     private var rollouts = RolloutReader()
     private var lastHome: URL?
+    private let metadataCache = SQLiteReadCache<[ThreadMetadata]>()
+    private let historyCache = SQLiteReadCache<[String: TurnBoundary]>()
+    private var quotaByPath: [String: [String: LocalQuotaBucket]] = [:]
+    private let collectEvidence: @Sendable (URL) async -> ProcessEvidence
+
+    init(collectEvidence: @escaping @Sendable (URL) async -> ProcessEvidence = ProcessEvidence.collect) {
+        self.collectEvidence = collectEvidence
+    }
 
     func fetch(home: URL) async throws -> TaskReadResult {
-        if lastHome != home { rollouts = RolloutReader(); lastHome = home }
-        let evidence = await ProcessEvidence.collect(home: home)
+        if lastHome != home {
+            rollouts = RolloutReader(); lastHome = home
+            metadataCache.reset(); historyCache.reset(); quotaByPath = [:]
+        }
+        var metrics = TaskReadMetrics()
+        let evidence = await collectEvidence(home)
+        metrics.processCollections = 1
         guard let stateURL = SQLiteReader.database(named: "state", in: home) else {
+            metadataCache.reset()
             throw MonitorFailure("未找到 Codex 任务数据库。请先运行 Codex，或在设置中选择数据目录。")
         }
-        let db = try SQLiteReader(url: stateURL)
-        let columns = try db.columns(in: "threads")
-        guard columns.contains("id"), columns.contains("rollout_path") else { throw MonitorFailure("Codex 数据库版本暂不兼容。") }
-        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used"].map { columns.contains($0) ? $0 : "NULL AS \($0)" }
-        let filter = columns.contains("archived") ? " WHERE archived = 0" : ""
-        let rows = try db.rows("SELECT id, rollout_path, \(optional.joined(separator: ", ")) FROM threads\(filter)")
-        let metadata = rows.compactMap { row -> ThreadMetadata? in
-            guard let id = row["id"], let path = row["rollout_path"] else { return nil }
-            let name = row["name"].flatMap { $0.isEmpty ? nil : $0 } ?? row["title"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名任务"
-            return ThreadMetadata(id: id, title: name, rolloutPath: path, model: row["model"], source: row["source"] ?? "",
-                                  updatedAt: Date(timeIntervalSince1970: Double(row["updated_at"] ?? "0") ?? 0),
-                                  tokens: row["tokens_used"].flatMap(Int64.init))
-        }.filter { !$0.isInternal }
+        let loaded = try metadataCache.load(url: stateURL, query: Self.readMetadata)
+        let metadata = loaded.value
+        metrics.metadataQueries = loaded.queried ? 1 : 0
         var turns: [String: TurnBoundary] = [:]
         var historyUnavailable = false
         if let historyURL = SQLiteReader.database(named: "thread_history", in: home) {
             do {
-                let history = try SQLiteReader(url: historyURL)
-                let rows = try history.rows("""
-                    SELECT t.thread_id, t.turn_id, t.status, t.started_at, t.completed_at
-                    FROM thread_turns t WHERE t.rollout_ordinal =
-                    (SELECT MAX(x.rollout_ordinal) FROM thread_turns x WHERE x.thread_id = t.thread_id)
-                    """)
-                for row in rows {
-                    guard let id = row["thread_id"] else { continue }
-                    let running = row["status"] == "inProgress"
-                    let seconds = Double((running ? row["started_at"] : row["completed_at"]) ?? "")
-                    turns[id] = TurnBoundary(turnID: row["turn_id"], isRunning: running, date: seconds.map(Date.init(timeIntervalSince1970:)))
-                }
+                let loaded = try historyCache.load(url: historyURL, query: Self.readHistory)
+                turns = loaded.value
+                metrics.historyQueries = loaded.queried ? 1 : 0
             } catch { historyUnavailable = true }
-        }
-        var tasks: [TaskSnapshot] = []
-        var unreadable = false
+        } else { historyCache.reset() }
+
+        // Include archived sessions for quota discovery, with a strict cold-read budget.
+        let quotaPaths = Set(metadata.sorted {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.id < $1.id
+        }.prefix(20).map(\.rolloutPath))
+        var tasks: [TaskSnapshot] = [], unreadable = false, quotaUnreadable = false
+        var readPaths: [String: RolloutState] = [:]
         let recent = Date().addingTimeInterval(-86_400)
-        for thread in metadata {
-            let canonicalPath = URL(fileURLWithPath: thread.rolloutPath).resolvingSymlinksInPath().path
-            let hasProcess = evidence.threadIDs.contains(thread.id) || evidence.rolloutPaths.contains(thread.rolloutPath)
-                || evidence.rolloutPaths.contains(canonicalPath)
+        // Task reads go first so a shared path is never tail-read and then reopened.
+        for thread in metadata where !thread.archived {
+            let hasProcess = evidence.matches(threadID: thread.id, path: thread.rolloutPath)
             let stored = turns[thread.id]
-            // Old completed logs need no reads. Legacy active CLI sessions are discovered through open files.
             guard hasProcess || stored?.isRunning == true || (stored == nil && thread.updatedAt > recent) else { continue }
             let rollout: RolloutState
-            do { rollout = try rollouts.read(URL(fileURLWithPath: thread.rolloutPath), requireBoundary: stored == nil) }
-            catch { rollout = RolloutState(); unreadable = true }
-            if let snapshot = TaskResolver.resolve(metadata: thread, rollout: rollout, storedTurn: stored, evidence: evidence) {
+            do {
+                if let cached = readPaths[thread.rolloutPath] { rollout = cached }
+                else {
+                    rollout = try rollouts.read(URL(fileURLWithPath: thread.rolloutPath), requireBoundary: stored == nil)
+                    metrics.rolloutBytes += rollouts.lastReadByteCount
+                    metrics.rolloutOpens += rollouts.lastOpenCount
+                    readPaths[thread.rolloutPath] = rollout
+                }
+                quotaByPath[thread.rolloutPath] = rollout.quotaBuckets
+            } catch { rollout = RolloutState(); unreadable = true }
+            if let snapshot = TaskResolver.resolve(metadata: thread, rollout: rollout, storedTurn: stored,
+                                                   evidence: evidence, processMatch: hasProcess) {
                 tasks.append(snapshot)
             }
         }
-        rollouts.keepOnly(paths: Set(metadata.map(\.rolloutPath)))
+        for path in quotaPaths where readPaths[path] == nil {
+            do {
+                let rollout = try rollouts.read(URL(fileURLWithPath: path), quotaOnly: true)
+                metrics.rolloutBytes += rollouts.lastReadByteCount
+                metrics.rolloutOpens += rollouts.lastOpenCount
+                quotaByPath[path] = rollout.quotaBuckets
+            } catch { quotaUnreadable = true }
+        }
+        let retained = Set(metadata.map(\.rolloutPath))
+        rollouts.keepOnly(paths: retained)
+        quotaByPath = quotaByPath.filter { retained.contains($0.key) }
+        var buckets: [String: LocalQuotaBucket] = [:]
+        for path in quotaByPath.keys.sorted() {
+            for (id, bucket) in quotaByPath[path] ?? [:] {
+                if buckets[id].map({ $0.recordedAt < bucket.recordedAt }) ?? true { buckets[id] = bucket }
+            }
+        }
         tasks.sort {
             if $0.activity != $1.activity { return $0.activity == .running }
-            return ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast)
+            if $0.startedAt != $1.startedAt { return ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+            return $0.id < $1.id
         }
         let warning = !evidence.reliable ? "无法核对 Codex 进程，任务状态暂不确定。"
             : historyUnavailable ? "部分任务历史暂不可读，正在使用会话事件。"
             : unreadable ? "部分会话记录暂不可读，明细可能不完整。" : nil
-        return TaskReadResult(tasks: tasks, fetchedAt: Date(), warning: warning)
+        return TaskReadResult(tasks: tasks, fetchedAt: Date(), warning: warning,
+                              localQuota: LocalQuotaBucket.snapshot(buckets),
+                              quotaWarning: quotaUnreadable ? "部分本地额度记录暂不可读。" : nil, metrics: metrics)
+    }
+
+    private static func readMetadata(_ db: SQLiteReader) throws -> [ThreadMetadata] {
+        let columns = try db.columns(in: "threads")
+        guard columns.contains("id"), columns.contains("rollout_path") else {
+            throw MonitorFailure("Codex 数据库版本暂不兼容。")
+        }
+        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived"]
+            .map { columns.contains($0) ? $0 : "NULL AS \($0)" }
+        return try db.rows("SELECT id, rollout_path, \(optional.joined(separator: ", ")) FROM threads").compactMap { row in
+            guard let id = row["id"], let path = row["rollout_path"] else { return nil }
+            let name = row["name"].flatMap { $0.isEmpty ? nil : $0 } ?? row["title"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名任务"
+            let item = ThreadMetadata(id: id, title: name, rolloutPath: path, model: row["model"], source: row["source"] ?? "",
+                                      updatedAt: Date(timeIntervalSince1970: Double(row["updated_at"] ?? "0") ?? 0),
+                                      tokens: row["tokens_used"].flatMap(Int64.init), archived: row["archived"] == "1")
+            return item.isInternal ? nil : item
+        }
+    }
+
+    private static func readHistory(_ history: SQLiteReader) throws -> [String: TurnBoundary] {
+        let rows = try history.rows("""
+            SELECT t.thread_id, t.turn_id, t.status, t.started_at, t.completed_at
+            FROM thread_turns t JOIN
+                (SELECT thread_id, MAX(rollout_ordinal) AS latest FROM thread_turns GROUP BY thread_id) latest
+            ON t.thread_id = latest.thread_id AND t.rollout_ordinal = latest.latest
+            """)
+        var turns: [String: TurnBoundary] = [:]
+        for row in rows {
+            guard let id = row["thread_id"] else { continue }
+            let running = row["status"] == "inProgress"
+            let seconds = Double((running ? row["started_at"] : row["completed_at"]) ?? "")
+            turns[id] = TurnBoundary(turnID: row["turn_id"], isRunning: running, date: seconds.map(Date.init(timeIntervalSince1970:)))
+        }
+        return turns
     }
 }

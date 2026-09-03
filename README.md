@@ -5,11 +5,11 @@
   <img src="assets/brand/veyra-logo-preview.png" alt="Veyra" width="360">
 </picture>
 
-使用 Swift 6 和 SwiftUI 编写的原生 macOS 菜单栏应用。顶部显示当前 Codex 账号的剩余额度与本机运行任务数，点击查看额度窗口、重置时间、任务模型、运行时长和累计 token 明细。
+使用 Swift 6 和 SwiftUI 编写的原生 macOS 菜单栏应用。顶部显示 Codex 额度快照与本机运行任务数，点击查看额度窗口、重置时间、任务模型、运行时长和累计 token 明细。
 
 ## 运行
 
-需要 macOS 14 或更新版本，并已安装、登录 Codex 桌面端或 CLI。应用依赖本机的 `codex` 可执行文件，不需要填写 API Key。
+需要 macOS 14 或更新版本，并已安装、登录 Codex 桌面端或 CLI。本地监控只读取已有数据；手动联网校准需要本机的 `codex` 可执行文件，不需要填写 API Key。
 
 构建完成后，打开：
 
@@ -59,15 +59,16 @@ python3 scripts/generate_project.py
 
 ## 数据口径
 
-- **额度**：通过独立的 `codex app-server --stdio` 子进程读取 `account/read` 和 `account/rateLimits/read`。主额度可能是周、5 小时或其他窗口，窗口名称与百分比由实际响应决定。其他模型的独立额度窗口也会展示。剩余比例为 `100 − usedPercent`，不能换算成剩余 token 数。[Codex App Server 文档](https://developers.openai.com/codex/app-server)
+- **额度**：默认读取会话 JSONL 中的 `token_count.rate_limits`，按额度桶采用记录时间最新的完整快照。任务与额度共用日志游标；冷启动补读最近 20 个非内部会话（包含归档），每个最多尾读 256 KiB。本地记录没有账号 ID，界面明确标注“本地快照／账号归属未确认”，菜单栏用 `~` 标记；超过 5 分钟没有新记录或已跨重置时间时显示“等待 Codex 更新”，不推算为满额。不同桶各自显示记录时间，记录缺失不会冒充完整账号额度。
+- **联网校准**：仅点击“联网校准”时启动独立 `codex app-server --stdio`，读取 `account/read` 和 `account/rateLimits/read`，完成后关闭子进程。结果整体显示为账号额度；更晚的本地记录出现后整体切回本地来源，不混合账号信息。启动、普通刷新、打开菜单和唤醒均不请求额度网络接口。手动请求最短间隔 60 秒，联网失败后分别冷却 5、15、30 分钟，不自动重试；服务端提供更长等待时间时遵守。配置或未登录错误可在修正后重新操作。[Codex App Server 文档](https://learn.chatgpt.com/docs/app-server#auth-endpoints)
 - **运行任务**：只读访问 `state_*.sqlite`、`thread_history_*.sqlite` 和会话 JSONL；结合 `lsof` 获取的 Codex 任务锁／会话文件持有情况确认进程。未结束的轮次且有对应进程才计入运行数；不能确认的记录放入“状态待确认”。独立 App Server 的内存任务列表不用于判断桌面端或 CLI 的运行状态。
 - **状态合并**：同一轮次的结束状态优先于开始状态，避免数据库秒级时间与日志毫秒级时间造成误判。不同轮次或缺少轮次 ID，且时间不足以可靠排序时显示“状态待确认”，不计入运行数，也不推测开始时间。
 - **累计 token**：优先采用会话最新 `total_token_usage` 快照，缺少快照时使用数据库累计总量。输入包含缓存输入，输出包含推理输出，不重复相加。累计是该任务记录的总量，包含已完成轮次；子任务各自展示、各自计数，不再叠加到父任务。
-- **刷新**：任务每 5 秒、额度每 60 秒更新。额度查询失败保留上次结果并显示更新时间，菜单栏百分比后的 `*` 表示上次数据；账号凭据发生变化时清除旧额度缓存。重置时间到了以后仍等待真实额度响应，不自行推算为 100%。
+- **刷新**：菜单打开或有已确认运行任务时每 5 秒检查，收起且无已确认运行任务时每 30 秒检查。打开菜单、手动刷新和唤醒立即检查本地数据；休眠暂停调度。每次仍采集新的进程证据，SQLite 连接与结果按数据库版本缓存，无变化日志不重复打开。认证文件变化使联网校准结果失效，本地记录仍保持账号归属未确认。
 
 应用不创建、恢复或控制任务，不触发模型请求。账户认证和凭据刷新由 Codex 自身管理，应用不复制或存储登录凭证。应用只在自己的 UserDefaults 中保存两个可选路径设置；监控数据保存在内存，退出后清除。关闭 App Sandbox 是为了读取本机数据和进程。
 
-额度错误在界面和诊断中统一显示固定的安全提示，舍弃后端原始错误文本和附加数据。诊断 JSON 保留 `quotaError` 提示，并通过 `quotaErrorCode` 返回稳定分类（如 `disconnected`、`timeout`、`rpc_failed`）；成功时两者均为 `null`。未知系统错误统一归为 `unknown`，不会导出其原始描述。
+额度错误在界面和诊断中统一显示固定的安全提示，舍弃后端原始错误文本和附加数据，仅提取结构化的 HTTP 状态码与重试秒数。诊断 JSON 保留 `quotaError` 提示，并通过 `quotaErrorCode` 返回稳定分类（如 `disconnected`、`timeout`、`rpc_failed`、`rate_limited`）；成功时两者均为 `null`。未知系统错误统一归为 `unknown`，不会导出其原始描述。
 
 ## 兼容性与限制
 
@@ -83,8 +84,8 @@ Codex 本地数据库与会话格式属于实现细节，升级后可能发生�
 # 一次真实只读联调，输出不含邮箱、凭据、标题或会话正文的 JSON，然后退出
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --diagnose
 
-# 渲染加载、空状态、单任务、长标题、多任务、多额度、错误、展开、待确认及边界数据场景
-# 输出浅色／深色及高对比度的 40 张 PNG 和 layouts.json；不启动 Codex，图片使用不透明布局外观
+# 渲染任务、额度、本地来源、过期、空记录和冷却等 14 种场景
+# 输出浅色／深色及高对比度的 56 张 PNG 和 layouts.json；不启动 Codex，图片使用不透明布局外观
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --render-previews "$PWD/build/previews"
 
 # 在独立窗口中检查内容布局，使用真实数据；不用于验收菜单栏材质
@@ -92,6 +93,10 @@ Codex 本地数据库与会话格式属于实现细节，升级后可能发生�
 
 # 用固定示例数据检查真正的菜单栏弹窗，不读取 Codex；场景名见上方预览场景
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --preview-menu multiple
+
+# 仅测试实例强制外观，不修改系统设置；可选 light/dark/light-increased/dark-increased
+# --preview-reduce-transparency 使用与“减少透明度”相同的应用内不透明回退样式
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --preview-menu local-quota --preview-appearance dark --preview-reduce-transparency
 
 # 60 秒内打开测试菜单，自动检查顶部／中部／底部、快速滚动与同一弹窗动态收缩
 # 仅允许与 --preview-menu 配合使用，输出布局位图及 menu-check.json
@@ -111,3 +116,20 @@ Codex 本地数据库与会话格式属于实现细节，升级后可能发生�
 
 界面使用 [SwiftUI MenuBarExtra 窗口样式](https://developer.apple.com/documentation/swiftui/menubarextrastyle/window)。
 固定操作控件使用 [Apple Liquid Glass API](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)，遵循 [Apple 关于固定玻璃操作层与滚动内容层的建议](https://developer.apple.com/forums/thread/791070)，不再额外叠加 `NSVisualEffectView` 或修改系统弹窗外观。
+
+
+## 能耗验证
+
+`--diagnose` 默认只读本地，输出缓存命中后的查询次数、日志字节数和打开次数。需要明确验证联网链路时使用 `--diagnose --network`。
+
+```sh
+python3 scripts/measure_energy.py --app build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra --scenario idle --output build/energy/idle.json
+python3 scripts/measure_energy.py --app build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra --scenario active --output build/energy/active.json
+python3 scripts/measure_energy.py --app build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra --scenario panel --output build/energy/panel.json
+```
+
+每次使用临时的 1,000 条任务记录和模拟 Codex 可执行文件，预热 10 秒后测量 5 分钟，不访问真实账号。`active` 和 `panel` 场景包含 3 个持有真实文件句柄的模拟运行任务并持续追加用量；`panel` 使用相同内容的原生调试窗口，不能代替真实菜单的玻璃与开关验收。报告区分主进程稳定期 CPU、唤醒次数和含已回收子进程的生命周期 CPU，不能将这些指标换算为瓦数或续航。
+
+脚本先用目标应用的诊断验证运行任务数，再开始计时；进程 CPU 的 Mach 时间单位转换为秒。夹具位于忽略的 `build/` 临时目录内，结束后清理。测试记录见 [能耗优化验收](docs/energy-validation.md)。
+
+新增预览场景：`local-quota`、`stale-quota`、`no-quota`、`cooldown`，用于核对本地来源、过期提醒、空记录和联网冷却。

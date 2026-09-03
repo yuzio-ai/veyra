@@ -7,6 +7,7 @@ enum PreviewSupport {
     enum Scenario: String, CaseIterable {
         case loading, empty, single, longTitle = "long-title", multiple, quotas, error, expanded, unknown
         case edgeCases = "edge-cases"
+        case localQuota = "local-quota", staleQuota = "stale-quota", noQuota = "no-quota", cooldown
     }
 
     static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
@@ -18,6 +19,21 @@ enum PreviewSupport {
         return Scenario(rawValue: arguments[index + 1])
     }
 
+    static var menuAppearance: NSAppearance.Name? {
+        let arguments = CommandLine.arguments
+        guard menuScenario != nil, let index = arguments.firstIndex(of: "--preview-appearance"),
+              arguments.indices.contains(index + 1) else { return nil }
+        return ["light": .aqua, "dark": .darkAqua,
+                "light-increased": .accessibilityHighContrastAqua,
+                "dark-increased": .accessibilityHighContrastDarkAqua][arguments[index + 1]]
+    }
+    static var menuIncreasedContrast: Bool {
+        menuAppearance == .accessibilityHighContrastAqua || menuAppearance == .accessibilityHighContrastDarkAqua
+    }
+    static var menuReduceTransparency: Bool {
+        menuScenario != nil && CommandLine.arguments.contains("--preview-reduce-transparency")
+    }
+
     static func configure(_ store: MonitorStore, scenario: Scenario) {
         store.isPreview = true
         store.quota = QuotaDisplayState()
@@ -25,6 +41,8 @@ enum PreviewSupport {
         store.taskWarning = nil
         store.tasksBusy = false
         store.quotaBusy = false
+        store.nextCalibrationAt = nil
+        store.localQuotaWarning = nil
         store.tasksUpdatedAt = referenceDate
         store.tasks = []
         if scenario == .loading {
@@ -56,8 +74,19 @@ enum PreviewSupport {
             ]
         }
         store.quota.snapshot = QuotaSnapshot(windows: windows, fetchedAt: referenceDate, accountID: nil)
+        if [.localQuota, .staleQuota].contains(scenario) {
+            store.quota.account = nil
+            store.quota.snapshot = QuotaSnapshot(windows: windows,
+                fetchedAt: referenceDate.addingTimeInterval(scenario == .staleQuota ? -600 : 0),
+                accountID: nil, source: .local)
+        }
+        if scenario == .noQuota { store.quota = QuotaDisplayState() }
+        if scenario == .cooldown {
+            store.quota.error = QuotaFailure.rateLimited.message
+            store.nextCalibrationAt = referenceDate.addingTimeInterval(300)
+        }
         switch scenario {
-        case .single, .quotas, .expanded:
+        case .single, .quotas, .expanded, .localQuota, .staleQuota, .cooldown:
             store.tasks = [task(1)]
         case .longTitle:
             store.tasks = [task(1, longTitle: true)]
@@ -76,7 +105,7 @@ enum PreviewSupport {
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
             ]
-        case .loading, .empty, .error:
+        case .loading, .empty, .error, .noQuota:
             break
         }
     }
@@ -143,10 +172,11 @@ enum PreviewSupport {
                             throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name)")
                         }
                         // Layout regression budgets for these fixed fixtures only;
+                        // Include the source timestamp and explicit calibration controls;
                         // production height always comes from the actual content.
-                        let heightBudget: CGFloat = scenario == .single ? 490 : scenario == .quotas ? 660 : 776
+                        let heightBudget: CGFloat = scenario == .single ? 560 : scenario == .quotas ? 730 : 776
                         guard measured.panelHeight <= heightBudget else {
-                            throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name) exceeds compact layout budget")
+                            throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name): \(measured.panelHeight) exceeds \(heightBudget)")
                         }
                         let filename = "\(scenario.rawValue)-\(name)"
                         try saveBitmap(hosting, to: directory.appendingPathComponent(filename + ".png"))

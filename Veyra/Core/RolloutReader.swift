@@ -11,6 +11,7 @@ struct RolloutState: Sendable {
     var usageDate: Date?
     var boundary: TurnBoundary?
     var model: String?
+    var quotaBuckets: [String: LocalQuotaBucket] = [:]
 }
 
 /// Only inspects top-level lifecycle and token events, never transcript text or tool output.
@@ -24,10 +25,16 @@ enum RolloutEvent {
         }
         guard event["type"].string == "event_msg" else { return }
         let kind = payload["type"].string
+        let tokenDate = kind == "token_count" ? timestamp(event["timestamp"].string) : nil
+        if kind == "token_count", let date = tokenDate,
+           let bucket = LocalQuotaBucket.parse(payload["rate_limits"], at: date),
+           state.quotaBuckets[bucket.id].map({ $0.recordedAt < date }) ?? true {
+            state.quotaBuckets[bucket.id] = bucket
+        }
         if kind == "token_count", payload["info"]["total_token_usage"].object != nil {
             if !newestFirst || state.usage == nil {
                 state.usage = TokenUsage(json: payload["info"]["total_token_usage"])
-                state.usageDate = timestamp(event["timestamp"].string)
+                state.usageDate = tokenDate
             }
         }
         if ["task_started", "task_complete", "task_completed", "turn_aborted", "task_failed", "turn_failed"].contains(kind) {
@@ -59,19 +66,22 @@ struct RolloutReader {
     private var cursors: [String: Cursor] = [:]
     private let chunkSize = 256 * 1_024
     private(set) var lastReadByteCount = 0
+    private(set) var lastOpenCount = 0
 
-    mutating func read(_ url: URL, requireBoundary: Bool = true) throws -> RolloutState {
+    mutating func read(_ url: URL, requireBoundary: Bool = true, quotaOnly: Bool = false) throws -> RolloutState {
         lastReadByteCount = 0
+        lastOpenCount = 0
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
         let identity = "\(attributes[.systemNumber] ?? 0):\(attributes[.systemFileNumber] ?? 0)"
         let modified = attributes[.modificationDate] as? Date
-        let file = try FileHandle(forReadingFrom: url)
-        defer { try? file.close() }
         if var cursor = cursors[url.path], cursor.identity == identity, size >= cursor.offset,
-           (cursor.didReachStart || hasRequiredFields(cursor.state, requireBoundary: requireBoundary)),
+           (quotaOnly || cursor.didReachStart || hasRequiredFields(cursor.state, requireBoundary: requireBoundary)),
            !(size == cursor.offset && modified != cursor.modified) {
             if size > cursor.offset {
+                let file = try FileHandle(forReadingFrom: url)
+                lastOpenCount = 1
+                defer { try? file.close() }
                 try file.seek(toOffset: cursor.offset)
                 var remaining = size - cursor.offset
                 while remaining > 0 {
@@ -87,7 +97,14 @@ struct RolloutReader {
             cursors[url.path] = cursor
             return cursor.state
         }
+        let file = try FileHandle(forReadingFrom: url)
+        lastOpenCount = 1
+        defer { try? file.close() }
         var state = RolloutState(), carry = Data(), partial = Data()
+        if let cursor = cursors[url.path], cursor.identity == identity, size >= cursor.offset,
+           !(size == cursor.offset && modified != cursor.modified) {
+            state.quotaBuckets = cursor.state.quotaBuckets
+        }
         var position = size
         var firstChunk = true
         while position > 0 {
@@ -105,7 +122,7 @@ struct RolloutReader {
             for line in parts.reversed() { RolloutEvent.apply(line, to: &state, newestFirst: true) }
             if start == 0 { RolloutEvent.apply(carry, to: &state, newestFirst: true) }
             position = start
-            if hasRequiredFields(state, requireBoundary: requireBoundary) { break }
+            if quotaOnly || hasRequiredFields(state, requireBoundary: requireBoundary) { break }
         }
         cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial,
                                    state: state, didReachStart: position == 0)

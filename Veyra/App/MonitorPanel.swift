@@ -61,7 +61,11 @@ struct MonitorPanel: View {
         .background {
             if reduceTransparency || opaquePreview { Color(nsColor: .windowBackgroundColor) }
         }
-        .background { PanelWindowReader { screen = $0 }.allowsHitTesting(false) }
+        .background {
+            PanelWindowReader(onChange: { screen = $0 }, onVisibilityChange: { store.setPanelVisible($0) })
+                .allowsHitTesting(false)
+        }
+        .environment(\.monitorPanelActive, store.panelVisible || store.isPreview)
         .foregroundStyle(.primary)
         .onChange(of: sizing, initial: true) { _, value in onSizingChange?(value) }
         .onChange(of: store.tasks.map(\.id)) { _, ids in
@@ -99,10 +103,10 @@ struct MonitorPanel: View {
                     .foregroundStyle(.primary).frame(width: 18, height: 18)
             }
             .modifier(MonitorActionStyle())
-            .help("刷新额度与任务")
+            .help("刷新本地任务与额度快照")
             .accessibilityLabel("刷新")
             .accessibilityIdentifier("monitor.refresh")
-            .disabled(store.quotaBusy && store.tasksBusy)
+            .disabled(store.tasksBusy)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
     }
@@ -110,7 +114,7 @@ struct MonitorPanel: View {
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionTitle("账号额度")
+                sectionTitle("额度")
                 Spacer()
                 if let plan = store.quota.account?.plan {
                     Text(plan.uppercased()).font(.system(size: 9, weight: .semibold, design: .rounded))
@@ -130,23 +134,42 @@ struct MonitorPanel: View {
                         VStack(spacing: 12) {
                             ForEach(windows) { window in QuotaWindowView(window: window) }
                         }
+                        MonitorTimeline(interval: 30) { now in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("\(snapshot.source == .local ? "本地快照" : "联网校准") · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))")
+                                if snapshot.isStale(bucketID: id, at: now) { Text("等待 Codex 更新").foregroundStyle(.orange) }
+                            }.font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
                     }
                     .padding(14).monitorCard()
                 }
             } else if store.quotaBusy {
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
-                    Text("正在读取账号额度…").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("正在联网校准额度…").font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, minHeight: 56).monitorCard()
+            } else {
+                Text("暂无本地额度记录").font(.system(size: 12)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
             }
+            MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
+                HStack {
+                    Button("联网校准") { Task { await store.calibrateQuota() } }
+                        .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
+                        .accessibilityIdentifier("monitor.calibrate")
+                    if let next = store.nextCalibrationAt, next > now {
+                        Text("\(next.formatted(date: .omitted, time: .standard)) 后可校准")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            if let warning = store.localQuotaWarning { notice(warning) }
             if let error = store.quota.error { notice(error) }
             VStack(alignment: .leading, spacing: 4) {
-                if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: store.quota.error == nil ? "clock" : "exclamationmark.circle")
-                        Text("更新于 \(snapshot.fetchedAt.formatted(date: .omitted, time: .standard))")
-                        if store.quota.error != nil { Text("· 上次数据") }
-                    }
+                if store.quota.snapshot?.source == .local {
+                    Text("本机会话记录 · 账号归属未确认 · 菜单栏 ~ 表示本地快照")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let email = store.quota.account?.email { Text(email).lineLimit(1).help(email) }
             }
@@ -163,13 +186,13 @@ struct MonitorPanel: View {
                     .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
                     .background(.primary.opacity(0.08), in: Capsule())
                 Spacer()
-                Text("每 5 秒更新").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("每 \(store.pollingSeconds) 秒检查").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             if store.runningTasks.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: store.tasksUpdatedAt == nil ? "ellipsis" : "checkmark.circle")
+                    Image(systemName: !store.hasTaskSnapshot ? "ellipsis" : "checkmark.circle")
                         .font(.system(size: 20, weight: .light)).foregroundStyle(.tertiary)
-                    Text(store.tasksUpdatedAt == nil && store.taskError == nil ? "正在读取本机任务…" : "暂无已确认运行的任务")
+                    Text(!store.hasTaskSnapshot && store.taskError == nil ? "正在读取本机任务…" : "暂无已确认运行的任务")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
             } else {
@@ -197,7 +220,7 @@ struct MonitorPanel: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Label("本机任务 · 账号共享额度", systemImage: "desktopcomputer")
+            Label("本机任务 · 额度快照", systemImage: "desktopcomputer")
                 .font(.system(size: 11)).lineLimit(1)
             Spacer(minLength: 0)
             MonitorGlassGroup {
@@ -282,8 +305,8 @@ private struct QuotaWindowView: View {
     private var resetLabel: some View {
         Group {
             if let reset = window.resetsAt {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Text(reset > (referenceDate ?? context.date) ? "\(reset.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())) 重置" : "已到重置时间 · 等待更新")
+                MonitorTimeline(interval: 30) { now in
+                    Text(reset > (referenceDate ?? now) ? "\(reset.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())) 重置" : "已到重置时间 · 等待更新")
                 }
             } else {
                 Text("重置时间暂不可用")
@@ -356,10 +379,13 @@ private struct TaskRow: View {
     private var outputTokens: some View { Text("输出 \(DisplayFormat.tokens(task.tokens.output))") }
 
     private var elapsedTime: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            Label(task.activity == .running ? DisplayFormat.duration(since: task.startedAt, now: referenceDate ?? context.date) : "状态未知", systemImage: "clock")
-                .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
-        }
+        Group {
+            if task.activity == .running {
+                MonitorTimeline(interval: 1) { now in
+                    Label(DisplayFormat.duration(since: task.startedAt, now: referenceDate ?? now), systemImage: "clock")
+                }
+            } else { Label("状态未知", systemImage: "clock") }
+        }.font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
     }
 
     private var tokenButton: some View {
@@ -397,5 +423,29 @@ private struct TaskRow: View {
 private extension View {
     func monitorCard() -> some View {
         modifier(ControlCenterTile())
+    }
+}
+
+private struct MonitorPanelActiveKey: EnvironmentKey { static let defaultValue = false }
+private extension EnvironmentValues {
+    var monitorPanelActive: Bool {
+        get { self[MonitorPanelActiveKey.self] }
+        set { self[MonitorPanelActiveKey.self] = newValue }
+    }
+}
+
+private struct MonitorTimeline<Content: View>: View {
+    let interval: TimeInterval
+    var enabled = true
+    var deadline: Date?
+    @ViewBuilder var content: (Date) -> Content
+    @Environment(\.monitorPanelActive) private var active
+    @Environment(\.monitorReferenceDate) private var referenceDate
+    var body: some View {
+        if let referenceDate { content(referenceDate) }
+        else if active && enabled {
+            if let deadline { TimelineView(.explicit([deadline])) { content($0.date) } }
+            else { TimelineView(.periodic(from: .now, by: interval)) { content($0.date) } }
+        } else { content(.now) }
     }
 }

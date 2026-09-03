@@ -12,12 +12,14 @@ struct VeyraApp: App {
                          initiallyExpandedTaskIDs: PreviewSupport.menuScenario == .expanded ? ["demo-1"] : [],
                          initiallyShowUnknown: PreviewSupport.menuScenario == .unknown)
                 .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
+                .environment(\.monitorOpaquePreview, PreviewSupport.menuReduceTransparency)
+                .environment(\.monitorPreviewContrast, PreviewSupport.menuIncreasedContrast ? .increased : nil)
         } label: {
             HStack(spacing: 4) {
                 VeyraIcon(isTemplate: true)
                 Text(store.menuLabel).monospacedDigit()
             }
-            .accessibilityLabel("Veyra，\(store.menuLabel)")
+            .accessibilityLabel("Veyra，\(store.menuLabel.contains("~") ? "本地额度快照，" : "")\(store.menuLabel)")
         }
         .menuBarExtraStyle(.window)
 
@@ -44,9 +46,13 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if let scenario = PreviewSupport.menuScenario {
+            if let appearance = PreviewSupport.menuAppearance { NSApp.appearance = NSAppearance(named: appearance) }
             PreviewSupport.configure(MonitorStore.shared, scenario: scenario)
         } else {
             MonitorStore.shared.start()
+            let center = NSWorkspace.shared.notificationCenter
+            center.addObserver(self, selector: #selector(willSleep), name: NSWorkspace.willSleepNotification, object: nil)
+            center.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
         }
         if let index = arguments.firstIndex(of: "--capture-menu-to"), arguments.indices.contains(index + 1) {
             Diagnostics.captureNextMenu(to: URL(fileURLWithPath: arguments[index + 1]))
@@ -69,6 +75,11 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             previewWindow = window
         }
     }
-    func applicationWillTerminate(_ notification: Notification) { MonitorStore.shared.stop() }
+    @objc private func willSleep(_ notification: Notification) { MonitorStore.shared.sleep() }
+    @objc private func didWake(_ notification: Notification) { MonitorStore.shared.wake() }
+    func applicationWillTerminate(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        MonitorStore.shared.stop()
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
