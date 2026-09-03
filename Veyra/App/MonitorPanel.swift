@@ -376,9 +376,15 @@ private struct TaskRow: View {
             .contentShape(Rectangle())
         }.buttonStyle(.plain).help("查看累计 token 明细")
         .accessibilityLabel("\(task.title)，累计 token 明细")
-        .accessibilityValue(expanded ? "已展开" : "已收起")
+        .accessibilityValue(tokenAccessibilityValue)
         .accessibilityIdentifier("monitor.tokens.\(task.id)")
     }
+
+    private var tokenAccessibilityValue: String {
+        let usage = task.tokens.total.map { "累计 \(DisplayFormat.tokens($0)) tokens" } ?? "累计用量暂不可用"
+        return "\(usage)，\(expanded ? "已展开" : "已收起")"
+    }
+
     private func tokenLine(_ label: String, value: Int64?) -> some View {
         HStack {
             Text(label).foregroundStyle(.secondary)
