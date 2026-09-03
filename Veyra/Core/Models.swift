@@ -72,10 +72,45 @@ struct QuotaSnapshot: Equatable, Sendable {
     }
 }
 
+/// Only fixed, safe messages cross the RPC boundary into the UI or diagnostics.
+enum QuotaFailure: String, Error, LocalizedError, Sendable, CaseIterable {
+    case missingExecutable = "missing_executable"
+    case missingHome = "missing_home"
+    case launchFailed = "launch_failed"
+    case disconnected
+    case timeout
+    case protocolError = "protocol_error"
+    case rpcFailed = "rpc_failed"
+    case notLoggedIn = "not_logged_in"
+    case unsupportedAuthentication = "unsupported_authentication"
+    case noQuotaWindows = "no_quota_windows"
+    case unknown
+
+    var message: String {
+        switch self {
+        case .missingExecutable: "未找到 Codex 可执行文件，请在设置中指定。"
+        case .missingHome: "Codex 数据目录不存在，请检查设置。"
+        case .launchFailed: "无法启动 Codex，请检查可执行文件和数据目录。"
+        case .disconnected: "Codex 连接已断开，稍后将自动重试。"
+        case .timeout: "连接 Codex 超时，稍后将自动重试。"
+        case .protocolError: "Codex 返回了无法识别的数据，请检查版本兼容性。"
+        case .rpcFailed: "额度读取失败，请检查 Codex 登录与网络连接后重试。"
+        case .notLoggedIn: "尚未登录 Codex。请先在 Codex 桌面端或 CLI 中登录。"
+        case .unsupportedAuthentication: "当前登录方式不提供 ChatGPT 订阅额度。"
+        case .noQuotaWindows: "账号暂未返回可用额度窗口。"
+        case .unknown: "额度读取遇到未知错误，稍后将自动重试。"
+        }
+    }
+
+    var errorDescription: String? { message }
+
+    static func classify(_ error: Error) -> QuotaFailure { error as? QuotaFailure ?? .unknown }
+}
+
 struct QuotaRefresh: Sendable {
     var account: AccountSnapshot?
     var snapshot: QuotaSnapshot?
-    var error: String?
+    var error: QuotaFailure?
     /// Set when auth is absent/changed, even if the subsequent network request fails.
     var invalidatePrevious: Bool = false
 }
@@ -91,7 +126,7 @@ struct QuotaDisplayState: Sendable {
         }
         if let newAccount = result.account { account = newAccount }
         if let newSnapshot = result.snapshot { snapshot = newSnapshot }
-        error = result.error
+        error = result.error?.message
     }
 }
 

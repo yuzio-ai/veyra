@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Owns only the monitor's sidecar; never attaches, resumes, or writes a Codex task.
 actor AppServerClient {
@@ -30,13 +31,13 @@ actor AppServerClient {
             let auth = try await request("account/read", params: .object(["refreshToken": .bool(false)]))
             guard auth["account"].object != nil else {
                 lastAccount = nil
-                return QuotaRefresh(error: "尚未登录 Codex。请先在 Codex 桌面端或 CLI 中登录。", invalidatePrevious: true)
+                return QuotaRefresh(error: .notLoggedIn, invalidatePrevious: true)
             }
             let rawAccount = auth["account"]
             account = AccountSnapshot(json: rawAccount)
             guard account?.authType == "chatgpt" || account?.authType == "chatgptAuthTokens" else {
                 lastAccount = account
-                return QuotaRefresh(account: account, error: "当前登录方式不提供 ChatGPT 订阅额度。", invalidatePrevious: true)
+                return QuotaRefresh(account: account, error: .unsupportedAuthentication, invalidatePrevious: true)
             }
             let data = try await request("account/rateLimits/read")
             let snapshot = QuotaSnapshot.parse(data)
@@ -46,7 +47,7 @@ actor AppServerClient {
             // Codex may refresh its credentials while servicing the read.
             authStamp = Self.authenticationStamp(at: newLocation.home)
             return QuotaRefresh(account: account, snapshot: snapshot,
-                                error: snapshot.windows.isEmpty ? "账号暂未返回可用额度窗口。" : nil,
+                                error: snapshot.windows.isEmpty ? .noQuotaWindows : nil,
                                 invalidatePrevious: changed || identityChanged)
         } catch {
             shutdown()
@@ -54,18 +55,22 @@ actor AppServerClient {
             if !changed, let old = lastAccount, old.email == account?.email, old.authType == account?.authType {
                 account = old
             }
-            return QuotaRefresh(account: account, error: error.localizedDescription, invalidatePrevious: changed)
+            return QuotaRefresh(account: account, error: .classify(error), invalidatePrevious: changed)
         }
     }
 
     private func start(at location: CodexLocation) async throws {
         guard let executable = location.executable, FileManager.default.isExecutableFile(atPath: executable.path) else {
-            throw MonitorFailure("未找到 Codex 可执行文件，请在设置中指定。")
+            throw QuotaFailure.missingExecutable
         }
         guard FileManager.default.fileExists(atPath: location.home.path) else {
-            throw MonitorFailure("Codex 数据目录不存在，请检查设置。")
+            throw QuotaFailure.missingHome
         }
         let child = Process(), stdinPipe = Pipe(), stdoutPipe = Pipe(), stderrPipe = Pipe()
+        // Suppress SIGPIPE only on our write descriptor; EPIPE must be a recoverable error.
+        guard fcntl(stdinPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+            throw QuotaFailure.launchFailed
+        }
         let currentGeneration = UUID()
         generation = currentGeneration
         child.executableURL = executable
@@ -86,7 +91,7 @@ actor AppServerClient {
             Task { await self?.exited(generation: currentGeneration) }
         }
         process = child
-        do { try child.run() } catch { shutdown(); throw MonitorFailure("无法启动 Codex：\(error.localizedDescription)") }
+        do { try child.run() } catch { shutdown(); throw QuotaFailure.launchFailed }
         _ = try await request("initialize", params: .object([
             "clientInfo": .object(["name": .string("veyra"), "title": .string("Veyra"), "version": .string("1.0.0")]),
             "capabilities": .object(["experimentalApi": .bool(false)])
@@ -112,12 +117,16 @@ actor AppServerClient {
     }
 
     private func send(_ message: JSONValue) throws {
-        guard let input else { throw MonitorFailure("Codex 连接已断开。") }
+        guard let input else { throw QuotaFailure.disconnected }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .withoutEscapingSlashes
         var data = try encoder.encode(message)
         data.append(0x0a)
-        try input.write(contentsOf: data)
+        do { try input.write(contentsOf: data) }
+        catch {
+            shutdown(reason: .disconnected)
+            throw QuotaFailure.disconnected
+        }
     }
 
     private func receive(_ data: Data, generation: UUID) {
@@ -127,14 +136,22 @@ actor AppServerClient {
         while let newline = buffer.firstIndex(of: 0x0a) {
             let line = Data(buffer[..<newline])
             buffer.removeSubrange(...newline)
-            guard let value = try? JSONValue.decode(line), let id = value["id"].integer else { continue }
+            guard let value = try? JSONValue.decode(line), let object = value.object else {
+                shutdown(reason: .protocolError)
+                return
+            }
+            guard let id = value["id"].integer, pending[id] != nil else { continue }
             if value["error"].object != nil {
-                // Backend messages may contain account data: show a bounded description, never log it.
-                let description = value["error"]["message"].string ?? "未知错误"
-                finish(id: id, result: .failure(MonitorFailure("额度读取失败：\(description.prefix(240))")))
-            } else { finish(id: id, result: .success(value["result"])) }
+                // Neither message nor data is retained: both can contain private account data.
+                finish(id: id, result: .failure(QuotaFailure.rpcFailed))
+            } else if object["result"] != nil {
+                finish(id: id, result: .success(value["result"]))
+            } else {
+                shutdown(reason: .protocolError)
+                return
+            }
         }
-        if buffer.count > 8 * 1_024 * 1_024 { shutdown(reason: "Codex 返回了无法识别的数据。") }
+        if buffer.count > 8 * 1_024 * 1_024 { shutdown(reason: .protocolError) }
     }
 
     private func finish(id: Int64, result: Result<JSONValue, Error>) {
@@ -143,20 +160,20 @@ actor AppServerClient {
     }
     private func timedOut(id: Int64) {
         guard pending[id] != nil else { return }
-        shutdown(reason: "连接 Codex 超时，稍后将自动重试。")
+        shutdown(reason: .timeout)
     }
     private func exited(generation: UUID) {
         guard generation == self.generation else { return }
-        shutdown(reason: "Codex 连接已断开，稍后将自动重试。")
+        shutdown(reason: .disconnected)
     }
-    func shutdown(reason: String = "连接已重新建立。") {
+    func shutdown(reason: QuotaFailure = .disconnected) {
         generation = UUID()
         output?.readabilityHandler = nil; errors?.readabilityHandler = nil
         try? input?.close()
         if let child = process, child.isRunning { child.terminate() }
         process?.terminationHandler = nil
         process = nil; input = nil; output = nil; errors = nil; buffer = Data()
-        for id in Array(pending.keys) { finish(id: id, result: .failure(MonitorFailure(reason))) }
+        for id in Array(pending.keys) { finish(id: id, result: .failure(reason)) }
     }
     private static func authenticationStamp(at home: URL) -> String {
         let attrs = try? FileManager.default.attributesOfItem(atPath: home.appendingPathComponent("auth.json").path)

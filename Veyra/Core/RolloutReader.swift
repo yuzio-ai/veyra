@@ -54,11 +54,14 @@ struct RolloutReader {
         var modified: Date?
         var partial: Data
         var state: RolloutState
+        var didReachStart: Bool
     }
     private var cursors: [String: Cursor] = [:]
     private let chunkSize = 256 * 1_024
+    private(set) var lastReadByteCount = 0
 
     mutating func read(_ url: URL, requireBoundary: Bool = true) throws -> RolloutState {
+        lastReadByteCount = 0
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
         let identity = "\(attributes[.systemNumber] ?? 0):\(attributes[.systemFileNumber] ?? 0)"
@@ -66,13 +69,14 @@ struct RolloutReader {
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
         if var cursor = cursors[url.path], cursor.identity == identity, size >= cursor.offset,
-           (!requireBoundary || cursor.state.boundary != nil),
+           (cursor.didReachStart || hasRequiredFields(cursor.state, requireBoundary: requireBoundary)),
            !(size == cursor.offset && modified != cursor.modified) {
             if size > cursor.offset {
                 try file.seek(toOffset: cursor.offset)
                 var remaining = size - cursor.offset
                 while remaining > 0 {
                     let data = try file.read(upToCount: Int(min(UInt64(chunkSize), remaining))) ?? Data()
+                    lastReadByteCount += data.count
                     if data.isEmpty { break }
                     remaining -= UInt64(data.count); cursor.offset += UInt64(data.count)
                     cursor.partial.append(data)
@@ -90,6 +94,7 @@ struct RolloutReader {
             let start = position > UInt64(chunkSize) ? position - UInt64(chunkSize) : 0
             try file.seek(toOffset: start)
             var data = try file.read(upToCount: Int(position - start)) ?? Data()
+            lastReadByteCount += data.count
             data.append(carry)
             var parts: [Data] = data.split(separator: UInt8(0x0a), omittingEmptySubsequences: false).map { Data($0) }
             if firstChunk {
@@ -100,10 +105,15 @@ struct RolloutReader {
             for line in parts.reversed() { RolloutEvent.apply(line, to: &state, newestFirst: true) }
             if start == 0 { RolloutEvent.apply(carry, to: &state, newestFirst: true) }
             position = start
-            if state.usage != nil && (!requireBoundary || state.boundary != nil) { break }
+            if hasRequiredFields(state, requireBoundary: requireBoundary) { break }
         }
-        cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial, state: state)
+        cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial,
+                                   state: state, didReachStart: position == 0)
         return state
+    }
+
+    private func hasRequiredFields(_ state: RolloutState, requireBoundary: Bool) -> Bool {
+        state.usage != nil && state.model != nil && (!requireBoundary || state.boundary != nil)
     }
 
     private func consumeLines(from data: inout Data, state: inout RolloutState) {

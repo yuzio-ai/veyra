@@ -23,18 +23,46 @@ struct ThreadMetadata: Sendable {
     }
 }
 
+enum TurnResolution: Equatable, Sendable {
+    case known(TurnBoundary)
+    case absent
+    case ambiguous
+}
+
 enum TaskResolver {
+    static func mergeBoundaries(rollout: TurnBoundary?, stored: TurnBoundary?) -> TurnResolution {
+        guard let fileTurn = rollout else { return stored.map { .known($0) } ?? .absent }
+        guard let dbTurn = stored else { return .known(fileTurn) }
+
+        if let id = fileTurn.turnID, !id.isEmpty, id == dbTurn.turnID {
+            // Completion of this exact turn is authoritative even when the database
+            // rounded its timestamp down to before the fractional start timestamp.
+            if fileTurn.isRunning != dbTurn.isRunning {
+                return .known(fileTurn.isRunning ? dbTurn : fileTurn)
+            }
+            return .known(TurnBoundary(turnID: id, isRunning: fileTurn.isRunning,
+                                       date: fileTurn.date ?? dbTurn.date))
+        }
+        if !fileTurn.isRunning && !dbTurn.isRunning { return .known(fileTurn) }
+        if let fileDate = fileTurn.date?.timeIntervalSince1970,
+           let dbDate = dbTurn.date?.timeIntervalSince1970, fileDate.isFinite, dbDate.isFinite {
+            let fileSecond = floor(fileDate), dbSecond = floor(dbDate)
+            if fileSecond != dbSecond { return .known(fileSecond > dbSecond ? fileTurn : dbTurn) }
+        }
+        // Different (or missing) IDs within the same second cannot establish turn order.
+        return .ambiguous
+    }
+
     static func resolve(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, evidence: ProcessEvidence) -> TaskSnapshot? {
         guard !metadata.isInternal else { return nil }
+        let resolution = mergeBoundaries(rollout: rollout.boundary, stored: storedTurn)
         let boundary: TurnBoundary?
-        if let fileTurn = rollout.boundary, let dbTurn = storedTurn {
-            boundary = (fileTurn.date ?? .distantPast) >= (dbTurn.date ?? .distantPast) ? fileTurn : dbTurn
-        } else { boundary = rollout.boundary ?? storedTurn }
+        if case .known(let value) = resolution { boundary = value } else { boundary = nil }
         guard boundary?.isRunning != false else { return nil }
         let canonicalPath = URL(fileURLWithPath: metadata.rolloutPath).resolvingSymlinksInPath().path
         let hasProcess = evidence.threadIDs.contains(metadata.id) || evidence.rolloutPaths.contains(metadata.rolloutPath)
             || evidence.rolloutPaths.contains(canonicalPath)
-        guard hasProcess || boundary?.isRunning == true else { return nil }
+        guard hasProcess || boundary?.isRunning == true || resolution == .ambiguous else { return nil }
         let activity: TaskActivity = boundary?.isRunning == true && hasProcess && evidence.reliable ? .running : .unknown
         let usage = rollout.usage ?? TokenUsage(total: metadata.tokens)
         return TaskSnapshot(id: metadata.id, title: metadata.title, model: rollout.model ?? metadata.model,

@@ -46,12 +46,12 @@ final class CoreTests: XCTestCase {
         let snapshot = QuotaSnapshot.parse(try json(#"{"rateLimits":{"primary":{"usedPercent":30}}}"#))
         var state = QuotaDisplayState()
         state.apply(QuotaRefresh(account: first, snapshot: snapshot))
-        state.apply(QuotaRefresh(account: first, error: "offline"))
+        state.apply(QuotaRefresh(account: first, error: .rpcFailed))
         XCTAssertEqual(state.snapshot, snapshot)
-        state.apply(QuotaRefresh(account: second, error: "offline"))
+        state.apply(QuotaRefresh(account: second, error: .rpcFailed))
         XCTAssertNil(state.snapshot)
         state.apply(QuotaRefresh(account: second, snapshot: snapshot))
-        state.apply(QuotaRefresh(error: "logged out", invalidatePrevious: true))
+        state.apply(QuotaRefresh(error: .notLoggedIn, invalidatePrevious: true))
         XCTAssertNil(state.snapshot)
         XCTAssertNil(state.account)
     }
@@ -234,7 +234,7 @@ final class CoreTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
         let slow = AppServerClient(requestTimeout: .milliseconds(100))
         let result = await slow.fetch(location: CodexLocation(home: home, executable: executable))
-        XCTAssertTrue(result.error?.contains("超时") == true)
+        XCTAssertEqual(result.error, .timeout)
         await slow.shutdown()
     }
 }

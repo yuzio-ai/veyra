@@ -43,7 +43,7 @@ enum PreviewSupport {
         }
         if scenario == .error {
             windows = [quota("codex", "Codex", primary: true, used: 94, minutes: 300)]
-            store.quota.error = "额度刷新失败，正在显示上次成功读取的数据。请检查本机连接后重试。"
+            store.quota.error = QuotaFailure.rpcFailed.message
             store.taskError = "无法读取本机任务记录，请在设置中检查数据目录。"
         }
         if scenario == .edgeCases {

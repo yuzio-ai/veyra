@@ -111,7 +111,8 @@ enum Diagnostics {
                 let secondDuration = secondStart.duration(to: clock.now)
                 let quota = await quotaRead
                 let result: [String: JSONValue] = [
-                    "quotaError": quota.error.map(JSONValue.string) ?? .null,
+                    "quotaError": quota.error.map { .string($0.message) } ?? .null,
+                    "quotaErrorCode": quota.error.map { .string($0.rawValue) } ?? .null,
                     "taskWarning": initial.warning.map(JSONValue.string) ?? .null,
                     "initialRead": .string(String(describing: firstDuration)),
                     "incrementalRead": .string(String(describing: secondDuration)),
@@ -131,7 +132,7 @@ enum Diagnostics {
                 let data = try encoder.encode(JSONValue.object(result))
                 FileHandle.standardOutput.write(data)
                 FileHandle.standardOutput.write(Data("\n".utf8))
-            } catch { print("Diagnostics failed: \(error.localizedDescription)") }
+            } catch { print("Diagnostics failed: 无法完成本机诊断。") }
             await client.shutdown()
             NSApp.terminate(nil)
         }
