@@ -178,7 +178,10 @@ struct MonitorPanel: View {
     }
 
     private var tasksSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let groups = TaskGroup.make(tasks: store.tasks, ancestors: store.taskAncestors)
+        let runningGroups = groups.filter(\.isRunning)
+        let unknownGroups = groups.filter { !$0.isRunning }
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 sectionTitle("运行任务")
                 Text("\(store.runningTasks.count)")
@@ -196,20 +199,19 @@ struct MonitorPanel: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
             } else {
-                ForEach(orderedTasks(store.runningTasks), id: \.task.id) { entry in
-                    TaskRow(task: entry.task, expanded: expandedBinding(for: entry.task.id))
-                        .padding(.leading, CGFloat(min(entry.depth, 3)) * 10)
+                ForEach(runningGroups) { group in
+                    TaskGroupCard(group: group, expansion: expandedBinding)
                 }
             }
-            if !store.unknownTasks.isEmpty {
+            if !unknownGroups.isEmpty {
                 DisclosureGroup(isExpanded: $showUnknown) {
                     VStack(spacing: 10) {
                         Text("记录尚未结束，但无法确认仍有进程运行。不会计入顶部运行数。")
                             .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                        ForEach(store.unknownTasks) { TaskRow(task: $0, expanded: expandedBinding(for: $0.id)) }
+                        ForEach(unknownGroups) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
                     }.padding(.top, 10)
                 } label: {
-                    Label("状态待确认 · \(store.unknownTasks.count)", systemImage: "questionmark.circle")
+                    Label("状态待确认 · \(unknownGroups.reduce(0) { $0 + $1.unknownCount })", systemImage: "questionmark.circle")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
@@ -251,18 +253,6 @@ struct MonitorPanel: View {
     private func notice(_ text: String) -> some View {
         Label(text, systemImage: "exclamationmark.circle")
             .font(.system(size: 11)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-    }
-    private func orderedTasks(_ tasks: [TaskSnapshot]) -> [(task: TaskSnapshot, depth: Int)] {
-        let ids = Set(tasks.map(\.id))
-        var result: [(TaskSnapshot, Int)] = [], seen: Set<String> = []
-        func append(_ task: TaskSnapshot, depth: Int) {
-            guard seen.insert(task.id).inserted else { return }
-            result.append((task, depth))
-            for child in tasks where child.parentID == task.id { append(child, depth: depth + 1) }
-        }
-        for task in tasks where task.parentID == nil || !ids.contains(task.parentID!) { append(task, depth: 0) }
-        for task in tasks where !seen.contains(task.id) { append(task, depth: 0) }
-        return result
     }
 }
 
@@ -322,8 +312,45 @@ private struct QuotaWindowView: View {
     }
 }
 
+private struct TaskGroupCard: View {
+    let group: TaskGroup
+    let expansion: (String) -> Binding<Bool>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(group.rows) { row in
+                let indent = CGFloat(min(row.depth, 3)) * 10
+                if row.id != group.rows.first?.id {
+                    Divider().padding(.leading, 14 + indent).padding(.trailing, 14)
+                }
+                Group {
+                    if let task = row.task {
+                        TaskRow(task: task, parentTitle: row.parentTitle, expanded: expansion(task.id))
+                    } else {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(row.reference.title).font(.system(size: 13, weight: .semibold))
+                                .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(row.reference.title)
+                            Label("父任务", systemImage: "arrow.triangle.branch")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(14).padding(.leading, indent)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("monitor.task.\(row.id)")
+            }
+        }
+        .monitorCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("monitor.task-group.\(group.id)")
+    }
+}
+
 private struct TaskRow: View {
     let task: TaskSnapshot
+    let parentTitle: String?
     @Binding var expanded: Bool
     @Environment(\.monitorReferenceDate) private var referenceDate
     var body: some View {
@@ -337,6 +364,12 @@ private struct TaskRow: View {
                 }
                 Spacer(minLength: 0)
                 Circle().fill(task.activity == .running ? monitorAccent : .orange).frame(width: 6, height: 6).padding(.top, 5)
+                    .accessibilityLabel(task.activity == .running ? "运行中" : "状态待确认")
+            }
+            if let progress = task.progress {
+                Text("\(progress.label)：\(progress.text)")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true).help("\(progress.label)：\(progress.text)")
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
@@ -351,6 +384,17 @@ private struct TaskRow: View {
             }
             if expanded {
                 Divider()
+                if parentTitle != nil || task.agentPath != nil || task.agentNickname != nil || task.agentRole != nil {
+                    VStack(alignment: .leading, spacing: 4) {
+                        contextLine("来自", value: parentTitle)
+                        contextLine("任务路径", value: task.agentPath)
+                        contextLine("代理", value: task.agentNickname)
+                        contextLine("角色", value: task.agentRole)
+                    }
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Divider()
+                }
                 VStack(spacing: 6) {
                     tokenLine("输入", value: task.tokens.input)
                     tokenLine("其中缓存输入", value: task.tokens.cachedInput)
@@ -361,7 +405,13 @@ private struct TaskRow: View {
                         .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-        }.padding(14).monitorCard()
+        }
+    }
+
+    @ViewBuilder private func contextLine(_ label: String, value: String?) -> some View {
+        if let value {
+            Text("\(label)：\(value)").fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+        }
     }
 
     private var activitySummary: some View {

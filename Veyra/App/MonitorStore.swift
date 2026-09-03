@@ -6,6 +6,7 @@ final class MonitorStore {
     static let shared = MonitorStore()
     var quota = QuotaDisplayState() { didSet { updateMenuLabel() } }
     var tasks: [TaskSnapshot] = [] { didSet { updateMenuLabel() } }
+    var taskAncestors: [TaskReference] = []
     var hasTaskSnapshot = false
     @ObservationIgnored var tasksUpdatedAt: Date? {
         didSet {
@@ -132,6 +133,7 @@ final class MonitorStore {
             let result = try await readLocal(location.home)
             guard version == revision else { return }
             if tasks != result.tasks { tasks = result.tasks }
+            if taskAncestors != result.ancestors { taskAncestors = result.ancestors }
             tasksUpdatedAt = result.fetchedAt
             if taskWarning != result.warning { taskWarning = result.warning }
             if taskError != nil { taskError = nil }
@@ -143,8 +145,10 @@ final class MonitorStore {
             guard version == revision else { return }
             let message = "无法读取本机任务记录，请检查数据目录。"
             if taskError != message { taskError = message }
-            let uncertain = tasks.map { TaskSnapshot(id: $0.id, title: $0.title, model: $0.model, sourceLabel: $0.sourceLabel,
-                parentID: $0.parentID, startedAt: $0.startedAt, updatedAt: $0.updatedAt, tokens: $0.tokens, activity: .unknown) }
+            let uncertain = tasks.map { task in
+                var copy = task; copy.activity = .unknown
+                return copy
+            }
             if tasks != uncertain { tasks = uncertain }
         }
         if tasksBusy { tasksBusy = false }
@@ -176,6 +180,7 @@ final class MonitorStore {
         quotaState = QuotaDisplayState(); quota = quotaState
         calibrationPolicy = QuotaCalibrationPolicy(); nextCalibrationAt = nil; authStamp = nil
         tasks = []; tasksUpdatedAt = nil; taskError = nil; taskWarning = nil
+        taskAncestors = []
         localQuotaWarning = nil; quotaFailureDetails = nil; quotaBusy = false; tasksBusy = false
         attemptedLocalRead = false
         // Join any old local read, then immediately read the new location once it has drained.

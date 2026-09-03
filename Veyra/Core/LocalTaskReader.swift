@@ -9,10 +9,21 @@ struct ThreadMetadata: Sendable {
     let updatedAt: Date
     let tokens: Int64?
     var archived = false
-    var parentID: String? {
-        guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return nil }
-        return value["subagent"]["thread_spawn"]["parent_thread_id"].string
+    var storedAgentPath: String?
+    var storedAgentNickname: String?
+    var storedAgentRole: String?
+    private var spawn: JSONValue {
+        guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return .null }
+        return value["subagent"]["thread_spawn"]
     }
+    var parentID: String? {
+        TaskText.nonempty(spawn["parent_thread_id"].string)
+    }
+    var agentPath: String? { TaskText.nonempty(storedAgentPath) ?? TaskText.nonempty(spawn["agent_path"].string) }
+    var agentNickname: String? { TaskText.nonempty(storedAgentNickname) ?? TaskText.nonempty(spawn["agent_nickname"].string) }
+    var agentRole: String? { TaskText.nonempty(storedAgentRole) ?? TaskText.nonempty(spawn["agent_role"].string) }
+    var displayTitle: String { TaskText.title(title, id: id, parentID: parentID, agentPath: agentPath, nickname: agentNickname) }
+    var reference: TaskReference { TaskReference(id: id, title: displayTitle, parentID: parentID) }
     var isInternal: Bool {
         if model?.hasPrefix("codex-auto-review") == true { return true }
         guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return false }
@@ -64,10 +75,12 @@ enum TaskResolver {
         guard hasProcess || boundary?.isRunning == true || resolution == .ambiguous else { return nil }
         let activity: TaskActivity = boundary?.isRunning == true && hasProcess && evidence.reliable ? .running : .unknown
         let usage = rollout.usage ?? TokenUsage(total: metadata.tokens)
-        return TaskSnapshot(id: metadata.id, title: metadata.title, model: rollout.model ?? metadata.model,
+        return TaskSnapshot(id: metadata.id, title: metadata.displayTitle, model: rollout.model ?? metadata.model,
                             sourceLabel: metadata.sourceLabel, parentID: metadata.parentID,
                             startedAt: boundary?.isRunning == true ? boundary?.date : nil,
-                            updatedAt: rollout.usageDate ?? metadata.updatedAt, tokens: usage, activity: activity)
+                            updatedAt: rollout.usageDate ?? metadata.updatedAt, tokens: usage, activity: activity,
+                            agentPath: metadata.agentPath, agentNickname: metadata.agentNickname, agentRole: metadata.agentRole,
+                            progress: metadata.parentID == nil ? nil : rollout.display.progress(for: boundary))
     }
 }
 
@@ -159,12 +172,23 @@ actor LocalTaskReader {
             if $0.startedAt != $1.startedAt { return ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
             return $0.id < $1.id
         }
+        let byID = Dictionary(metadata.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let taskIDs = Set(tasks.map(\.id))
+        var ancestors: [String: TaskReference] = [:]
+        for task in tasks {
+            var parentID = task.parentID, seen: Set<String> = [task.id]
+            while let id = parentID, seen.insert(id).inserted, let parent = byID[id] {
+                if !taskIDs.contains(id) { ancestors[id] = parent.reference }
+                parentID = parent.parentID
+            }
+        }
         let warning = !evidence.reliable ? "无法核对 Codex 进程，任务状态暂不确定。"
             : historyUnavailable ? "部分任务历史暂不可读，正在使用会话事件。"
             : unreadable ? "部分会话记录暂不可读，明细可能不完整。" : nil
         return TaskReadResult(tasks: tasks, fetchedAt: Date(), warning: warning,
                               localQuota: LocalQuotaBucket.snapshot(buckets),
-                              quotaWarning: quotaUnreadable ? "部分本地额度记录暂不可读。" : nil, metrics: metrics)
+                              quotaWarning: quotaUnreadable ? "部分本地额度记录暂不可读。" : nil, metrics: metrics,
+                              ancestors: ancestors.values.sorted { $0.id < $1.id })
     }
 
     private static func readMetadata(_ db: SQLiteReader) throws -> [ThreadMetadata] {
@@ -172,14 +196,15 @@ actor LocalTaskReader {
         guard columns.contains("id"), columns.contains("rollout_path") else {
             throw MonitorFailure("Codex 数据库版本暂不兼容。")
         }
-        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived"]
+        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived", "agent_path", "agent_nickname", "agent_role"]
             .map { columns.contains($0) ? $0 : "NULL AS \($0)" }
         return try db.rows("SELECT id, rollout_path, \(optional.joined(separator: ", ")) FROM threads").compactMap { row in
             guard let id = row["id"], let path = row["rollout_path"] else { return nil }
-            let name = row["name"].flatMap { $0.isEmpty ? nil : $0 } ?? row["title"].flatMap { $0.isEmpty ? nil : $0 } ?? "未命名任务"
+            let name = TaskText.nonempty(row["name"]) ?? TaskText.nonempty(row["title"]) ?? ""
             let item = ThreadMetadata(id: id, title: name, rolloutPath: path, model: row["model"], source: row["source"] ?? "",
                                       updatedAt: Date(timeIntervalSince1970: Double(row["updated_at"] ?? "0") ?? 0),
-                                      tokens: row["tokens_used"].flatMap(Int64.init), archived: row["archived"] == "1")
+                                      tokens: row["tokens_used"].flatMap(Int64.init), archived: row["archived"] == "1",
+                                      storedAgentPath: row["agent_path"], storedAgentNickname: row["agent_nickname"], storedAgentRole: row["agent_role"])
             return item.isInternal ? nil : item
         }
     }

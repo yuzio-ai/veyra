@@ -8,6 +8,7 @@ enum PreviewSupport {
         case loading, empty, single, longTitle = "long-title", multiple, quotas, error, expanded, unknown
         case edgeCases = "edge-cases"
         case localQuota = "local-quota", staleQuota = "stale-quota", noQuota = "no-quota", cooldown
+        case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
     }
 
     static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
@@ -34,6 +35,14 @@ enum PreviewSupport {
         menuScenario != nil && CommandLine.arguments.contains("--preview-reduce-transparency")
     }
 
+    static func expandedTaskIDs(for scenario: Scenario?) -> Set<String> {
+        switch scenario {
+        case .expanded: ["demo-1"]
+        case .familyExpanded: ["demo-1", "demo-2"]
+        default: []
+        }
+    }
+
     static func configure(_ store: MonitorStore, scenario: Scenario) {
         store.isPreview = true
         store.quota = QuotaDisplayState()
@@ -45,6 +54,7 @@ enum PreviewSupport {
         store.localQuotaWarning = nil
         store.tasksUpdatedAt = referenceDate
         store.tasks = []
+        store.taskAncestors = []
         if scenario == .loading {
             store.tasksUpdatedAt = nil
             store.tasksBusy = true
@@ -105,6 +115,19 @@ enum PreviewSupport {
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
             ]
+        case .taskFamily, .familyExpanded:
+            store.tasks = [task(1), task(2, parentID: "demo-1"), task(3, parentID: "demo-1", activity: .unknown),
+                           task(4, parentID: "demo-2")]
+            store.tasks[1] = TaskSnapshot(id: "demo-2", title: "ios phone auth r2 review", model: "gpt-5.6-sol",
+                sourceLabel: "子任务", parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
+                updatedAt: referenceDate, tokens: TokenUsage(input: 240_400, output: 1_300, total: 241_700), activity: .running,
+                agentPath: "/root/ios_phone_auth_r2_review", agentNickname: "Lorentz", agentRole: "reviewer",
+                progress: TaskProgress(kind: .message, text: "已核对认证表单与传输边界，目前正在检查快照失效、缓存提交和账号接续后的资料选择，确保长进展文本能正确截断并通过悬停查看。"))
+            store.tasks[3].progress = TaskProgress(kind: .tool, text: "执行命令")
+        case .familyContext:
+            store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
+            store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
+                           task(3, parentID: "demo-2"), task(4, parentID: "missing-parent")]
         case .loading, .empty, .error, .noQuota:
             break
         }
@@ -129,7 +152,7 @@ enum PreviewSupport {
     private static func panel(store: MonitorStore, scenario: Scenario, screenHeight: CGFloat = 800, increasedContrast: Bool = false,
                               onSizingChange: @escaping (PanelSizing) -> Void) -> some View {
         MonitorPanel(store: store, screenOverride: PanelScreenMetrics(visibleHeight: screenHeight),
-                     initiallyExpandedTaskIDs: scenario == .expanded ? ["demo-1"] : [],
+                     initiallyExpandedTaskIDs: expandedTaskIDs(for: scenario),
                      initiallyShowUnknown: scenario == .unknown, onSizingChange: onSizingChange)
             .environment(\.monitorOpaquePreview, true)
             .environment(\.monitorPreviewContrast, increasedContrast ? .increased : .standard)

@@ -9,7 +9,7 @@ struct VeyraApp: App {
     var body: some Scene {
         MenuBarExtra {
             MonitorPanel(store: store,
-                         initiallyExpandedTaskIDs: PreviewSupport.menuScenario == .expanded ? ["demo-1"] : [],
+                         initiallyExpandedTaskIDs: PreviewSupport.expandedTaskIDs(for: PreviewSupport.menuScenario),
                          initiallyShowUnknown: PreviewSupport.menuScenario == .unknown)
                 .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
                 .environment(\.monitorOpaquePreview, PreviewSupport.menuReduceTransparency)

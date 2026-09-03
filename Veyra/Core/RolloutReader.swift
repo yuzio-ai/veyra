@@ -12,12 +12,14 @@ struct RolloutState: Sendable {
     var boundary: TurnBoundary?
     var model: String?
     var quotaBuckets: [String: LocalQuotaBucket] = [:]
+    var display = RolloutDisplay()
 }
 
-/// Only inspects top-level lifecycle and token events, never transcript text or tool output.
+/// Lifecycle/token data plus explicitly public progress; never reasoning or tool output.
 enum RolloutEvent {
     static func apply(_ line: Data, to state: inout RolloutState, newestFirst: Bool = false) {
         guard let event = try? JSONValue.decode(line) else { return }
+        state.display.apply(event, newestFirst: newestFirst)
         let payload = event["payload"]
         if event["type"].string == "turn_context" {
             if !newestFirst || state.model == nil { state.model = payload["model"].string ?? state.model }

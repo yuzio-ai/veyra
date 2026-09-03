@@ -216,7 +216,11 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     let startedAt: Date?
     let updatedAt: Date
     let tokens: TokenUsage
-    let activity: TaskActivity
+    var activity: TaskActivity
+    var agentPath: String?
+    var agentNickname: String?
+    var agentRole: String?
+    var progress: TaskProgress?
 }
 
 struct TaskReadResult: Sendable {
@@ -226,6 +230,7 @@ struct TaskReadResult: Sendable {
     var localQuota: QuotaSnapshot?
     var quotaWarning: String?
     var metrics = TaskReadMetrics()
+    var ancestors: [TaskReference] = []
 }
 
 enum DisplayFormat {

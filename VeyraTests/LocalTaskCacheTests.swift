@@ -37,6 +37,38 @@ final class SQLiteFixture {
 }
 
 final class LocalTaskCacheTests: XCTestCase {
+    func testUnnamedChildUsesOptionalMetadataAndRetainsArchivedParentWithoutCountingIt() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads()
+        let parentPath = try fixture.log("parent"), childPath = try fixture.log("child")
+        try fixture.insert("parent", path: parentPath, archived: true)
+        try fixture.insert("child", path: childPath)
+        try fixture.execute("ALTER TABLE threads ADD COLUMN name TEXT; ALTER TABLE threads ADD COLUMN agent_path TEXT; ALTER TABLE threads ADD COLUMN agent_nickname TEXT; ALTER TABLE threads ADD COLUMN agent_role TEXT")
+        try fixture.execute("""
+            UPDATE threads SET name='归档父任务' WHERE id='parent';
+            UPDATE threads SET title='', name='  ', agent_path='/root/ios_phone_auth_r2_review',
+                agent_nickname='Lorentz', agent_role='reviewer',
+                source='{"subagent":{"thread_spawn":{"parent_thread_id":"parent"}}}' WHERE id='child';
+            """)
+        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"child-turn"}}"# + "\n" +
+                  #"{"type":"turn_context","payload":{"model":"test"}}"# + "\n" +
+                  #"{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"正在检查认证边界"}],"internal_chat_message_metadata_passthrough":{"turn_id":"child-turn"}}}"# + "\n").utf8).appendTo(childPath)
+        let reader = LocalTaskReader { _ in ProcessEvidence(threadIDs: ["child"]) }
+        let first = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(first.tasks.count, 1)
+        XCTAssertEqual(first.tasks[0].title, "ios phone auth r2 review")
+        XCTAssertEqual(first.tasks[0].agentRole, "reviewer")
+        XCTAssertEqual(first.tasks[0].progress?.text, "正在检查认证边界")
+        XCTAssertEqual(first.ancestors, [TaskReference(id: "parent", title: "归档父任务", parentID: nil)])
+        let cached = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(cached.metrics.metadataQueries, 0)
+        XCTAssertEqual(cached.metrics.rolloutBytes, 0)
+        XCTAssertEqual(cached.metrics.rolloutOpens, 0)
+        try fixture.execute("UPDATE threads SET name='新的父任务标题' WHERE id='parent'")
+        let renamed = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(renamed.ancestors.first?.title, "新的父任务标题")
+        XCTAssertEqual(renamed.metrics.rolloutBytes, 0)
+    }
+
     func testCacheHitWALCommitAndQueryRaceCannotMarkOldResultCurrent() throws {
         let fixture = try SQLiteFixture()
         try fixture.execute("PRAGMA journal_mode=WAL; CREATE TABLE sample(value INTEGER); INSERT INTO sample VALUES(1)")

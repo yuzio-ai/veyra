@@ -12,7 +12,8 @@ import sys
 import tempfile
 
 
-SECRETS = ["private@example.invalid", "TEST_SECRET", "DATA_SECRET", "/private/account/path"]
+SECRETS = ["private@example.invalid", "TEST_SECRET", "DATA_SECRET", "/private/account/path",
+           "PRIVATE_TASK_TITLE", "PRIVATE_PROGRESS", "PRIVATE_AGENT_PATH", "PRIVATE_AGENT_ROLE"]
 SERVER = r'''
 import json
 import os
@@ -59,11 +60,28 @@ for line in sys.stdin:
 '''
 
 
-def run_case(app, mode, expected_code, network=True):
+def run_case(app, mode, expected_code, network=True, with_task=False):
     with tempfile.TemporaryDirectory(prefix="veyra-diagnostics-") as directory:
         home = Path(directory)
         with sqlite3.connect(home / "state_5.sqlite") as db:
-            db.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT)")
+            db.execute("CREATE TABLE threads (id TEXT, rollout_path TEXT, title TEXT, source TEXT, updated_at INTEGER, archived INTEGER)")
+            if with_task:
+                rollout = home / "child.jsonl"
+                source = {"subagent": {"thread_spawn": {"parent_thread_id": "fixture-parent",
+                          "agent_path": "/root/PRIVATE_AGENT_PATH", "agent_role": "PRIVATE_AGENT_ROLE"}}}
+                db.execute("INSERT INTO threads VALUES (?, ?, ?, ?, strftime('%s','now'), 0)",
+                           ("fixture-child", str(rollout), "", json.dumps(source)))
+                db.execute("INSERT INTO threads VALUES (?, ?, ?, ?, 0, 1)",
+                           ("fixture-parent", str(home / "missing-parent.jsonl"), "PRIVATE_TASK_TITLE", "cli"))
+                events = [
+                    {"type": "event_msg", "payload": {"type": "task_started", "turn_id": "fixture-turn"}},
+                    {"type": "turn_context", "payload": {"model": "fixture-model"}},
+                    {"type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"total_tokens": 123}}}},
+                    {"type": "response_item", "payload": {"type": "message", "role": "assistant", "phase": "commentary",
+                        "content": [{"type": "output_text", "text": "PRIVATE_PROGRESS"}],
+                        "internal_chat_message_metadata_passthrough": {"turn_id": "fixture-turn"}}},
+                ]
+                rollout.write_text("".join(json.dumps(event) + "\n" for event in events))
         (home / "mode").write_text(mode)
         server = home / "server.py"
         server.write_text(SERVER)
@@ -96,7 +114,12 @@ def run_case(app, mode, expected_code, network=True):
         payload = json.loads(stdout)
         assert "quotaErrorCode" in payload, f"{mode}: missing error code field"
         assert payload["quotaErrorCode"] == expected_code, f"{mode}: unexpected error category: {payload}"
-        assert payload["tasks"] == [], f"{mode}: expected the isolated empty task database"
+        if with_task:
+            assert len(payload["tasks"]) == 1, "Expected the child without its archived parent in diagnostic task counts"
+            assert payload["tasks"][0]["id"] == "fixture-child"
+            assert payload["tasks"][0]["totalTokens"] == 123
+        else:
+            assert payload["tasks"] == [], f"{mode}: expected the isolated empty task database"
         if expected_code is None:
             assert payload["quotaError"] is None
             if network:
@@ -110,7 +133,7 @@ def run_case(app, mode, expected_code, network=True):
             requests = (home / "requests").read_text().splitlines()
             assert requests[0] == "initialize"
             assert set(requests) <= {"initialize", "initialized", "account/read", "account/rateLimits/read"}
-        print(f"PASS diagnostics: {mode} ({'network fixture' if network else 'local only'})")
+        print(f"PASS diagnostics: {mode} ({'task context privacy' if with_task else 'network fixture' if network else 'local only'})")
 
 
 def main():
@@ -128,7 +151,8 @@ def main():
     for mode, expected_code in cases:
         run_case(app, mode, expected_code)
     run_case(app, "success", None, network=False)
-    print(f"Passed {len(cases) + 1} isolated app diagnostics checks")
+    run_case(app, "success", None, network=False, with_task=True)
+    print(f"Passed {len(cases) + 2} isolated app diagnostics checks")
 
 
 if __name__ == "__main__":
