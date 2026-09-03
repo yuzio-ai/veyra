@@ -9,6 +9,8 @@ enum PreviewSupport {
         case edgeCases = "edge-cases"
         case localQuota = "local-quota", staleQuota = "stale-quota", noQuota = "no-quota", cooldown
         case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
+        case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
+        case refreshing
     }
 
     static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
@@ -83,6 +85,15 @@ enum PreviewSupport {
                             usedPercent: nil, durationMinutes: nil, resetsAt: nil)
             ]
         }
+        if scenario == .quotaRingLow || scenario == .quotaRingHigh {
+            let remainingValues: [Double?] = scenario == .quotaRingLow ? [0, 0.4, 9.9, 10] : [29.9, 30, 100, nil]
+            windows = remainingValues.enumerated().map { index, remaining in
+                QuotaWindow(id: "codex:ring-\(index)", bucketID: "codex", bucketName: "Codex",
+                            isPrimary: index == 0, usedPercent: remaining.map { 100 - $0 },
+                            durationMinutes: Int64((index + 1) * 60),
+                            resetsAt: referenceDate.addingTimeInterval(Double((index + 1) * 3_600)))
+            }
+        }
         store.quota.snapshot = QuotaSnapshot(windows: windows, fetchedAt: referenceDate, accountID: nil)
         if [.localQuota, .staleQuota].contains(scenario) {
             store.quota.account = nil
@@ -96,8 +107,9 @@ enum PreviewSupport {
             store.nextCalibrationAt = referenceDate.addingTimeInterval(300)
         }
         switch scenario {
-        case .single, .quotas, .expanded, .localQuota, .staleQuota, .cooldown:
+        case .single, .quotas, .expanded, .localQuota, .staleQuota, .cooldown, .refreshing:
             store.tasks = [task(1)]
+            if scenario == .refreshing { store.tasksBusy = true }
         case .longTitle:
             store.tasks = [task(1, longTitle: true)]
         case .multiple:
@@ -128,7 +140,7 @@ enum PreviewSupport {
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
             store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
                            task(3, parentID: "demo-2"), task(4, parentID: "missing-parent")]
-        case .loading, .empty, .error, .noQuota:
+        case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh:
             break
         }
     }

@@ -87,39 +87,48 @@ struct MonitorPanel: View {
     private var header: some View {
         HStack(spacing: 11) {
             VeyraIcon(size: 28)
-            VStack(alignment: .leading, spacing: 3) {
-                VeyraWordmark(width: 56)
-                HStack(spacing: 5) {
-                    Circle().fill(store.taskError == nil ? monitorAccent : .orange).frame(width: 5, height: 5)
-                    Text("本机活动").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
+            VeyraWordmark(width: 56)
             Spacer()
-            if store.quotaBusy || store.tasksBusy {
-                ProgressView().controlSize(.small).scaleEffect(0.8)
+            HStack(spacing: 5) {
+                Circle().fill(store.taskError == nil ? monitorAccent : .orange).frame(width: 5, height: 5)
+                Text("本机活动").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Button { Task { await store.refreshAll() } } label: {
-                Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary).frame(width: 18, height: 18)
-            }
-            .modifier(MonitorActionStyle())
-            .help("刷新本地任务与额度快照")
-            .accessibilityLabel("刷新")
-            .accessibilityIdentifier("monitor.refresh")
-            .disabled(store.tasksBusy)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 7) {
                 sectionTitle("额度")
+                if store.quotaBusy {
+                    ProgressView().controlSize(.small).scaleEffect(0.8)
+                        .frame(width: 14, height: 14)
+                        .accessibilityLabel("正在联网校准额度")
+                        .accessibilityIdentifier("monitor.quotaProgress")
+                }
                 Spacer()
                 if let plan = store.quota.account?.plan {
                     Text(plan.uppercased()).font(.system(size: 9, weight: .semibold, design: .rounded))
                         .tracking(0.5).padding(.horizontal, 7).padding(.vertical, 4)
                         .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
+                }
+                MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
+                    HStack(spacing: 7) {
+                        if let next = store.nextCalibrationAt, next > now {
+                            Text("\(next.formatted(date: .omitted, time: .standard)) 后可校准")
+                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                        Button { Task { await store.calibrateQuota() } } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.primary).frame(width: 18, height: 18)
+                        }
+                        .modifier(MonitorActionStyle())
+                        .help("联网校准额度")
+                        .accessibilityLabel("联网校准")
+                        .accessibilityIdentifier("monitor.calibrate")
+                        .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
+                    }
                 }
             }
             if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
@@ -132,14 +141,15 @@ struct MonitorPanel: View {
                         Text(windows.first?.bucketName ?? id)
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
                         VStack(spacing: 12) {
-                            ForEach(windows) { window in QuotaWindowView(window: window) }
+                            ForEach(windows) { window in
+                                if window.id != windows.first?.id {
+                                    Divider().accessibilityHidden(true)
+                                }
+                                QuotaWindowView(window: window)
+                            }
                         }
-                        MonitorTimeline(interval: 30) { now in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("\(snapshot.source == .local ? "本地快照" : "联网校准") · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))")
-                                if snapshot.isStale(bucketID: id, at: now) { Text("等待 Codex 更新").foregroundStyle(.orange) }
-                            }.font(.system(size: 10)).foregroundStyle(.secondary)
-                        }
+                        Text("\(snapshot.source == .local ? "本地快照" : "联网校准") · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
                     }
                     .padding(14).monitorCard()
                 }
@@ -152,28 +162,8 @@ struct MonitorPanel: View {
                 Text("暂无本地额度记录").font(.system(size: 12)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
             }
-            MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
-                HStack {
-                    Button("联网校准") { Task { await store.calibrateQuota() } }
-                        .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
-                        .accessibilityIdentifier("monitor.calibrate")
-                    if let next = store.nextCalibrationAt, next > now {
-                        Text("\(next.formatted(date: .omitted, time: .standard)) 后可校准")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
             if let warning = store.localQuotaWarning { notice(warning) }
             if let error = store.quota.error { notice(error) }
-            VStack(alignment: .leading, spacing: 4) {
-                if store.quota.snapshot?.source == .local {
-                    Text("本机会话记录 · 账号归属未确认 · 菜单栏 ~ 表示本地快照")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let email = store.quota.account?.email { Text(email).lineLimit(1).help(email) }
-            }
-            .font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 
@@ -188,9 +178,25 @@ struct MonitorPanel: View {
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
                     .background(.primary.opacity(0.08), in: Capsule())
+                if store.tasksBusy {
+                    ProgressView().controlSize(.small).scaleEffect(0.8)
+                        .frame(width: 14, height: 14)
+                        .accessibilityLabel("正在刷新运行任务")
+                        .accessibilityIdentifier("monitor.tasksProgress")
+                }
                 Spacer()
-                Text("每 \(store.pollingSeconds) 秒检查").font(.system(size: 11)).foregroundStyle(.secondary)
+                PollingInfoView(seconds: store.pollingSeconds)
+                Button { Task { await store.refreshAll() } } label: {
+                    Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary).frame(width: 18, height: 18)
+                }
+                .modifier(MonitorActionStyle())
+                .help("刷新本地任务与额度快照")
+                .accessibilityLabel("刷新")
+                .accessibilityIdentifier("monitor.refresh")
+                .disabled(store.tasksBusy)
             }
+            .zIndex(1)
             if store.runningTasks.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: !store.hasTaskSnapshot ? "ellipsis" : "checkmark.circle")
@@ -256,40 +262,62 @@ struct MonitorPanel: View {
     }
 }
 
+private struct PollingInfoView: View {
+    let seconds: Int
+    @State private var isHovered = false
+    @Environment(\.monitorPanelActive) private var panelActive
+
+    private var tooltip: String { "每 \(seconds) 秒检查" }
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.system(size: 13)).foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+            .accessibilityLabel("自动检查间隔")
+            .accessibilityValue(tooltip)
+            .accessibilityIdentifier("monitor.pollingInfo")
+            .overlay(alignment: .topTrailing) {
+                if isHovered {
+                    Text(tooltip)
+                        .font(.system(size: 11)).foregroundStyle(.primary)
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                        }
+                        .fixedSize()
+                        .offset(y: 26)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("monitor.pollingTooltip")
+                }
+            }
+            .onChange(of: panelActive) { _, active in
+                if !active { isHovered = false }
+            }
+            .onDisappear { isHovered = false }
+    }
+}
+
 private struct QuotaWindowView: View {
     let window: QuotaWindow
     @Environment(\.monitorReferenceDate) private var referenceDate
-    private var tint: Color {
-        guard let remaining = window.remainingPercent else { return .secondary }
-        return remaining <= 10 ? .red : remaining <= 25 ? .orange : .primary
-    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(durationTitle)
-                        .font(.system(size: 13, weight: .medium))
-                    resetLabel
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("剩余").font(.system(size: 11)).foregroundStyle(.secondary)
-                    Text(DisplayFormat.percent(window.remainingPercent))
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .monospacedDigit().foregroundStyle(tint)
-                }.fixedSize()
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(durationTitle)
+                    .font(.system(size: 13, weight: .medium))
+                resetLabel
             }
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(tint.opacity(0.12))
-                    if let remaining = window.remainingPercent {
-                        Capsule().fill(tint).frame(width: max(0, geometry.size.width * remaining / 100))
-                    }
-                }
-            }.frame(height: 5)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            QuotaRingView(remainingPercent: window.remainingPercent)
         }
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("monitor.quota.\(window.id)")
     }
 
     private var resetLabel: some View {
@@ -309,6 +337,35 @@ private struct QuotaWindowView: View {
         let label = window.durationLabel
         if label == "周" { return "每周额度" }
         return label.hasSuffix("额度") ? label : "\(label)额度"
+    }
+}
+
+private struct QuotaRingView: View {
+    let remainingPercent: Double?
+
+    private var tint: Color {
+        guard let remaining = remainingPercent else { return .secondary }
+        return remaining < 10 ? .red : remaining < 30 ? .orange : monitorAccent
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(tint.opacity(0.12), lineWidth: 5)
+            if let remaining = remainingPercent, remaining > 0 {
+                Circle().inset(by: 2.5)
+                    .trim(from: 0, to: remaining / 100)
+                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            Text(DisplayFormat.percent(remainingPercent))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .monospacedDigit().foregroundStyle(tint)
+                .fixedSize()
+        }
+        .frame(width: 56, height: 56)
+        .accessibilityElement(children: .ignore)
+        // Keep the percentage in the label so the combined quota row retains it.
+        .accessibilityLabel(remainingPercent == nil ? "剩余额度暂不可用" : "剩余额度 \(DisplayFormat.percent(remainingPercent))")
     }
 }
 
