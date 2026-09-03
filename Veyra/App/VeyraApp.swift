@@ -8,7 +8,10 @@ struct VeyraApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MonitorPanel(store: store)
+            MonitorPanel(store: store,
+                         initiallyExpandedTaskIDs: PreviewSupport.menuScenario == .expanded ? ["demo-1"] : [],
+                         initiallyShowUnknown: PreviewSupport.menuScenario == .unknown)
+                .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
         } label: {
             HStack(spacing: 4) {
                 VeyraIcon(isTemplate: true)
@@ -40,17 +43,27 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             PreviewSupport.render(to: URL(fileURLWithPath: arguments[index + 1]))
             return
         }
-        MonitorStore.shared.start()
+        if let scenario = PreviewSupport.menuScenario {
+            PreviewSupport.configure(MonitorStore.shared, scenario: scenario)
+        } else {
+            MonitorStore.shared.start()
+        }
         if let index = arguments.firstIndex(of: "--capture-menu-to"), arguments.indices.contains(index + 1) {
             Diagnostics.captureNextMenu(to: URL(fileURLWithPath: arguments[index + 1]))
+        }
+        if PreviewSupport.menuScenario != nil,
+           let index = arguments.firstIndex(of: "--exercise-menu-to"), arguments.indices.contains(index + 1) {
+            Diagnostics.exerciseNextMenu(to: URL(fileURLWithPath: arguments[index + 1]))
         }
         // Developer smoke-test entry point; shows the exact menu content using live data.
         if arguments.contains("--show-panel") {
             let view = NSHostingView(rootView: MonitorPanel(store: MonitorStore.shared))
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 660),
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 1),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.title = "Veyra"
             window.contentView = view
+            view.sizingOptions = [.intrinsicContentSize, .minSize, .maxSize]
+            window.setContentSize(view.fittingSize)
             window.center(); window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             previewWindow = window

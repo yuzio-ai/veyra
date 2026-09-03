@@ -33,6 +33,7 @@ struct VeyraIcon: View {
 
 /// Typography rendered from the supplied SVG, tinted for the current appearance.
 struct VeyraWordmark: View {
+    var width: CGFloat = 72
     private static let image: NSImage = {
         let image = (NSImage(named: "VeyraWordmark")?.copy() as? NSImage)
             ?? NSImage(size: NSSize(width: 72, height: 29))
@@ -47,7 +48,7 @@ struct VeyraWordmark: View {
             .resizable()
             .interpolation(.high)
             .scaledToFit()
-            .frame(width: 72, height: 29)
+            .frame(width: width, height: width * 29 / 72)
             .accessibilityLabel("Veyra")
     }
 }

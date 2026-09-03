@@ -10,12 +10,9 @@ struct MonitorSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 12) {
-                VeyraIcon(size: 44)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Veyra 设置").font(.title2.weight(.semibold))
-                    Text("沿用 Codex 的登录与本机任务记录。")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
+                VeyraIcon(size: 32)
+                Text("沿用 Codex 的登录与本机任务记录。")
+                    .font(.callout).foregroundStyle(.secondary)
             }
             pathField("Codex 数据目录", value: $home, placeholder: CodexLocation.resolve().home.path, folder: true)
             pathField("Codex 可执行文件", value: $executable, placeholder: CodexLocation.resolve().executable?.path ?? "自动查找", folder: false)

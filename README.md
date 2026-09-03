@@ -17,9 +17,11 @@
 open 'build/Build/Products/Release/Veyra.app'
 ```
 
-应用只出现在屏幕顶部菜单栏，不显示 Dock 图标。也可以将生成的 `.app` 拖到自己的“应用程序”目录。菜单栏使用 Veyra 标志，并随系统背景自动调整深浅；面板和设置保留原始米灰色标志。弹窗采用控制中心风格的系统毛玻璃背景和大圆角面板，背景、文字和进度条跟随系统浅色／深色外观，包括自动切换；macOS 26 使用原生 Liquid Glass，旧系统使用原生材质回退，并支持“减少透明度”。点击图标后，首先显示运行任务及累计、输入、输出 token；任务标题前不显示图标，点击累计用量展开缓存和推理明细。向下滚动可查看全部额度窗口，底部齿轮打开设置，电源按钮退出应用。
+应用只出现在屏幕顶部菜单栏，不显示 Dock 图标。也可以将生成的 `.app` 拖到自己的“应用程序”目录。菜单栏使用 Veyra 标志，并随系统背景自动调整深浅；面板和设置保留原始米灰色标志。弹窗为 360pt 紧凑面板：高度随实际内容自动伸缩，达到所在显示器的可用高度上限后，仅中间正文滚动，标题、刷新和底部操作始终固定。系统负责弹窗材质、圆角与阴影，滚动卡片使用语义填充；macOS 26 的固定操作按钮使用原生 Liquid Glass，旧系统使用原生 bordered 样式。外观跟随系统浅色／深色切换，并支持“减少透明度”和“增加对比度”。点击图标后，首先显示运行任务及累计、输入、输出 token；任务标题前不显示图标，点击累计用量展开缓存和推理明细。刷新保留仍存在任务的展开状态，不主动滚回顶部。向下滚动可查看全部额度窗口，底部齿轮打开设置，电源按钮退出应用。
 
 设置中的路径留空时会自动发现 Codex：优先检查已安装桌面应用，再检查 PATH 和常见 CLI 安装位置。默认数据目录为 `CODEX_HOME`，未设置时使用 `~/.codex`；从 Finder 启动通常不会继承终端中的环境变量，自定义目录请在设置中指定。
+
+卡片内以信息分组区分层次：任务左侧汇总耗时与输入／输出，右侧突出可展开的累计用量；额度将窗口名称和重置时间放在左侧、剩余比例右对齐。较长数值自动转为纵向排列，不压小文字。卡片仅使用语义填充和系统分隔色细边界，低额度同时在进度和百分比上使用风险色。
 
 ## 构建和测试
 
@@ -76,17 +78,31 @@ Codex 本地数据库与会话格式属于实现细节，升级后可能发生�
 # 一次真实只读联调，输出不含邮箱、凭据、标题或会话正文的 JSON，然后退出
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --diagnose
 
-# 用示例数据渲染布局与空状态，不启动 Codex；图片使用“减少透明度”外观
+# 渲染加载、空状态、单任务、长标题、多任务、多额度、错误、展开、待确认及边界数据场景
+# 输出浅色／深色及高对比度的 40 张 PNG 和 layouts.json；不启动 Codex，图片使用不透明布局外观
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --render-previews "$PWD/build/previews"
 
-# 在独立窗口中检查与菜单相同的界面，使用真实数据
+# 在独立窗口中检查内容布局，使用真实数据；不用于验收菜单栏材质
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --show-panel
 
-# 启动后点击菜单栏，捕获真实菜单内容，用于检查弹窗尺寸
+# 用固定示例数据检查真正的菜单栏弹窗，不读取 Codex；场景名见上方预览场景
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --preview-menu multiple
+
+# 60 秒内打开测试菜单，自动检查顶部／中部／底部、快速滚动与同一弹窗动态收缩
+# 仅允许与 --preview-menu 配合使用，输出布局位图及 menu-check.json
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --preview-menu multiple --exercise-menu-to "$PWD/build/menu-check"
+
+# 启动后 30 秒内点击菜单栏，导出真实菜单的布局位图并打印窗口编号／尺寸
+# 可与 --preview-menu single 等场景组合；布局位图不包含完整 WindowServer 玻璃合成
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --capture-menu-to "$PWD/build/menu.png"
+
+# 使用上一条命令打印的窗口编号捕获系统合成结果（可能需要屏幕录制权限）
+# screencapture -x -l <窗口编号> "$PWD/build/menu-native.png"
 ```
 
-核心测试覆盖额度窗口、缺失数据、登录／网络失败缓存、累计 token、增量／半行日志、文件替换／截断、子任务、完成／中断、进程证据、只读 SQLite，以及真实子进程上的 RPC 初始化和超时。
+核心测试覆盖额度窗口、缺失数据、登录／网络失败缓存、累计 token、增量／半行日志、文件替换／截断、子任务、完成／中断、进程证据、只读 SQLite，以及真实子进程上的 RPC 初始化和超时。尺寸测试覆盖自然高度、溢出上限、窗口边距、展开／收起及多屏尺寸变化。
+
+视觉验收应打开真实菜单，分别滚到顶部、中部和底部，并检查快速滚动／回弹期间标题和底栏不被覆盖。使用同一背景分别比较浅色、深色、减少透明度及增加对比度；不透明布局预览不能证明 Liquid Glass 的最终效果。菜单预览场景名为 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`。边界场景包括长数值、缺失用量、子任务、不到 1% 的剩余额度和过期／缺失重置时间；固定单任务和多额度预览附带紧凑高度回归检查，运行时不使用这些预览高度预算。
 
 界面使用 [SwiftUI MenuBarExtra 窗口样式](https://developer.apple.com/documentation/swiftui/menubarextrastyle/window)。
-玻璃面板使用 [Apple Liquid Glass API](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)，背景使用 AppKit 原生 `NSVisualEffectView`。
+固定操作控件使用 [Apple Liquid Glass API](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)，遵循 [Apple 关于固定玻璃操作层与滚动内容层的建议](https://developer.apple.com/forums/thread/791070)，不再额外叠加 `NSVisualEffectView` 或修改系统弹窗外观。

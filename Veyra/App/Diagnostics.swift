@@ -3,17 +3,86 @@ import AppKit
 
 @MainActor
 enum Diagnostics {
+    /// Opt-in interaction smoke test against the actual menu window, not a substitute window.
+    /// Images remain layout-only; this never requests screen recording permission.
+    static func exerciseNextMenu(to directory: URL) {
+        Task { @MainActor in
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                for _ in 0..<300 {
+                    try await Task.sleep(for: .milliseconds(200))
+                    guard let window = NSApp.windows.first(where: {
+                        $0.isVisible && abs($0.frame.width - PanelSizing.width) < 4 && $0.frame.height > 100
+                    }), let view = window.contentView else { continue }
+                    try await Task.sleep(for: .milliseconds(700))
+                    guard let scroll = scrollView(in: view), let document = scroll.documentView else {
+                        throw MenuCheckError.missingScrollView
+                    }
+                    var records: [[String: Any]] = []
+                    let originalHeight = window.frame.height
+                    let maximumOffset = max(0, document.bounds.height - scroll.contentView.bounds.height)
+                    guard maximumOffset > 0 else { throw MenuCheckError.expectedOverflow }
+                    for (name, offset) in [("top", CGFloat(0)), ("middle", maximumOffset / 2), ("bottom", maximumOffset)] {
+                        scroll.contentView.scroll(to: NSPoint(x: 0, y: offset))
+                        scroll.reflectScrolledClipView(scroll.contentView)
+                        try await Task.sleep(for: .milliseconds(150))
+                        view.layoutSubtreeIfNeeded()
+                        guard abs(window.frame.height - originalHeight) < 1 else { throw MenuCheckError.unstableHeight }
+                        try PreviewSupport.saveBitmap(view, to: directory.appendingPathComponent("\(name)-layout.png"))
+                        records.append(["position": name, "windowHeight": window.frame.height,
+                                        "offset": scroll.contentView.bounds.origin.y,
+                                        "viewportHeight": scroll.contentView.bounds.height,
+                                        "documentHeight": document.bounds.height])
+                    }
+                    // Rapid alternating scroll commands exercise viewport clipping and clamping.
+                    for index in 0..<12 {
+                        scroll.contentView.scroll(to: NSPoint(x: 0, y: index.isMultiple(of: 2) ? -120 : maximumOffset + 120))
+                        scroll.reflectScrolledClipView(scroll.contentView)
+                        try await Task.sleep(for: .milliseconds(20))
+                    }
+                    scroll.contentView.scroll(to: .zero)
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                    // A short snapshot must shrink this very same menu window while it remains open.
+                    PreviewSupport.configure(MonitorStore.shared, scenario: .single)
+                    try await Task.sleep(for: .milliseconds(700))
+                    view.layoutSubtreeIfNeeded()
+                    guard window.frame.height < originalHeight else { throw MenuCheckError.didNotShrink }
+                    try PreviewSupport.saveBitmap(view, to: directory.appendingPathComponent("shrunk-layout.png"))
+                    records.append(["position": "shrunk", "windowHeight": window.frame.height])
+                    try JSONSerialization.data(withJSONObject: records, options: [.prettyPrinted, .sortedKeys])
+                        .write(to: directory.appendingPathComponent("menu-check.json"))
+                    print("Menu checks passed: top, middle, bottom, rapid scrolling, live shrink. Window \(window.windowNumber)")
+                    return
+                }
+                throw MenuCheckError.timedOut
+            } catch {
+                print("Menu checks failed: \(error)")
+            }
+        }
+    }
+
+    private static func scrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
+    }
+
+    private enum MenuCheckError: Error {
+        case missingScrollView, expectedOverflow, unstableHeight, didNotShrink, timedOut
+    }
+
     /// Capture our own real MenuBarExtra, avoiding a fixed preview window that
-    /// can hide intrinsic-size regressions. Only enabled by this explicit flag.
+    /// can hide intrinsic-size regressions. This bitmap checks layout, not live glass;
+    /// use the printed window number with macOS screencapture for compositor output.
     static func captureNextMenu(to destination: URL) {
         Task { @MainActor in
             for _ in 0..<150 {
                 try? await Task.sleep(for: .milliseconds(200))
                 guard let window = NSApp.windows.first(where: {
-                    $0.isVisible && abs($0.frame.width - 420) < 4 && $0.frame.height > 200
+                    $0.isVisible && abs($0.frame.width - PanelSizing.width) < 4 && $0.frame.height > 100
                 }), let view = window.contentView else { continue }
                 try? await Task.sleep(for: .milliseconds(600))
                 view.layoutSubtreeIfNeeded()
+                print("Menu window: \(window.windowNumber), size: \(window.frame.size), screen: \(window.screen.map { String(describing: $0.visibleFrame) } ?? "unknown")")
                 if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     if let data = bitmap.representation(using: .png, properties: [:]) {
@@ -22,6 +91,7 @@ enum Diagnostics {
                 }
                 return
             }
+            print("Menu capture timed out. Open the Veyra menu within 30 seconds.")
         }
     }
 
