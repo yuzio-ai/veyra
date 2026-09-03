@@ -4,8 +4,10 @@ import Foundation
 private actor MonitorFixture {
     var localReads = 0
     var networkReads = 0
-    var local = QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 100), accountID: nil, source: .local)
+    var local: QuotaSnapshot? = QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 100), accountID: nil, source: .local)
+    var networkResult = QuotaRefresh(snapshot: QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 200), accountID: "fixture"), didRequestQuota: true)
     var networkGate: CheckedContinuation<Void, Never>?
+    var gateWaiters: [CheckedContinuation<Void, Never>] = []
     var holdNetwork = false
     func read() -> TaskReadResult {
         localReads += 1
@@ -13,12 +15,23 @@ private actor MonitorFixture {
     }
     func network() async -> QuotaRefresh {
         networkReads += 1
-        if holdNetwork { await withCheckedContinuation { networkGate = $0 } }
-        return QuotaRefresh(snapshot: QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 200), accountID: "fixture"), didRequestQuota: true)
+        let result = networkResult
+        if holdNetwork {
+            await withCheckedContinuation {
+                networkGate = $0
+                gateWaiters.forEach { $0.resume() }; gateWaiters = []
+            }
+        }
+        return result
     }
     func counts() -> (Int, Int) { (localReads, networkReads) }
+    func setLocal(_ snapshot: QuotaSnapshot?) { local = snapshot }
+    func setNetwork(_ result: QuotaRefresh) { networkResult = result }
     func hold() { holdNetwork = true }
-    func release() { networkGate?.resume(); networkGate = nil }
+    func waitUntilHeld() async {
+        if networkGate == nil { await withCheckedContinuation { gateWaiters.append($0) } }
+    }
+    func release() { holdNetwork = false; networkGate?.resume(); networkGate = nil }
 }
 
 @MainActor
@@ -30,6 +43,99 @@ final class MonitorStoreTests: XCTestCase {
         defaults.set(home.path, forKey: "codexHome")
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
         return defaults
+    }
+    private var verifiedQuota: QuotaRefresh {
+        let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "email": .string("a@example.invalid")]), accountID: "account-a")
+        let window = QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex", isPrimary: true,
+                                 usedPercent: 20, durationMinutes: 300, resetsAt: nil)
+        return QuotaRefresh(account: account, snapshot: QuotaSnapshot(windows: [window],
+                            fetchedAt: Date(timeIntervalSince1970: 200), accountID: "account-a"), didRequestQuota: true)
+    }
+    func testCalibrationInvalidatesChangedAuthenticationBeforeEarlyFailure() async throws {
+        for failure: QuotaFailure in [.timeout, .disconnected] {
+            for hasLocal in [false, true] {
+                let folder = try SQLiteFixture(), fixture = MonitorFixture()
+                let local = hasLocal ? await fixture.read().localQuota : nil
+                await fixture.setLocal(local)
+                await fixture.setNetwork(verifiedQuota)
+                var now = Date(timeIntervalSince1970: 300)
+                let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                         now: { now }, defaults: defaults(home: folder.home))
+                await store.refreshAll()
+                await store.calibrateQuota()
+                XCTAssertEqual(store.quota.account?.identity, "account-a")
+                try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"), options: .atomic)
+                await fixture.setNetwork(QuotaRefresh(error: failure))
+                now = now.addingTimeInterval(61)
+                await store.calibrateQuota()
+                XCTAssertNil(store.quota.account)
+                XCTAssertEqual(store.quota.snapshot, local)
+                XCTAssertEqual(store.quota.error, failure.message)
+                await store.refreshAll()
+                XCTAssertNil(store.quota.account)
+                XCTAssertEqual(store.quota.snapshot, local)
+                let counts = await fixture.counts()
+                XCTAssertEqual(counts.1, 2)
+                store.stop()
+            }
+        }
+    }
+    func testCalibrationFailureKeepsVerifiedQuotaWhenAuthenticationIsUnchanged() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        let verified = verifiedQuota
+        await fixture.setNetwork(verified)
+        var now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        await store.calibrateQuota()
+        await fixture.setNetwork(QuotaRefresh(error: .timeout))
+        now = now.addingTimeInterval(61)
+        await store.calibrateQuota()
+        XCTAssertEqual(store.quota.account, verified.account)
+        XCTAssertEqual(store.quota.snapshot, verified.snapshot)
+        XCTAssertEqual(store.quota.error, QuotaFailure.timeout.message)
+    }
+    func testAuthenticationChangeDuringCooldownInvalidatesWithoutRequestingQuota() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        await fixture.setNetwork(verifiedQuota)
+        let now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                 now: { now }, defaults: defaults(home: folder.home))
+        await store.refreshAll()
+        await store.calibrateQuota()
+        let deadline = store.nextCalibrationAt
+        try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"))
+        await store.calibrateQuota()
+        XCTAssertNil(store.quota.account)
+        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        XCTAssertEqual(store.nextCalibrationAt, deadline)
+        let counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1)
+        store.stop()
+    }
+    func testAuthenticationChangeDuringRequestDiscardsResponseWithOrWithoutLocalPolling() async throws {
+        for pollWhilePending in [false, true] {
+            let folder = try SQLiteFixture(), fixture = MonitorFixture()
+            await fixture.setNetwork(verifiedQuota)
+            var now = Date(timeIntervalSince1970: 300)
+            let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                     now: { now }, defaults: defaults(home: folder.home))
+            await store.refreshAll()
+            await store.calibrateQuota()
+            now = now.addingTimeInterval(61)
+            await fixture.hold()
+            let request = Task { await store.calibrateQuota() }
+            await fixture.waitUntilHeld()
+            XCTAssertTrue(store.quotaBusy)
+            try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"))
+            if pollWhilePending { await store.refreshAll() }
+            await fixture.release(); await request.value
+            XCTAssertNil(store.quota.account)
+            XCTAssertEqual(store.quota.snapshot?.source, .local)
+            XCTAssertEqual(store.quota.error, "登录状态发生变化，请重新联网校准。")
+            XCTAssertEqual(store.nextCalibrationAt, now.addingTimeInterval(60))
+            XCTAssertFalse(store.quotaBusy)
+            store.stop()
+        }
     }
     func testStartupVisibilityWakeAndNormalRefreshNeverRequestQuota() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()

@@ -30,7 +30,7 @@ enum RolloutEvent {
         let tokenDate = kind == "token_count" ? timestamp(event["timestamp"].string) : nil
         if kind == "token_count", let date = tokenDate,
            let bucket = LocalQuotaBucket.parse(payload["rate_limits"], at: date),
-           state.quotaBuckets[bucket.id].map({ $0.recordedAt < date }) ?? true {
+           state.quotaBuckets[bucket.id].map({ $0.recordedAt < date || (!newestFirst && $0.recordedAt == date) }) ?? true {
             state.quotaBuckets[bucket.id] = bucket
         }
         if kind == "token_count", payload["info"]["total_token_usage"].object != nil {
@@ -62,6 +62,10 @@ struct RolloutReader {
         var offset: UInt64
         var modified: Date?
         var partial: Data
+        var discardingPartial: Bool
+        // A quota tail began inside a line. Task reads must recover its prefix,
+        // even if later incremental events supplied all the usual required fields.
+        var missingPrefixBefore: UInt64?
         var state: RolloutState
         var didReachStart: Bool
     }
@@ -77,9 +81,14 @@ struct RolloutReader {
         let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
         let identity = "\(attributes[.systemNumber] ?? 0):\(attributes[.systemFileNumber] ?? 0)"
         let modified = attributes[.modificationDate] as? Date
-        if var cursor = cursors[url.path], cursor.identity == identity, size >= cursor.offset,
-           (quotaOnly || cursor.didReachStart || hasRequiredFields(cursor.state, requireBoundary: requireBoundary)),
-           !(size == cursor.offset && modified != cursor.modified) {
+        let previous: Cursor? = cursors[url.path].flatMap { cursor in
+            guard cursor.identity == identity, size >= cursor.offset,
+                  !(size == cursor.offset && modified != cursor.modified) else { return nil }
+            return cursor
+        }
+        if var cursor = previous,
+           quotaOnly || (cursor.missingPrefixBefore == nil &&
+               (cursor.didReachStart || hasRequiredFields(cursor.state, requireBoundary: requireBoundary))) {
             if size > cursor.offset {
                 let file = try FileHandle(forReadingFrom: url)
                 lastOpenCount = 1
@@ -87,10 +96,15 @@ struct RolloutReader {
                 try file.seek(toOffset: cursor.offset)
                 var remaining = size - cursor.offset
                 while remaining > 0 {
-                    let data = try file.read(upToCount: Int(min(UInt64(chunkSize), remaining))) ?? Data()
+                    var data = try file.read(upToCount: Int(min(UInt64(chunkSize), remaining))) ?? Data()
                     lastReadByteCount += data.count
                     if data.isEmpty { break }
                     remaining -= UInt64(data.count); cursor.offset += UInt64(data.count)
+                    if cursor.discardingPartial {
+                        guard let newline = data.firstIndex(of: 0x0a) else { continue }
+                        data = Data(data[data.index(after: newline)...])
+                        cursor.discardingPartial = false
+                    }
                     cursor.partial.append(data)
                     consumeLines(from: &cursor.partial, state: &cursor.state)
                 }
@@ -102,37 +116,63 @@ struct RolloutReader {
         let file = try FileHandle(forReadingFrom: url)
         lastOpenCount = 1
         defer { try? file.close() }
-        var state = RolloutState(), carry = Data(), partial = Data()
-        if let cursor = cursors[url.path], cursor.identity == identity, size >= cursor.offset,
-           !(size == cursor.offset && modified != cursor.modified) {
-            state.quotaBuckets = cursor.state.quotaBuckets
-        }
+        var state = RolloutState(), partial = Data(), fragments: [Data] = []
+        var missingPrefixBefore = previous?.missingPrefixBefore
         var position = size
-        var firstChunk = true
+        var collectingPartial = true
         while position > 0 {
             let start = position > UInt64(chunkSize) ? position - UInt64(chunkSize) : 0
             try file.seek(toOffset: start)
-            var data = try file.read(upToCount: Int(position - start)) ?? Data()
+            let data = try file.read(upToCount: Int(position - start)) ?? Data()
             lastReadByteCount += data.count
-            data.append(carry)
-            var parts: [Data] = data.split(separator: UInt8(0x0a), omittingEmptySubsequences: false).map { Data($0) }
-            if firstChunk {
-                partial = parts.removeLast()
-                firstChunk = false
+            let parts = data.split(separator: UInt8(0x0a), omittingEmptySubsequences: false)
+            // A newline closes the line to its right in a reverse scan. Keep
+            // fragments in scan order and assemble only when its start is known.
+            for part in parts.dropFirst().reversed() {
+                fragments.append(Data(part))
+                let line = joinBackwardFragments(&fragments)
+                if collectingPartial { partial = line; collectingPartial = false }
+                else { RolloutEvent.apply(line, to: &state, newestFirst: true) }
             }
-            carry = parts.isEmpty ? Data() : parts.removeFirst()
-            for line in parts.reversed() { RolloutEvent.apply(line, to: &state, newestFirst: true) }
-            if start == 0 { RolloutEvent.apply(carry, to: &state, newestFirst: true) }
+            if let first = parts.first { fragments.append(Data(first)) }
+            if start == 0 {
+                let line = joinBackwardFragments(&fragments)
+                if collectingPartial { partial = line; collectingPartial = false }
+                else { RolloutEvent.apply(line, to: &state, newestFirst: true) }
+                missingPrefixBefore = nil
+            } else if let cutoff = missingPrefixBefore, let newline = data.firstIndex(of: 0x0a),
+                      start + UInt64(data.distance(from: data.startIndex, to: newline)) <= cutoff {
+                missingPrefixBefore = nil
+            }
             position = start
-            if quotaOnly || hasRequiredFields(state, requireBoundary: requireBoundary) { break }
+            if quotaOnly || (missingPrefixBefore == nil && hasRequiredFields(state, requireBoundary: requireBoundary)) { break }
+        }
+        let discardingPartial = collectingPartial && position > 0
+        if discardingPartial { missingPrefixBefore = position }
+        // Rescanned records win timestamp ties; cached buckets outside this scan
+        // remain available without seeding the reverse scan with an older tie.
+        for (id, bucket) in previous?.state.quotaBuckets ?? [:] {
+            if state.quotaBuckets[id].map({ $0.recordedAt < bucket.recordedAt }) ?? true {
+                state.quotaBuckets[id] = bucket
+            }
         }
         cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial,
+                                   discardingPartial: discardingPartial, missingPrefixBefore: missingPrefixBefore,
                                    state: state, didReachStart: position == 0)
         return state
     }
 
     private func hasRequiredFields(_ state: RolloutState, requireBoundary: Bool) -> Bool {
         state.usage != nil && state.model != nil && (!requireBoundary || state.boundary != nil)
+    }
+
+    private func joinBackwardFragments(_ fragments: inout [Data]) -> Data {
+        if fragments.count == 1 { return fragments.removeLast() }
+        var line = Data()
+        line.reserveCapacity(fragments.reduce(0) { $0 + $1.count })
+        for fragment in fragments.reversed() { line.append(fragment) }
+        fragments.removeAll(keepingCapacity: true)
+        return line
     }
 
     private func consumeLines(from data: inout Data, state: inout RolloutState) {

@@ -99,10 +99,11 @@ final class MonitorStore {
     }
     func calibrateQuota() async {
         guard !isPreview, !suspended else { return }
+        let location = location
+        let initialAuth = checkAuthentication(at: location.home)
         if let calibrationTask { await calibrationTask.value; return }
         guard calibrationPolicy.allowsRequest(at: now()) else { return }
-        let version = revision, location = location, started = now()
-        let initialAuth = AppServerClient.authenticationStamp(at: location.home)
+        let version = revision, started = now()
         calibrationPolicy.began(at: started)
         nextCalibrationAt = calibrationPolicy.nextAllowedAt
         quotaBusy = true
@@ -154,7 +155,8 @@ final class MonitorStore {
         if tasksBusy { tasksBusy = false }
         scheduler.update(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty)
     }
-    private func checkAuthentication(at home: URL) {
+    @discardableResult
+    private func checkAuthentication(at home: URL) -> String {
         let stamp = AppServerClient.authenticationStamp(at: home)
         if let authStamp, authStamp != stamp {
             quotaState.invalidateAccount()
@@ -163,6 +165,7 @@ final class MonitorStore {
             publishQuota()
         }
         authStamp = stamp
+        return stamp
     }
     private func publishQuota() {
         if quota.snapshot != quotaState.snapshot || quota.account != quotaState.account || quota.error != quotaState.error {

@@ -36,6 +36,50 @@ final class QuotaPolicyTests: XCTestCase {
         XCTAssertNil(missing.windows.first?.remainingPercent)
         XCTAssertNil(LocalQuotaBucket.parse(.null, at: date))
     }
+    func testEqualTimestampsUseLastRecordInBothScanDirectionsWithoutInheritingWindows() {
+        let events = [event(used: 20, secondary: true), event(used: 70),
+                      event(used: 5, date: "2026-09-03T00:59:59Z", secondary: true)]
+        for reverse in [false, true] {
+            var state = RolloutState()
+            for line in reverse ? Array(events.reversed()) : events {
+                RolloutEvent.apply(line, to: &state, newestFirst: reverse)
+            }
+            XCTAssertEqual(state.quotaBuckets["codex"]?.windows.count, 1)
+            XCTAssertEqual(state.quotaBuckets["codex"]?.windows.first?.remainingPercent, 30)
+        }
+    }
+    func testEqualTimestampQuotaAgreesAcrossIncrementalColdAndUpgradedReads() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("quota.jsonl")
+        let newline = Data([10]), filler = Data(String(repeating: "{}\n", count: 100_000).utf8)
+        try (filler + event(bucket: "spark") + newline + event(secondary: true) + newline).write(to: url)
+        var incremental = RolloutReader(), upgraded = RolloutReader()
+        _ = try incremental.read(url, quotaOnly: true)
+        _ = try upgraded.read(url, quotaOnly: true)
+        let fields = Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n" +
+            #"{"type":"turn_context","payload":{"model":"test"}}"# + "\n" +
+            #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}}"# + "\n").utf8)
+        let added = filler + fields + event(used: 70) + newline + event(used: 5, date: "2026-09-03T00:59:59Z", secondary: true) + newline
+        let file = try FileHandle(forWritingTo: url)
+        try file.seekToEnd(); try file.write(contentsOf: added); try file.close()
+        let warm = try incremental.read(url, quotaOnly: true)
+        XCTAssertEqual(incremental.lastReadByteCount, added.count)
+        let rescanned = try upgraded.read(url)
+        XCTAssertEqual(upgraded.lastReadByteCount, 256 * 1_024)
+        var fresh = RolloutReader()
+        let cold = try fresh.read(url, quotaOnly: true)
+        for state in [warm, rescanned, cold] {
+            XCTAssertEqual(state.quotaBuckets["codex"]?.windows.count, 1)
+            XCTAssertEqual(state.quotaBuckets["codex"]?.windows.first?.remainingPercent, 30)
+        }
+        XCTAssertEqual(rescanned.quotaBuckets["spark"], warm.quotaBuckets["spark"])
+        XCTAssertNotNil(rescanned.quotaBuckets["spark"])
+        _ = try upgraded.read(url)
+        XCTAssertEqual(upgraded.lastReadByteCount, 0)
+        XCTAssertEqual(upgraded.lastOpenCount, 0)
+    }
     func testSourceSwitchingNeverLeaksNetworkAccountIntoLocalSnapshot() throws {
         let account = AccountSnapshot(json: try JSONValue.decode(Data(#"{"type":"chatgpt","email":"test@example.invalid"}"#.utf8)))
         let network = QuotaSnapshot(windows: [], fetchedAt: date, accountID: "a")
