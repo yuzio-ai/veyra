@@ -32,7 +32,7 @@
 
 空闲累计 CPU 降低至少 60% 的目标已达到；运行任务收起及面板可见场景均未出现超过 10% 的 CPU 回退。面板测量使用同一内容的原生调试窗口，不能直接等同于 MenuBarExtra 弹窗的合成成本。最早未通过运行任务数核验的采样已排除，不计入此表。
 
-复现命令见 README 的“能耗验证”。汇总数据见 [energy-measurements.json](energy-measurements.json)。
+复现命令见[开发与手动发布](development.zh-CN.md#能耗验证)。汇总数据见 [energy-measurements.json](energy-measurements.json)。
 
 ## 界面验收及限制
 

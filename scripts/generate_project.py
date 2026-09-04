@@ -47,7 +47,7 @@ add('main-group', f'isa = PBXGroup; children = ({children}, {ident("info")}, {id
 
 common = '''SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 6.0;
 SWIFT_STRICT_CONCURRENCY = complete; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Manual;
-CODE_SIGN_IDENTITY = "-"; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = NO;
+CODE_SIGN_IDENTITY = "-"; ENABLE_APP_SANDBOX = NO;
 OTHER_LDFLAGS = "$(inherited) -lsqlite3"; COMBINE_HIDPI_IMAGES = YES;'''
 
 for target, files in [('app', core + app), ('test', core + [ROOT / 'Veyra/App/MonitorStore.swift'] + tests)]:
@@ -59,11 +59,12 @@ for target, files in [('app', core + app), ('test', core + [ROOT / 'Veyra/App/Mo
     add(f'{target}-frameworks', 'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
     bundled_resources = ', '.join(resource_builds) + ',' if target == 'app' else ''
     add(f'{target}-resources', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({bundled_resources}); runOnlyForDeploymentPostprocessing = 0;')
+    hardened_runtime = 'ENABLE_HARDENED_RUNTIME = YES;' if target == 'app' else 'ENABLE_HARDENED_RUNTIME = NO;'
     for config in ['Debug', 'Release']:
         # Keep the existing bundle IDs so a rename preserves saved user preferences.
         flags = 'SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;' if config == 'Debug' else 'SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";'
         settings = 'PRODUCT_NAME = "Veyra"; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.app; INFOPLIST_FILE = Veyra/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";' if target == 'app' else 'PRODUCT_NAME = VeyraTests; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.tests; GENERATE_INFOPLIST_FILE = YES; TEST_HOST = ""; BUNDLE_LOADER = "";'
-        add(f'{target}-{config}', f'isa = XCBuildConfiguration; buildSettings = {{ {common} {flags} {settings} }}; name = {config};')
+        add(f'{target}-{config}', f'isa = XCBuildConfiguration; buildSettings = {{ {common} {hardened_runtime} {flags} {settings} }}; name = {config};')
     add(f'{target}-configs', f'isa = XCConfigurationList; buildConfigurations = ({ident(f"{target}-Debug")}, {ident(f"{target}-Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
     name = 'Veyra' if target == 'app' else 'VeyraTests'
     product_type = 'com.apple.product-type.application' if target == 'app' else 'com.apple.product-type.bundle.unit-test'
