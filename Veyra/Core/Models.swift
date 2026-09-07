@@ -201,6 +201,12 @@ struct TokenUsage: Equatable, Sendable {
     var reasoningOutput: Int64?
     var total: Int64?
 
+    var cachedInputPercent: Double? {
+        guard let input, input > 0, let cachedInput,
+              cachedInput >= 0, cachedInput <= input else { return nil }
+        return Double(cachedInput) / Double(input) * 100
+    }
+
     init(input: Int64? = nil, output: Int64? = nil, cachedInput: Int64? = nil,
          reasoningOutput: Int64? = nil, total: Int64? = nil) {
         self.input = input; self.output = output; self.cachedInput = cachedInput

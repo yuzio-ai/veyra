@@ -449,7 +449,8 @@ private struct TaskRow: View {
                 }
                 VStack(spacing: 6) {
                     tokenLine("Input", value: task.tokens.input)
-                    tokenLine("Cached input (included)", value: task.tokens.cachedInput)
+                    tokenLine("Cached input (included)", value: task.tokens.cachedInput,
+                              percent: task.tokens.cachedInputPercent)
                     tokenLine("Output", value: task.tokens.output)
                     tokenLine("Reasoning output (included)", value: task.tokens.reasoningOutput)
                     tokenLine("Total usage", value: task.tokens.total)
@@ -513,11 +514,12 @@ private struct TaskRow: View {
         return L10n.text("\(usage), \(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))")
     }
 
-    private func tokenLine(_ label: LocalizedStringKey, value: Int64?) -> some View {
-        HStack {
+    private func tokenLine(_ label: LocalizedStringKey, value: Int64?, percent: Double? = nil) -> some View {
+        let suffix = percent.map { " (\($0.formatted(.number.precision(.fractionLength(1))))%)" } ?? ""
+        return HStack {
             Text(label).foregroundStyle(.secondary)
             Spacer()
-            Text(value.map { $0.formatted() } ?? "—").monospacedDigit()
+            Text((value.map { $0.formatted() } ?? "—") + suffix).monospacedDigit()
         }.font(.system(size: 11))
     }
 }

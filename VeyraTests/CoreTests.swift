@@ -68,6 +68,30 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(DisplayFormat.tokens(nil), "—")
     }
 
+    func testCachedInputPercentUsesRawInputCount() throws {
+        let usage = TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, total: 884_100)
+        XCTAssertEqual(try XCTUnwrap(usage.cachedInputPercent), 79.616236970023, accuracy: 0.000001)
+        XCTAssertEqual(TokenUsage(input: 100, cachedInput: 0).cachedInputPercent, 0)
+        XCTAssertEqual(TokenUsage(input: 100, cachedInput: 100).cachedInputPercent, 100)
+        XCTAssertEqual(TokenUsage(input: Int64.max, cachedInput: Int64.max).cachedInputPercent, 100)
+    }
+
+    func testCachedInputPercentUnavailableForMissingOrInvalidCounts() {
+        let usages = [
+            TokenUsage(),
+            TokenUsage(input: 100),
+            TokenUsage(cachedInput: 80),
+            TokenUsage(input: 0, cachedInput: 0),
+            TokenUsage(input: 0, cachedInput: 10),
+            TokenUsage(input: 100, cachedInput: 101),
+            TokenUsage(input: -1, cachedInput: 0),
+            TokenUsage(input: 100, cachedInput: -1)
+        ]
+        for usage in usages {
+            XCTAssertNil(usage.cachedInputPercent, "Unexpected percentage for \(usage)")
+        }
+    }
+
     private var start: String {
         #"{"timestamp":"2026-09-03T01:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}"# + "\n"
     }
