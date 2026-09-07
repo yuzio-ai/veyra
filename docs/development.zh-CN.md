@@ -55,7 +55,7 @@ python3 scripts/generate_project.py
    ```sh
    ditto -c -k --sequesterRsrc --keepParent \
      '/path/to/Veyra.app' \
-     'Veyra-v1.0.0-macos-universal.zip'
+     'Veyra-v1.1.0-macos-universal.zip'
    ```
 
 8. 在 GitHub 的 Releases 页面创建与版本对应的 tag，上传 ZIP 并手动发布。
