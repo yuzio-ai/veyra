@@ -23,7 +23,9 @@ open 'build/Build/Products/Release/Veyra.app'
 
 也可以打开 `Veyra.xcodeproj`，选择 `Veyra` scheme 后运行。默认构建使用本地 ad-hoc 签名，无需配置开发者团队；Release 同时包含 Apple Silicon 和 Intel 架构。App target 开启 Hardened Runtime，App Sandbox 保持关闭。
 
-添加或移除 Swift 源文件后，重新生成工程引用：
+工程使用 Xcode 同步文件夹（蓝色目录），`Veyra` 和 `VeyraTests` 中新增或删除的文件会自动反映到工程。`Veyra` 默认属于应用 target，`VeyraTests` 默认属于测试 target。测试额外使用 Core 源码、`MonitorStore.swift` 和本地化资源，这些跨 target 引用由生成脚本维护；新增、删除或重命名 Core 源码后需要重新生成，更新测试成员规则。`Info.plist` 仅作为应用构建配置输入，不会重复复制到资源中。
+
+修改工程配置或上述 target 成员规则时，更新 `scripts/generate_project.py` 并重新生成：
 
 ```sh
 python3 scripts/generate_project.py

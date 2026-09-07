@@ -18,7 +18,7 @@ Use Xcode 26/Swift 6 targeting macOS 14. Run from the repository root:
 - `./scripts/test.sh`: run the XCTest suite in Debug on macOS.
 - `open build/Build/Products/Release/Veyra.app`: launch the menu bar app.
 - `open Veyra.xcodeproj`: develop using the `Veyra` scheme.
-- `python3 scripts/generate_project.py`: regenerate project references after adding/removing Swift files. Make persistent project configuration changes in this generator.
+- `python3 scripts/generate_project.py`: regenerate project configuration. Xcode synchronized folders automatically pick up file additions/removals for their default targets; regenerate after adding/removing/renaming shared Core sources to update test membership exceptions. Make persistent project configuration and target membership changes in this generator.
 
 See `README.md` for brand regeneration and preview commands.
 

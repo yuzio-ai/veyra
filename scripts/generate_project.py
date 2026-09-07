@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the dependency-free Xcode project after adding/removing Swift files."""
+"""Generate the dependency-free Xcode project with file system synchronized folders."""
 import hashlib
 from pathlib import Path
 
@@ -22,32 +22,27 @@ def add(name, body):
     return ident(name)
 
 
-core = sorted(ROOT.glob('Veyra/Core/*.swift'))
-app = sorted(ROOT.glob('Veyra/App/*.swift'))
-tests = sorted(ROOT.glob('VeyraTests/*.swift'))
-all_files = core + app + tests
-for path in all_files:
-    relative = str(path.relative_to(ROOT))
-    add(relative, f'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {quoted(relative)}; sourceTree = "<group>";')
-add('info', 'isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Veyra/Info.plist; sourceTree = "<group>";')
-add('icon', 'isa = PBXFileReference; lastKnownFileType = image.icns; path = Veyra/AppIcon.icns; sourceTree = "<group>";')
-add('icon-build', f'isa = PBXBuildFile; fileRef = {ident("icon")};')
-resources = sorted(ROOT.glob('Veyra/Resources/*.png'))
-resource_refs = []
-resource_builds = [ident('icon-build')]
-for path in resources:
-    relative = str(path.relative_to(ROOT))
-    resource_refs.append(add(relative, f'isa = PBXFileReference; lastKnownFileType = image.png; path = {quoted(relative)}; sourceTree = "<group>";'))
-    resource_builds.append(add(f'resource-{relative}', f'isa = PBXBuildFile; fileRef = {ident(relative)};'))
-catalog = 'Veyra/Resources/Localizable.xcstrings'
-resource_refs.append(add(catalog, f'isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = {quoted(catalog)}; sourceTree = "<group>";'))
-localization_build = add('localization-build', f'isa = PBXBuildFile; fileRef = {ident(catalog)};')
-resource_builds.append(localization_build)
 add('product-app', 'isa = PBXFileReference; explicitFileType = wrapper.application; path = "Veyra.app"; sourceTree = BUILT_PRODUCTS_DIR;')
 add('product-test', 'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = VeyraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
 add('products', f'isa = PBXGroup; name = Products; children = ({ident("product-app")}, {ident("product-test")},); sourceTree = "<group>";')
-children = ', '.join(ident(str(p.relative_to(ROOT))) for p in all_files)
-add('main-group', f'isa = PBXGroup; children = ({children}, {ident("info")}, {ident("icon")}, {", ".join(resource_refs)}, {ident("products")},); sourceTree = "<group>";')
+
+
+def add_membership_exceptions(name, target, paths):
+    members = ', '.join(quoted(path) for path in paths)
+    return add(name, f'isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = ({members},); target = {ident(f"target-{target}")};')
+
+
+# Veyra belongs to the app by default, so its plist is excluded from resources.
+app_exceptions = add_membership_exceptions('exceptions-Veyra-app', 'app', ['Info.plist'])
+# Veyra does not belong to the test target by default; exceptions opt in shared
+# files individually. Regenerate after changing the shared Core source set.
+shared_core = sorted(str(path.relative_to(ROOT / 'Veyra')) for path in ROOT.glob('Veyra/Core/**/*.swift'))
+test_exceptions = add_membership_exceptions('exceptions-Veyra-test', 'test', [
+    'App/MonitorStore.swift', *shared_core, 'Resources/Localizable.xcstrings',
+])
+veyra_group = add('group-Veyra', f'isa = PBXFileSystemSynchronizedRootGroup; exceptions = ({app_exceptions}, {test_exceptions},); explicitFileTypes = {{}}; explicitFolders = (); path = Veyra; sourceTree = "<group>";')
+tests_group = add('group-VeyraTests', 'isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VeyraTests; sourceTree = "<group>";')
+add('main-group', f'isa = PBXGroup; children = ({veyra_group}, {tests_group}, {ident("products")},); sourceTree = "<group>";')
 
 common = '''SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 6.0;
 SWIFT_STRICT_CONCURRENCY = complete; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_WEAK = YES;
@@ -72,15 +67,10 @@ GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR; GCC_WARN_UNDECLARED_SELECTOR = YES;
 GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE; GCC_WARN_UNUSED_FUNCTION = YES;
 GCC_WARN_UNUSED_VARIABLE = YES;'''
 
-for target, files in [('app', core + app), ('test', core + [ROOT / 'Veyra/App/MonitorStore.swift'] + tests)]:
-    build_files = []
-    for path in files:
-        name = str(path.relative_to(ROOT))
-        build_files.append(add(f'{target}-{name}', f'isa = PBXBuildFile; fileRef = {ident(name)};'))
-    add(f'{target}-sources', f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ({", ".join(build_files)},); runOnlyForDeploymentPostprocessing = 0;')
+for target in ['app', 'test']:
+    add(f'{target}-sources', 'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
     add(f'{target}-frameworks', 'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
-    bundled_resources = ', '.join(resource_builds) + ',' if target == 'app' else localization_build + ','
-    add(f'{target}-resources', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({bundled_resources}); runOnlyForDeploymentPostprocessing = 0;')
+    add(f'{target}-resources', 'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
     hardened_runtime = 'ENABLE_HARDENED_RUNTIME = YES;' if target == 'app' else 'ENABLE_HARDENED_RUNTIME = NO;'
     for config in ['Debug', 'Release']:
         # Keep the existing bundle IDs so a rename preserves saved user preferences.
@@ -91,7 +81,8 @@ for target, files in [('app', core + app), ('test', core + [ROOT / 'Veyra/App/Mo
     name = 'Veyra' if target == 'app' else 'VeyraTests'
     product_type = 'com.apple.product-type.application' if target == 'app' else 'com.apple.product-type.bundle.unit-test'
     phases = ', '.join(ident(f'{target}-{phase}') for phase in ['sources', 'frameworks', 'resources'])
-    add(f'target-{target}', f'isa = PBXNativeTarget; buildConfigurationList = {ident(f"{target}-configs")}; buildPhases = ({phases},); buildRules = (); dependencies = (); name = {name}; productName = {name}; productReference = {ident(f"product-{target}")}; productType = {quoted(product_type)};')
+    synchronized_group = veyra_group if target == 'app' else tests_group
+    add(f'target-{target}', f'isa = PBXNativeTarget; buildConfigurationList = {ident(f"{target}-configs")}; buildPhases = ({phases},); buildRules = (); dependencies = (); fileSystemSynchronizedGroups = ({synchronized_group},); name = {name}; productName = {name}; productReference = {ident(f"product-{target}")}; productType = {quoted(product_type)};')
 
 for config in ['Debug', 'Release']:
     config_settings = 'ENABLE_TESTABILITY = YES; ONLY_ACTIVE_ARCH = YES;' if config == 'Debug' else 'SWIFT_COMPILATION_MODE = wholemodule;'
@@ -102,14 +93,14 @@ CLANG_ENABLE_MODULES = YES; DEAD_CODE_STRIPPING = YES; ENABLE_USER_SCRIPT_SANDBO
 }}; name = {config};''')
 add('project-configs', f'isa = XCConfigurationList; buildConfigurations = ({ident("project-Debug")}, {ident("project-Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
 add('project', f'''isa = PBXProject; attributes = {{ BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2660; }};
-buildConfigurationList = {ident('project-configs')}; compatibilityVersion = "Xcode 14.0";
+buildConfigurationList = {ident('project-configs')}; preferredProjectObjectVersion = 77;
 developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, "zh-Hans", Base,);
 mainGroup = {ident('main-group')}; productRefGroup = {ident('products')}; projectDirPath = "";
 projectRoot = ""; targets = ({ident('target-app')}, {ident('target-test')},);''')
 
 project = ROOT / 'Veyra.xcodeproj'
 project.mkdir(exist_ok=True)
-(project / 'project.pbxproj').write_text('// !$*UTF8*$!\n{ archiveVersion = 1; classes = {}; objectVersion = 56;\nobjects = {\n' + '\n'.join(objects) + f'\n}}; rootObject = {ident("project")};\n}}\n')
+(project / 'project.pbxproj').write_text('// !$*UTF8*$!\n{ archiveVersion = 1; classes = {}; objectVersion = 77;\nobjects = {\n' + '\n'.join(objects) + f'\n}}; rootObject = {ident("project")};\n}}\n')
 
 scheme = project / 'xcshareddata/xcschemes'
 scheme.mkdir(parents=True, exist_ok=True)
