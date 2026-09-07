@@ -3,7 +3,7 @@ import Foundation
 
 final class TaskPresentationTests: XCTestCase {
     private func task(_ id: String, parent: String? = nil, activity: TaskActivity = .running) -> TaskSnapshot {
-        TaskSnapshot(id: id, title: id, model: nil, sourceLabel: parent == nil ? "桌面端" : "子任务",
+        TaskSnapshot(id: id, title: id, model: nil, sourceLabel: parent == nil ? L10n.text("Desktop") : L10n.text("Subtask"),
                      parentID: parent, startedAt: nil, updatedAt: .distantPast,
                      tokens: TokenUsage(total: 100), activity: activity)
     }
@@ -29,7 +29,7 @@ final class TaskPresentationTests: XCTestCase {
         XCTAssertEqual(groups[0].rows.last?.parentTitle, "父任务标题")
         XCTAssertEqual(groups[0].rows.compactMap(\.task).count, 1)
         XCTAssertNil(groups[1].rows.first?.task)
-        XCTAssertEqual(groups[1].rows.last?.parentTitle, "父任务 · missing")
+        XCTAssertEqual(groups[1].rows.last?.parentTitle, L10n.text("Parent task · \("missing")"))
     }
 
     func testMixedStatusStaysTogetherAndUnknownOnlyGroupRemainsSeparate() {
@@ -71,7 +71,7 @@ final class TaskPresentationTests: XCTestCase {
         XCTAssertEqual(metadata.displayTitle, "database review")
         XCTAssertEqual(TaskText.title(" 已有名称 ", id: metadata.id, parentID: "p", agentPath: metadata.agentPath, nickname: nil), "已有名称")
         XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: "p", agentPath: nil, nickname: " Lorentz "), "Lorentz")
-        XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: "p", agentPath: "/root", nickname: nil), "子任务 · 12345678")
-        XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: nil, agentPath: nil, nickname: nil), "未命名任务")
+        XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: "p", agentPath: "/root", nickname: nil), L10n.text("Subtask · \("12345678")"))
+        XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: nil, agentPath: nil, nickname: nil), L10n.text("Untitled task"))
     }
 }

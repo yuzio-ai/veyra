@@ -131,7 +131,7 @@ final class MonitorStoreTests: XCTestCase {
             await fixture.release(); await request.value
             XCTAssertNil(store.quota.account)
             XCTAssertEqual(store.quota.snapshot?.source, .local)
-            XCTAssertEqual(store.quota.error, "登录状态发生变化，请重新联网校准。")
+            XCTAssertEqual(store.quota.error, L10n.text("Your sign-in has changed. Sync quota again."))
             XCTAssertEqual(store.nextCalibrationAt, now.addingTimeInterval(60))
             XCTAssertFalse(store.quotaBusy)
             store.stop()

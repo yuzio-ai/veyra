@@ -88,6 +88,13 @@ python3 scripts/generate_project.py
 # 输出浅色、深色及高对比度 PNG 和 layouts.json，不启动 Codex
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --render-previews "$PWD/build/previews"
 
+# 独立验证中英文界面，含设置页；语言与区域参数仅作用于本次进程
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
+  --render-previews "$PWD/build/previews-en" -AppleLanguages '(en)' -AppleLocale en_US
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
+  --render-previews "$PWD/build/previews-zh" -AppleLanguages '("zh-Hans")' -AppleLocale zh_CN
+# 仅复查设置页时，在上述命令后追加 --preview-settings-only
+
 # 在独立窗口中使用真实数据检查内容布局，不用于验收菜单栏材质
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --show-panel
 

@@ -39,6 +39,10 @@ for path in resources:
     relative = str(path.relative_to(ROOT))
     resource_refs.append(add(relative, f'isa = PBXFileReference; lastKnownFileType = image.png; path = {quoted(relative)}; sourceTree = "<group>";'))
     resource_builds.append(add(f'resource-{relative}', f'isa = PBXBuildFile; fileRef = {ident(relative)};'))
+catalog = 'Veyra/Resources/Localizable.xcstrings'
+resource_refs.append(add(catalog, f'isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = {quoted(catalog)}; sourceTree = "<group>";'))
+localization_build = add('localization-build', f'isa = PBXBuildFile; fileRef = {ident(catalog)};')
+resource_builds.append(localization_build)
 add('product-app', 'isa = PBXFileReference; explicitFileType = wrapper.application; path = "Veyra.app"; sourceTree = BUILT_PRODUCTS_DIR;')
 add('product-test', 'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = VeyraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
 add('products', f'isa = PBXGroup; name = Products; children = ({ident("product-app")}, {ident("product-test")},); sourceTree = "<group>";')
@@ -75,7 +79,7 @@ for target, files in [('app', core + app), ('test', core + [ROOT / 'Veyra/App/Mo
         build_files.append(add(f'{target}-{name}', f'isa = PBXBuildFile; fileRef = {ident(name)};'))
     add(f'{target}-sources', f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ({", ".join(build_files)},); runOnlyForDeploymentPostprocessing = 0;')
     add(f'{target}-frameworks', 'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
-    bundled_resources = ', '.join(resource_builds) + ',' if target == 'app' else ''
+    bundled_resources = ', '.join(resource_builds) + ',' if target == 'app' else localization_build + ','
     add(f'{target}-resources', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({bundled_resources}); runOnlyForDeploymentPostprocessing = 0;')
     hardened_runtime = 'ENABLE_HARDENED_RUNTIME = YES;' if target == 'app' else 'ENABLE_HARDENED_RUNTIME = NO;'
     for config in ['Debug', 'Release']:
@@ -99,7 +103,7 @@ CLANG_ENABLE_MODULES = YES; DEAD_CODE_STRIPPING = YES; ENABLE_USER_SCRIPT_SANDBO
 add('project-configs', f'isa = XCConfigurationList; buildConfigurations = ({ident("project-Debug")}, {ident("project-Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
 add('project', f'''isa = PBXProject; attributes = {{ BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2660; }};
 buildConfigurationList = {ident('project-configs')}; compatibilityVersion = "Xcode 14.0";
-developmentRegion = zh_CN; hasScannedForEncodings = 0; knownRegions = (zh_CN, en, Base,);
+developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, "zh-Hans", Base,);
 mainGroup = {ident('main-group')}; productRefGroup = {ident('products')}; projectDirPath = "";
 projectRoot = ""; targets = ({ident('target-app')}, {ident('target-test')},);''')
 

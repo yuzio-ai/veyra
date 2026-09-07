@@ -136,6 +136,27 @@ def run_case(app, mode, expected_code, network=True, with_task=False):
         print(f"PASS diagnostics: {mode} ({'task context privacy' if with_task else 'network fixture' if network else 'local only'})")
 
 
+def run_language_cases(app):
+    # Launch arguments override language preferences for this process only.
+    cases = [
+        ('(en)', 'en_US', 'Diagnostics failed: unable to complete local diagnostics.'),
+        ('("zh-Hans")', 'zh_CN', '诊断失败：无法完成本机诊断。'),
+        ('("fr-FR")', 'fr_FR', 'Diagnostics failed: unable to complete local diagnostics.'),
+        ('("fr-FR", "zh-Hans")', 'fr_FR', '诊断失败：无法完成本机诊断。'),
+        ('(en)', 'zh_CN', 'Diagnostics failed: unable to complete local diagnostics.'),
+    ]
+    with tempfile.TemporaryDirectory(prefix="veyra-language-") as home:
+        for languages, locale, expected in cases:
+            result = subprocess.run([
+                str(app), "--diagnose", "-codexHome", home,
+                "-AppleLanguages", languages, "-AppleLocale", locale,
+            ], capture_output=True, text=True, timeout=15)
+            assert result.returncode == 0, result.stderr
+            assert result.stdout.strip() == expected, (languages, locale, result.stdout)
+            print(f"PASS language: {languages}, region: {locale}")
+    return len(cases)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path, help="Path to the built Veyra executable")
@@ -152,7 +173,8 @@ def main():
         run_case(app, mode, expected_code)
     run_case(app, "success", None, network=False)
     run_case(app, "success", None, network=False, with_task=True)
-    print(f"Passed {len(cases) + 2} isolated app diagnostics checks")
+    language_checks = run_language_cases(app)
+    print(f"Passed {len(cases) + 2} isolated app diagnostics checks and {language_checks} language checks")
 
 
 if __name__ == "__main__":

@@ -34,8 +34,8 @@ struct ResetCreditsSnapshot: Equatable, Sendable {
     }
 
     func totalLabel(at now: Date) -> String {
-        if hasExpiredCredits(at: now) { return "待校准" }
-        return availableCount.map { "\($0) 次" } ?? "—"
+        if hasExpiredCredits(at: now) { return L10n.text("Sync needed") }
+        return availableCount.map(L10n.resetCount) ?? "—"
     }
 
     static func parse(_ value: JSONValue, at date: Date) -> ResetCreditsSnapshot {

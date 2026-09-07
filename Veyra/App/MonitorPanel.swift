@@ -91,7 +91,7 @@ struct MonitorPanel: View {
             Spacer()
             HStack(spacing: 5) {
                 Circle().fill(store.taskError == nil ? monitorAccent : .orange).frame(width: 5, height: 5)
-                Text("本机活动").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("Local activity").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
@@ -100,11 +100,11 @@ struct MonitorPanel: View {
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                sectionTitle("额度")
+                sectionTitle("Quota")
                 if store.quotaBusy {
                     ProgressView().controlSize(.small).scaleEffect(0.8)
                         .frame(width: 14, height: 14)
-                        .accessibilityLabel("正在联网校准额度")
+                        .accessibilityLabel("Syncing quota online")
                         .accessibilityIdentifier("monitor.quotaProgress")
                 }
                 Spacer()
@@ -116,7 +116,7 @@ struct MonitorPanel: View {
                 MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
                     HStack(spacing: 7) {
                         if let next = store.nextCalibrationAt, next > now {
-                            Text("\(next.formatted(date: .omitted, time: .standard)) 后可校准")
+                            Text(L10n.text("Sync after \(next.formatted(date: .omitted, time: .standard))"))
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
                         }
                         Button { Task { await store.calibrateQuota() } } label: {
@@ -124,8 +124,8 @@ struct MonitorPanel: View {
                                 .foregroundStyle(.primary).frame(width: 18, height: 18)
                         }
                         .modifier(MonitorActionStyle())
-                        .help("联网校准额度")
-                        .accessibilityLabel("联网校准")
+                        .help("Sync quota online")
+                        .accessibilityLabel("Sync quota")
                         .accessibilityIdentifier("monitor.calibrate")
                         .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
                     }
@@ -149,7 +149,7 @@ struct MonitorPanel: View {
                                 QuotaWindowView(window: window)
                             }
                         }
-                        Text("\(snapshot.source == .local ? "本地快照" : "联网校准") · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))")
+                        Text(L10n.text("\(snapshot.source == .local ? L10n.text("Local snapshot") : L10n.text("Online sync")) · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))"))
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                     }
                     .padding(14).monitorCard()
@@ -157,10 +157,10 @@ struct MonitorPanel: View {
             } else if store.quotaBusy {
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
-                    Text("正在联网校准额度…").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("Syncing quota online…").font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, minHeight: 56).monitorCard()
             } else {
-                Text("暂无本地额度记录").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("No local quota records").font(.system(size: 12)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
             }
             if let warning = store.localQuotaWarning { notice(warning) }
@@ -174,7 +174,7 @@ struct MonitorPanel: View {
         let unknownGroups = groups.filter { !$0.isRunning }
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                sectionTitle("运行任务")
+                sectionTitle("Running tasks")
                 Text("\(store.runningTasks.count)")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
@@ -182,7 +182,7 @@ struct MonitorPanel: View {
                 if store.tasksBusy {
                     ProgressView().controlSize(.small).scaleEffect(0.8)
                         .frame(width: 14, height: 14)
-                        .accessibilityLabel("正在刷新运行任务")
+                        .accessibilityLabel("Refreshing running tasks")
                         .accessibilityIdentifier("monitor.tasksProgress")
                 }
                 Spacer()
@@ -192,8 +192,8 @@ struct MonitorPanel: View {
                         .foregroundStyle(.primary).frame(width: 18, height: 18)
                 }
                 .modifier(MonitorActionStyle())
-                .help("刷新本地任务与额度快照")
-                .accessibilityLabel("刷新")
+                .help("Refresh local tasks and quota snapshots")
+                .accessibilityLabel("Refresh")
                 .accessibilityIdentifier("monitor.refresh")
                 .disabled(store.tasksBusy)
             }
@@ -202,7 +202,7 @@ struct MonitorPanel: View {
                 VStack(spacing: 6) {
                     Image(systemName: !store.hasTaskSnapshot ? "ellipsis" : "checkmark.circle")
                         .font(.system(size: 20, weight: .light)).foregroundStyle(.tertiary)
-                    Text(!store.hasTaskSnapshot && store.taskError == nil ? "正在读取本机任务…" : "暂无已确认运行的任务")
+                    Text(!store.hasTaskSnapshot && store.taskError == nil ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks"))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
             } else {
@@ -213,23 +213,23 @@ struct MonitorPanel: View {
             if !unknownGroups.isEmpty {
                 DisclosureGroup(isExpanded: $showUnknown) {
                     VStack(spacing: 10) {
-                        Text("记录尚未结束，但无法确认仍有进程运行。不会计入顶部运行数。")
+                        Text("These sessions have not ended, but no running process could be confirmed. They are excluded from the running count.")
                             .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                         ForEach(unknownGroups) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
                     }.padding(.top, 10)
                 } label: {
-                    Label("状态待确认 · \(unknownGroups.reduce(0) { $0 + $1.unknownCount })", systemImage: "questionmark.circle")
+                    Label(L10n.text("Unconfirmed status · \(unknownGroups.reduce(0) { $0 + $1.unknownCount })"), systemImage: "questionmark.circle")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
             if let error = store.taskError { notice(error) }
-            if let warning = store.taskWarning { notice(warning) }
+            if let warning = store.taskWarning { notice(warning.message) }
         }
     }
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Label("本机任务 · 额度快照", systemImage: "desktopcomputer")
+            Label("Local tasks · Quota snapshots", systemImage: "desktopcomputer")
                 .font(.system(size: 11)).lineLimit(1)
             Spacer(minLength: 0)
             MonitorGlassGroup {
@@ -240,21 +240,21 @@ struct MonitorPanel: View {
                     }
                     .modifier(MonitorActionStyle())
                     .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
-                    .help("设置").accessibilityLabel("设置")
+                    .help("Settings").accessibilityLabel("Settings")
                     .accessibilityIdentifier("monitor.settings")
                     Button { NSApplication.shared.terminate(nil) } label: {
                         Image(systemName: "power").font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.primary).frame(width: 18, height: 18)
                     }
                     .modifier(MonitorActionStyle())
-                    .help("退出 Veyra").accessibilityLabel("退出")
+                    .help("Quit Veyra").accessibilityLabel("Quit")
                     .accessibilityIdentifier("monitor.quit")
                 }
             }
         }.foregroundStyle(.secondary).padding(.horizontal, 16).padding(.vertical, 12)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
+    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
         Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
     }
     private func notice(_ text: String) -> some View {
@@ -268,7 +268,7 @@ private struct PollingInfoView: View {
     @State private var isHovered = false
     @Environment(\.monitorPanelActive) private var panelActive
 
-    private var tooltip: String { "每 \(seconds) 秒检查" }
+    private var tooltip: String { L10n.text("Checks every \(seconds) seconds") }
 
     var body: some View {
         Image(systemName: "info.circle")
@@ -276,7 +276,7 @@ private struct PollingInfoView: View {
             .frame(width: 22, height: 22)
             .contentShape(Rectangle())
             .onHover { isHovered = $0 }
-            .accessibilityLabel("自动检查间隔")
+            .accessibilityLabel("Automatic check interval")
             .accessibilityValue(tooltip)
             .accessibilityIdentifier("monitor.pollingInfo")
             .overlay(alignment: .topTrailing) {
@@ -309,7 +309,7 @@ private struct QuotaWindowView: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(durationTitle)
+                Text(window.durationTitle)
                     .font(.system(size: 13, weight: .medium))
                 resetLabel
             }
@@ -325,19 +325,13 @@ private struct QuotaWindowView: View {
         Group {
             if let reset = window.resetsAt {
                 MonitorTimeline(interval: 30) { now in
-                    Text(reset > (referenceDate ?? now) ? "\(reset.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())) 重置" : "已到重置时间 · 等待更新")
+                    Text(reset > (referenceDate ?? now) ? L10n.text("Resets \(reset.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))") : L10n.text("Reset due · Awaiting update"))
                 }
             } else {
-                Text("重置时间暂不可用")
+                Text("Reset time unavailable")
             }
         }
         .font(.system(size: 11)).foregroundStyle(.secondary)
-    }
-
-    private var durationTitle: String {
-        let label = window.durationLabel
-        if label == "周" { return "每周额度" }
-        return label.hasSuffix("额度") ? label : "\(label)额度"
     }
 }
 
@@ -366,7 +360,7 @@ private struct QuotaRingView: View {
         .frame(width: 56, height: 56)
         .accessibilityElement(children: .ignore)
         // Keep the percentage in the label so the combined quota row retains it.
-        .accessibilityLabel(remainingPercent == nil ? "剩余额度暂不可用" : "剩余额度 \(DisplayFormat.percent(remainingPercent))")
+        .accessibilityLabel(remainingPercent == nil ? L10n.text("Remaining quota unavailable") : L10n.text("Remaining quota \(DisplayFormat.percent(remainingPercent))"))
     }
 }
 
@@ -388,7 +382,7 @@ private struct TaskGroupCard: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(row.reference.title).font(.system(size: 13, weight: .semibold))
                                 .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(row.reference.title)
-                            Label("父任务", systemImage: "arrow.triangle.branch")
+                            Label("Parent task", systemImage: "arrow.triangle.branch")
                                 .font(.system(size: 11)).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -417,17 +411,17 @@ private struct TaskRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true).help(task.title)
-                    Text("\(task.sourceLabel) · \(task.model ?? "模型未知")")
+                    Text("\(task.sourceLabel) · \(task.model ?? L10n.text("Unknown model"))")
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).help(task.model ?? "")
                 }
                 Spacer(minLength: 0)
                 Circle().fill(task.activity == .running ? monitorAccent : .orange).frame(width: 6, height: 6).padding(.top, 5)
-                    .accessibilityLabel(task.activity == .running ? "运行中" : "状态待确认")
+                    .accessibilityLabel(task.activity == .running ? L10n.text("Running") : L10n.text("Unconfirmed status"))
             }
             if let progress = task.progress {
-                Text("\(progress.label)：\(progress.text)")
+                Text(L10n.text("\(progress.label): \(progress.text)"))
                     .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true).help("\(progress.label)：\(progress.text)")
+                    .fixedSize(horizontal: false, vertical: true).help(L10n.text("\(progress.label): \(progress.text)"))
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
@@ -444,22 +438,22 @@ private struct TaskRow: View {
                 Divider()
                 if parentTitle != nil || task.agentPath != nil || task.agentNickname != nil || task.agentRole != nil {
                     VStack(alignment: .leading, spacing: 4) {
-                        contextLine("来自", value: parentTitle)
-                        contextLine("任务路径", value: task.agentPath)
-                        contextLine("代理", value: task.agentNickname)
-                        contextLine("角色", value: task.agentRole)
+                        contextLine(L10n.text("From"), value: parentTitle)
+                        contextLine(L10n.text("Task path"), value: task.agentPath)
+                        contextLine(L10n.text("Agent"), value: task.agentNickname)
+                        contextLine(L10n.text("Role"), value: task.agentRole)
                     }
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Divider()
                 }
                 VStack(spacing: 6) {
-                    tokenLine("输入", value: task.tokens.input)
-                    tokenLine("其中缓存输入", value: task.tokens.cachedInput)
-                    tokenLine("输出", value: task.tokens.output)
-                    tokenLine("其中推理输出", value: task.tokens.reasoningOutput)
-                    tokenLine("累计总量", value: task.tokens.total)
-                    Text("缓存与推理明细已包含在总量中。")
+                    tokenLine("Input", value: task.tokens.input)
+                    tokenLine("Cached input (included)", value: task.tokens.cachedInput)
+                    tokenLine("Output", value: task.tokens.output)
+                    tokenLine("Reasoning output (included)", value: task.tokens.reasoningOutput)
+                    tokenLine("Total usage", value: task.tokens.total)
+                    Text("Cached input and reasoning output are included in the totals.")
                         .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -468,7 +462,7 @@ private struct TaskRow: View {
 
     @ViewBuilder private func contextLine(_ label: String, value: String?) -> some View {
         if let value {
-            Text("\(label)：\(value)").fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            Text(L10n.text("\(label): \(value)")).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
         }
     }
 
@@ -483,8 +477,8 @@ private struct TaskRow: View {
         }
     }
 
-    private var inputTokens: some View { Text("输入 \(DisplayFormat.tokens(task.tokens.input))") }
-    private var outputTokens: some View { Text("输出 \(DisplayFormat.tokens(task.tokens.output))") }
+    private var inputTokens: some View { Text(L10n.text("Input \(DisplayFormat.tokens(task.tokens.input))")) }
+    private var outputTokens: some View { Text(L10n.text("Output \(DisplayFormat.tokens(task.tokens.output))")) }
 
     private var elapsedTime: some View {
         Group {
@@ -492,14 +486,14 @@ private struct TaskRow: View {
                 MonitorTimeline(interval: 1) { now in
                     Label(DisplayFormat.duration(since: task.startedAt, now: referenceDate ?? now), systemImage: "clock")
                 }
-            } else { Label("状态未知", systemImage: "clock") }
+            } else { Label("Unknown status", systemImage: "clock") }
         }.font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
     }
 
     private var tokenButton: some View {
         Button { expanded.toggle() } label: {
             VStack(alignment: .trailing, spacing: 2) {
-                Text("累计 tokens").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("Total tokens").font(.system(size: 11)).foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(DisplayFormat.tokens(task.tokens.total))
                         .font(.system(size: 20, weight: .semibold, design: .rounded)).monospacedDigit()
@@ -508,18 +502,18 @@ private struct TaskRow: View {
                 }
             }
             .contentShape(Rectangle())
-        }.buttonStyle(.plain).help("查看累计 token 明细")
-        .accessibilityLabel("\(task.title)，累计 token 明细")
+        }.buttonStyle(.plain).help("View total token breakdown")
+        .accessibilityLabel(L10n.text("\(task.title), total token breakdown"))
         .accessibilityValue(tokenAccessibilityValue)
         .accessibilityIdentifier("monitor.tokens.\(task.id)")
     }
 
     private var tokenAccessibilityValue: String {
-        let usage = task.tokens.total.map { "累计 \(DisplayFormat.tokens($0)) tokens" } ?? "累计用量暂不可用"
-        return "\(usage)，\(expanded ? "已展开" : "已收起")"
+        let usage = task.tokens.total.map { L10n.text("\(DisplayFormat.tokens($0)) tokens total") } ?? L10n.text("Total usage unavailable")
+        return L10n.text("\(usage), \(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))")
     }
 
-    private func tokenLine(_ label: String, value: Int64?) -> some View {
+    private func tokenLine(_ label: LocalizedStringKey, value: Int64?) -> some View {
         HStack {
             Text(label).foregroundStyle(.secondary)
             Spacer()
@@ -542,7 +536,7 @@ private struct ResetCreditsCard: View {
         MonitorTimeline(interval: 1, enabled: snapshot?.credits.contains { $0.expiresAt != nil } == true) { now in
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("可用重置次数").font(.system(size: 12, weight: .semibold))
+                    Text("Available resets").font(.system(size: 12, weight: .semibold))
                     Spacer(minLength: 8)
                     Text(snapshot?.totalLabel(at: now) ?? "—")
                         .font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
@@ -552,7 +546,7 @@ private struct ResetCreditsCard: View {
                 if let snapshot {
                     ForEach(snapshot.expiryGroups) { group in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text("\(group.count) 次").monospacedDigit().fixedSize()
+                            Text(L10n.resetCount(Int64(group.count))).monospacedDigit().fixedSize()
                             Spacer(minLength: 0)
                             expiryLabel(group, at: now)
                                 .multilineTextAlignment(.trailing)
@@ -562,13 +556,13 @@ private struct ResetCreditsCard: View {
                         .accessibilityElement(children: .combine)
                     }
                     if snapshot.availableCount == nil {
-                        detail("暂不可用")
+                        detail(L10n.text("Unavailable"))
                     } else if snapshot.hasIncompleteDetails {
-                        detail("部分到期信息暂不可用")
+                        detail(L10n.text("Some expiry details are unavailable"))
                     }
-                    detail("上次联网校准 · \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard))")
+                    detail(L10n.text("Last online sync · \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard))"))
                 } else {
-                    detail(isLoading ? "正在联网校准…" : "联网校准后查看")
+                    detail(isLoading ? L10n.text("Syncing online…") : L10n.text("Sync quota to view"))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -580,10 +574,10 @@ private struct ResetCreditsCard: View {
     @ViewBuilder
     private func expiryLabel(_ group: ResetCreditsSnapshot.ExpiryGroup, at now: Date) -> some View {
         if let expiry = group.expiresAt {
-            Text(group.isExpired(at: now) ? "已到期 · 待校准" : "\(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute())) 到期")
-                .help("到期时间：\(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute().second()))")
+            Text(group.isExpired(at: now) ? L10n.text("Expired · Sync needed") : L10n.text("Expires \(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute()))"))
+                .help(L10n.text("Expires: \(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute().second()))"))
         } else {
-            Text("到期时间未知")
+            Text("Unknown expiry")
         }
     }
 

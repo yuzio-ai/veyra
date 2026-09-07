@@ -15,7 +15,7 @@ final class MonitorStore {
         }
     }
     var taskError: String? { didSet { updateMenuLabel() } }
-    var taskWarning: String? { didSet { updateMenuLabel() } }
+    var taskWarning: TaskReadWarning? { didSet { updateMenuLabel() } }
     var localQuotaWarning: String?
     var quotaBusy = false
     var tasksBusy = false
@@ -25,7 +25,7 @@ final class MonitorStore {
     var homePath: String
     var executablePath: String
     var isPreview = false
-    private(set) var menuLabel = "额度 — · 运行 —"
+    private(set) var menuLabel = L10n.text("Quota — · Running —")
 
     @ObservationIgnored private var quotaState = QuotaDisplayState()
     @ObservationIgnored private var calibrationPolicy = QuotaCalibrationPolicy()
@@ -65,14 +65,20 @@ final class MonitorStore {
     var unknownTasks: [TaskSnapshot] { tasks.filter { $0.activity == .unknown } }
     var pollingSeconds: Int { panelVisible || !runningTasks.isEmpty ? 5 : 30 }
 
+    var menuAccessibilityLabel: String {
+        quota.snapshot?.source == .local
+            ? L10n.text("Veyra, local quota snapshot, \(menuLabel)")
+            : L10n.text("Veyra, \(menuLabel)")
+    }
+
     private func updateMenuLabel() {
         let quotaLabel: String
         if let window = quota.snapshot?.menuWindow {
             let marker = quota.snapshot?.source == .local ? "~" : (quota.error == nil ? "" : "*")
             quotaLabel = "\(window.durationLabel) \(DisplayFormat.percent(window.remainingPercent))\(marker)"
-        } else { quotaLabel = "额度 —" }
-        let count = tasksUpdatedAt == nil || taskError != nil || taskWarning?.hasPrefix("无法核对") == true ? "—" : String(runningTasks.count)
-        let label = "\(quotaLabel) · 运行 \(count)"
+        } else { quotaLabel = L10n.text("Quota —") }
+        let count = tasksUpdatedAt == nil || taskError != nil || taskWarning == .processUnverified ? "—" : String(runningTasks.count)
+        let label = L10n.text("\(quotaLabel) · Running \(count)")
         if menuLabel != label { menuLabel = label }
     }
     func start() {
@@ -116,7 +122,7 @@ final class MonitorStore {
             let currentAuth = AppServerClient.authenticationStamp(at: location.home)
             if currentAuth != initialAuth {
                 self.quotaState.invalidateAccount()
-                self.quotaState.error = "登录状态发生变化，请重新联网校准。"
+                self.quotaState.error = L10n.text("Your sign-in has changed. Sync quota again.")
             } else { self.quotaState.apply(result) }
             self.authStamp = currentAuth
             self.publishQuota()
@@ -144,7 +150,7 @@ final class MonitorStore {
             lastReadMetrics = result.metrics
         } catch {
             guard version == revision else { return }
-            let message = "无法读取本机任务记录，请检查数据目录。"
+            let message = L10n.text("Unable to read local task records. Check the data directory.")
             if taskError != message { taskError = message }
             let uncertain = tasks.map { task in
                 var copy = task; copy.activity = .unknown

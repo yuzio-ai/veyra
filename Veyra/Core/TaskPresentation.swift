@@ -4,7 +4,7 @@ struct TaskProgress: Equatable, Sendable {
     enum Kind: Sendable { case message, tool }
     let kind: Kind
     let text: String
-    var label: String { kind == .message ? "最近进展" : "最近操作" }
+    var label: String { kind == .message ? L10n.text("Latest progress") : L10n.text("Latest action") }
 }
 
 /// Minimal context for ancestors that need not have an active turn or readable rollout.
@@ -43,7 +43,7 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
                 included.insert(id)
                 priority[id] = min(priority[id] ?? rank, rank)
                 if references[id] == nil {
-                    references[id] = TaskReference(id: id, title: "父任务 · \(id.prefix(8))", parentID: nil)
+                    references[id] = TaskReference(id: id, title: L10n.text("Parent task · \(String(id.prefix(8)))"), parentID: nil)
                 }
                 next = references[id]?.parentID
             }
@@ -99,6 +99,6 @@ enum TaskText {
             return String(leaf).replacingOccurrences(of: "_", with: " ")
         }
         if let nickname = nonempty(nickname) { return nickname }
-        return parentID == nil ? "未命名任务" : "子任务 · \(id.prefix(8))"
+        return parentID == nil ? L10n.text("Untitled task") : L10n.text("Subtask · \(String(id.prefix(8)))")
     }
 }

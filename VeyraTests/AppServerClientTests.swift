@@ -154,7 +154,7 @@ final class AppServerClientTests: XCTestCase {
         XCTAssertEqual(failure, .unknown)
         var display = QuotaDisplayState()
         display.apply(QuotaRefresh(error: failure))
-        XCTAssertEqual(display.error, "额度读取遇到未知错误，请稍后手动校准。")
+        XCTAssertEqual(display.error, L10n.text("An unknown error occurred while reading quotas. Try syncing again later."))
         XCTAssertEqual(QuotaFailure.classify(QuotaFailure.timeout), .timeout)
     }
 }

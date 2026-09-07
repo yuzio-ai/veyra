@@ -10,7 +10,7 @@ final class SQLiteReader {
         guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
             if let db { sqlite3_close(db) }
             db = nil
-            throw MonitorFailure("无法读取 Codex 数据库，请检查数据目录和文件权限。")
+            throw MonitorFailure(L10n.text("Unable to read the Codex database. Check the data directory and file permissions."))
         }
         sqlite3_busy_timeout(db, 250)
     }
@@ -19,14 +19,14 @@ final class SQLiteReader {
     func rows(_ sql: String) throws -> [[String: String]] {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            throw MonitorFailure("Codex 数据库结构暂不兼容，请更新应用或检查数据目录。")
+            throw MonitorFailure(L10n.text("Unsupported Codex database schema. Update Veyra or check the data directory."))
         }
         defer { sqlite3_finalize(statement) }
         var rows: [[String: String]] = []
         while true {
             let status = sqlite3_step(statement)
             if status == SQLITE_DONE { return rows }
-            guard status == SQLITE_ROW else { throw MonitorFailure("Codex 数据库正忙，稍后将自动重试。") }
+            guard status == SQLITE_ROW else { throw MonitorFailure(L10n.text("The Codex database is busy. Retrying automatically shortly.")) }
             var row: [String: String] = [:]
             for column in 0..<sqlite3_column_count(statement) {
                 guard sqlite3_column_type(statement, column) != SQLITE_NULL,
@@ -47,7 +47,7 @@ final class SQLiteReader {
     func version(_ name: String) throws -> Int64 {
         guard ["data_version", "schema_version"].contains(name),
               let raw = try rows("PRAGMA \(name)").first?[name], let value = Int64(raw) else {
-            throw MonitorFailure("无法检查 Codex 数据库更新。")
+            throw MonitorFailure(L10n.text("Unable to check for Codex database updates."))
         }
         return value
     }
@@ -80,7 +80,7 @@ final class SQLiteReadCache<Value> {
         let stamp = "\(url.path):\(attrs[.systemNumber] ?? 0):\(attrs[.systemFileNumber] ?? 0)"
         if identity != stamp { reset(); identity = stamp }
         if reader == nil { reader = try SQLiteReader(url: url) }
-        guard let reader else { throw MonitorFailure("无法读取 Codex 数据库。") }
+        guard let reader else { throw MonitorFailure(L10n.text("Unable to read the Codex database.")) }
         let currentData = try reader.version("data_version")
         let currentSchema = try reader.version("schema_version")
         if dataVersion == currentData, schemaVersion == currentSchema, let value { return (value, false) }

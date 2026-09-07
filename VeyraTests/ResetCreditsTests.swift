@@ -33,18 +33,18 @@ final class ResetCreditsTests: XCTestCase {
             #"{"availableCount":3,"credits":[null,{},5]}"#
         ] {
             let snapshot = try parse(text)
-            XCTAssertEqual(snapshot.totalLabel(at: now), "3 次")
+            XCTAssertEqual(snapshot.totalLabel(at: now), L10n.resetCount(3))
             XCTAssertTrue(snapshot.hasIncompleteDetails)
         }
         let excess = try parse(#"{"availableCount":0,"credits":[{"status":"available","expiresAt":200}]}"#)
-        XCTAssertEqual(excess.totalLabel(at: now), "0 次")
+        XCTAssertEqual(excess.totalLabel(at: now), L10n.resetCount(0))
         XCTAssertTrue(excess.hasIncompleteDetails)
     }
 
     func testZeroAndUnsupportedResponsesAreDistinct() throws {
         for text in [#"{"availableCount":0,"credits":[]}"#, #"{"availableCount":0}"#] {
             let snapshot = try parse(text)
-            XCTAssertEqual(snapshot.totalLabel(at: now), "0 次")
+            XCTAssertEqual(snapshot.totalLabel(at: now), L10n.resetCount(0))
             XCTAssertTrue(snapshot.expiryGroups.isEmpty)
             XCTAssertFalse(snapshot.hasIncompleteDetails)
         }
@@ -71,8 +71,8 @@ final class ResetCreditsTests: XCTestCase {
     func testExpiryBoundaryUpdatesWithoutChangingTheNetworkSnapshot() throws {
         let snapshot = try parse(#"{"availableCount":2,"credits":[{"status":"available","expiresAt":200},{"status":"available","expiresAt":300}]}"#)
         XCTAssertFalse(snapshot.hasIncompleteDetails)
-        XCTAssertEqual(snapshot.totalLabel(at: Date(timeIntervalSince1970: 199.999)), "2 次")
-        XCTAssertEqual(snapshot.totalLabel(at: Date(timeIntervalSince1970: 200)), "待校准")
+        XCTAssertEqual(snapshot.totalLabel(at: Date(timeIntervalSince1970: 199.999)), L10n.resetCount(2))
+        XCTAssertEqual(snapshot.totalLabel(at: Date(timeIntervalSince1970: 200)), L10n.text("Sync needed"))
         XCTAssertTrue(snapshot.expiryGroups[0].isExpired(at: Date(timeIntervalSince1970: 200)))
         XCTAssertFalse(snapshot.expiryGroups[1].isExpired(at: Date(timeIntervalSince1970: 200)))
         XCTAssertEqual(snapshot.availableCount, 2)

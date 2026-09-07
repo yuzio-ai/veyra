@@ -114,7 +114,7 @@ enum Diagnostics {
                 let result: [String: JSONValue] = [
                     "quotaError": quota.error.map { .string($0.message) } ?? .null,
                     "quotaErrorCode": quota.error.map { .string($0.rawValue) } ?? .null,
-                    "taskWarning": initial.warning.map(JSONValue.string) ?? .null,
+                    "taskWarning": initial.warning.map { .string($0.message) } ?? .null,
                     "initialRead": .string(String(describing: firstDuration)),
                     "incrementalRead": .string(String(describing: secondDuration)),
                     "quotaSource": quota.snapshot.map { .string($0.source.rawValue) } ?? .null,
@@ -140,7 +140,7 @@ enum Diagnostics {
                 let data = try encoder.encode(JSONValue.object(result))
                 FileHandle.standardOutput.write(data)
                 FileHandle.standardOutput.write(Data("\n".utf8))
-            } catch { print("Diagnostics failed: 无法完成本机诊断。") }
+            } catch { print(L10n.text("Diagnostics failed: unable to complete local diagnostics.")) }
             await client.shutdown()
             NSApp.terminate(nil)
         }

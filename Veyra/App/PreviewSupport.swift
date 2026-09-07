@@ -78,7 +78,7 @@ enum PreviewSupport {
         if scenario == .error {
             windows = [quota("codex", "Codex", primary: true, used: 94, minutes: 300)]
             store.quota.error = QuotaFailure.rpcFailed.message
-            store.taskError = "无法读取本机任务记录，请在设置中检查数据目录。"
+            store.taskError = L10n.text("Unable to read local task records. Check the data directory in Settings.")
         }
         if scenario == .edgeCases {
             windows = [
@@ -144,11 +144,11 @@ enum PreviewSupport {
         case .edgeCases:
             store.tasks = [
                 TaskSnapshot(id: "demo-1", title: "检查长数值换行、缺失数据与已经到期的额度窗口，保持所有摘要可读",
-                             model: "a-long-model-name-for-layout-validation", sourceLabel: "桌面端", parentID: nil,
+                             model: "a-long-model-name-for-layout-validation", sourceLabel: L10n.text("Desktop"), parentID: nil,
                              startedAt: referenceDate.addingTimeInterval(-9_876_543), updatedAt: referenceDate,
                              tokens: TokenUsage(input: Int64.max / 2, output: Int64.max / 2, total: Int64.max - 1),
                              activity: .running),
-                TaskSnapshot(id: "demo-2", title: "缺失用量与开始时间的子任务", model: nil, sourceLabel: "子任务",
+                TaskSnapshot(id: "demo-2", title: "缺失用量与开始时间的子任务", model: nil, sourceLabel: L10n.text("Subtask"),
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
             ]
@@ -156,11 +156,11 @@ enum PreviewSupport {
             store.tasks = [task(1), task(2, parentID: "demo-1"), task(3, parentID: "demo-1", activity: .unknown),
                            task(4, parentID: "demo-2")]
             store.tasks[1] = TaskSnapshot(id: "demo-2", title: "ios phone auth r2 review", model: "gpt-5.6-sol",
-                sourceLabel: "子任务", parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
+                sourceLabel: L10n.text("Subtask"), parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
                 updatedAt: referenceDate, tokens: TokenUsage(input: 240_400, output: 1_300, total: 241_700), activity: .running,
                 agentPath: "/root/ios_phone_auth_r2_review", agentNickname: "Lorentz", agentRole: "reviewer",
                 progress: TaskProgress(kind: .message, text: "已核对认证表单与传输边界，目前正在检查快照失效、缓存提交和账号接续后的资料选择，确保长进展文本能正确截断并通过悬停查看。"))
-            store.tasks[3].progress = TaskProgress(kind: .tool, text: "执行命令")
+            store.tasks[3].progress = TaskProgress(kind: .tool, text: L10n.text("Running command"))
         case .familyContext:
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
             store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
@@ -187,7 +187,7 @@ enum PreviewSupport {
                              activity: TaskActivity = .running) -> TaskSnapshot {
         TaskSnapshot(id: "demo-\(number)",
                      title: longTitle ? "检查额度读取与并行任务监控，验证非常长的任务名称能够正确换行并保持界面整齐" : "优化菜单栏弹窗与滚动体验 · \(number)",
-                     model: "gpt-5.6-sol", sourceLabel: parentID == nil ? "桌面端" : "子任务", parentID: parentID,
+                     model: "gpt-5.6-sol", sourceLabel: parentID == nil ? L10n.text("Desktop") : L10n.text("Subtask"), parentID: parentID,
                      startedAt: referenceDate.addingTimeInterval(-752), updatedAt: referenceDate,
                      tokens: TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, reasoningOutput: 2_891, total: 884_100),
                      activity: activity)
@@ -209,7 +209,8 @@ enum PreviewSupport {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let store = MonitorStore()
                 var results: [[String: Any]] = []
-                for scenario in Scenario.allCases {
+                let scenarios = CommandLine.arguments.contains("--preview-settings-only") ? [] : Scenario.allCases
+                for scenario in scenarios {
                     configure(store, scenario: scenario)
                     let appearances: [(String, NSAppearance.Name)] = [
                         ("light", .aqua), ("dark", .darkAqua),
@@ -253,6 +254,32 @@ enum PreviewSupport {
                         window.orderOut(nil)
                         retainedWindow = nil
                     }
+                }
+                // Settings has its own width and long explanatory copy; include it in language checks.
+                for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
+                                           ("light-increased", .accessibilityHighContrastAqua),
+                                           ("dark-increased", .accessibilityHighContrastDarkAqua)] {
+                    let hosting = NSHostingView(rootView: MonitorSettings(store: store)
+                        .background(Color(nsColor: .windowBackgroundColor)))
+                    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 1),
+                                          styleMask: [.borderless], backing: .buffered, defer: false)
+                    window.appearance = NSAppearance(named: appearance)
+                    window.contentView = hosting
+                    window.orderFront(nil)
+                    retainedWindow = window
+                    for _ in 0..<5 {
+                        try await Task.sleep(for: .milliseconds(80))
+                        hosting.layoutSubtreeIfNeeded()
+                        window.setContentSize(hosting.fittingSize)
+                    }
+                    guard abs(hosting.bounds.width - 570) < 1, hosting.bounds.height > 100 else {
+                        throw PreviewError.invalidLayout("settings-\(name)")
+                    }
+                    try saveBitmap(hosting, to: directory.appendingPathComponent("settings-\(name).png"))
+                    results.append(["name": "settings-\(name)", "width": hosting.bounds.width,
+                                    "height": hosting.bounds.height])
+                    window.orderOut(nil)
+                    retainedWindow = nil
                 }
                 try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
                     .write(to: directory.appendingPathComponent("layouts.json"))

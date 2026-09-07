@@ -57,16 +57,16 @@ struct RolloutDisplay: Sendable {
     private static func toolLabel(_ name: String) -> String {
         let leaf = name.split(separator: ".").last.map(String.init) ?? name
         switch leaf {
-        case "exec": return "执行工具脚本"
-        case "exec_command", "shell", "shell_command": return "执行命令"
-        case "apply_patch": return "修改文件"
-        case "view_image": return "查看图片"
-        case "read_file": return "读取文件"
-        case "query_docs": return "查阅文档"
-        case "spawn_agent", "followup_task": return "分派子任务"
-        case "send_message", "send_message_to_thread": return "发送协作消息"
-        case "wait", "wait_agent", "sleep", "write_stdin": return "等待或读取执行结果"
-        default: return "调用工具：\(name)"
+        case "exec": return L10n.text("Running tool script")
+        case "exec_command", "shell", "shell_command": return L10n.text("Running command")
+        case "apply_patch": return L10n.text("Editing files")
+        case "view_image": return L10n.text("Viewing image")
+        case "read_file": return L10n.text("Reading file")
+        case "query_docs": return L10n.text("Reading documentation")
+        case "spawn_agent", "followup_task": return L10n.text("Delegating subtask")
+        case "send_message", "send_message_to_thread": return L10n.text("Sending collaboration message")
+        case "wait", "wait_agent", "sleep", "write_stdin": return L10n.text("Waiting for results")
+        default: return L10n.text("Calling tool: \(name)")
         }
     }
 }

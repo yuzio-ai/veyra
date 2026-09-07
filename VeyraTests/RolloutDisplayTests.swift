@@ -48,7 +48,7 @@ final class RolloutDisplayTests: XCTestCase {
         }
         var state = RolloutState()
         RolloutEvent.apply(try tool("apply_patch"), to: &state)
-        XCTAssertEqual(progress(state), TaskProgress(kind: .tool, text: "修改文件"))
+        XCTAssertEqual(progress(state), TaskProgress(kind: .tool, text: L10n.text("Editing files")))
     }
 
     func testInheritedUserReasoningFinalEncryptedAndUnattributedTextAreIgnored() throws {
@@ -108,7 +108,7 @@ final class RolloutDisplayTests: XCTestCase {
         try replacement.write(to: url, options: .atomic)
         let replaced = try reader.read(url)
         XCTAssertNil(progress(replaced))
-        XCTAssertEqual(progress(replaced, turn: "replacement")?.text, "查看图片")
+        XCTAssertEqual(progress(replaced, turn: "replacement")?.text, L10n.text("Viewing image"))
         try Data().write(to: url)
         XCTAssertNil(progress(try reader.read(url), turn: "replacement"))
     }

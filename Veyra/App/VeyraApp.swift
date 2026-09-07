@@ -19,7 +19,7 @@ struct VeyraApp: App {
                 VeyraIcon(isTemplate: true)
                 Text(store.menuLabel).monospacedDigit()
             }
-            .accessibilityLabel("Veyra，\(store.menuLabel.contains("~") ? "本地额度快照，" : "")\(store.menuLabel)")
+            .accessibilityLabel(store.menuAccessibilityLabel)
         }
         .menuBarExtraStyle(.window)
 

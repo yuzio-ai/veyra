@@ -32,11 +32,21 @@ struct QuotaWindow: Identifiable, Equatable, Sendable {
     var remainingPercent: Double? { usedPercent.map { min(100, max(0, 100 - $0)) } }
     var durationLabel: String {
         switch durationMinutes {
-        case 10_080: "周"
+        case 10_080: L10n.text("Week")
         case 1_440: "24h"
         case .some(let minutes) where minutes > 0 && minutes % 60 == 0: "\(minutes / 60)h"
-        case .some(let minutes) where minutes > 0: "\(minutes)分钟"
-        default: isPrimary ? "主额度" : "次额度"
+        case .some(let minutes) where minutes > 0: L10n.text("\(minutes)min")
+        default: isPrimary ? L10n.text("Primary quota") : L10n.text("Secondary quota")
+        }
+    }
+
+    var durationTitle: String {
+        switch durationMinutes {
+        case 10_080: L10n.text("Weekly quota")
+        case .some(let minutes) where minutes > 0 && minutes % 60 == 0:
+            L10n.text("\(minutes / 60)h quota")
+        case .some(let minutes) where minutes > 0: L10n.text("\(minutes)min quota")
+        default: isPrimary ? L10n.text("Primary quota") : L10n.text("Secondary quota")
         }
     }
 }
@@ -110,20 +120,20 @@ enum QuotaFailure: String, Error, LocalizedError, Sendable, CaseIterable {
 
     var message: String {
         switch self {
-        case .missingExecutable: "未找到 Codex 可执行文件，请在设置中指定。"
-        case .missingHome: "Codex 数据目录不存在，请检查设置。"
-        case .launchFailed: "无法启动 Codex，请检查可执行文件和数据目录。"
-        case .disconnected: "Codex 连接已断开，请稍后手动校准。"
-        case .timeout: "连接 Codex 超时，请稍后手动校准。"
-        case .protocolError: "Codex 返回了无法识别的数据，请检查版本兼容性。"
-        case .rpcFailed: "额度读取失败，请检查 Codex 登录与网络连接后重试。"
-        case .rateLimited: "额度接口暂时限流，请等待冷却结束后再校准。"
-        case .unauthorized: "额度请求未获授权，请检查 Codex 登录状态。"
-        case .serviceUnavailable: "额度服务暂时不可用，请稍后手动校准。"
-        case .notLoggedIn: "尚未登录 Codex。请先在 Codex 桌面端或 CLI 中登录。"
-        case .unsupportedAuthentication: "当前登录方式不提供 ChatGPT 订阅额度。"
-        case .noQuotaWindows: "账号暂未返回可用额度窗口。"
-        case .unknown: "额度读取遇到未知错误，请稍后手动校准。"
+        case .missingExecutable: L10n.text("Codex executable not found. Specify it in Settings.")
+        case .missingHome: L10n.text("Codex data directory does not exist. Check Settings.")
+        case .launchFailed: L10n.text("Unable to start Codex. Check the executable and data directory.")
+        case .disconnected: L10n.text("Codex disconnected. Try syncing quota again later.")
+        case .timeout: L10n.text("Connection to Codex timed out. Try syncing quota again later.")
+        case .protocolError: L10n.text("Codex returned unrecognized data. Check version compatibility.")
+        case .rpcFailed: L10n.text("Unable to read quotas. Check your Codex sign-in and network connection, then retry.")
+        case .rateLimited: L10n.text("Quota requests are rate-limited. Wait for the cooldown to end before syncing again.")
+        case .unauthorized: L10n.text("Quota request unauthorized. Check your Codex sign-in.")
+        case .serviceUnavailable: L10n.text("Quota service unavailable. Try syncing quota again later.")
+        case .notLoggedIn: L10n.text("Sign in to Codex Desktop or the CLI first.")
+        case .unsupportedAuthentication: L10n.text("This sign-in method does not provide ChatGPT subscription quotas.")
+        case .noQuotaWindows: L10n.text("No quota windows are currently available for this account.")
+        case .unknown: L10n.text("An unknown error occurred while reading quotas. Try syncing again later.")
         }
     }
 
@@ -229,7 +239,7 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
 struct TaskReadResult: Sendable {
     let tasks: [TaskSnapshot]
     let fetchedAt: Date
-    let warning: String?
+    let warning: TaskReadWarning?
     var localQuota: QuotaSnapshot?
     var quotaWarning: String?
     var metrics = TaskReadMetrics()
@@ -253,9 +263,9 @@ enum DisplayFormat {
     static func duration(since start: Date?, now: Date = Date()) -> String {
         guard let start else { return "—" }
         let seconds = max(0, Int(now.timeIntervalSince(start)))
-        if seconds >= 86_400 { return "\(seconds / 86_400)天 \(seconds % 86_400 / 3_600)时" }
-        if seconds >= 3_600 { return "\(seconds / 3_600)时 \(seconds % 3_600 / 60)分" }
-        if seconds >= 60 { return "\(seconds / 60)分 \(seconds % 60)秒" }
-        return "\(seconds)秒"
+        if seconds >= 86_400 { return L10n.text("\(seconds / 86_400)d \(seconds % 86_400 / 3_600)h") }
+        if seconds >= 3_600 { return L10n.text("\(seconds / 3_600)h \(seconds % 3_600 / 60)m") }
+        if seconds >= 60 { return L10n.text("\(seconds / 60)m \(seconds % 60)s") }
+        return L10n.text("\(seconds)s")
     }
 }

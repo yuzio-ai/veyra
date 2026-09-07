@@ -30,8 +30,8 @@ struct ThreadMetadata: Sendable {
         return value["subagent"]["other"].string != nil
     }
     var sourceLabel: String {
-        if parentID != nil { return "子任务" }
-        return ["cli", "exec"].contains(source) ? "CLI" : "桌面端"
+        if parentID != nil { return L10n.text("Subtask") }
+        return ["cli", "exec"].contains(source) ? "CLI" : L10n.text("Desktop")
     }
 }
 
@@ -106,7 +106,7 @@ actor LocalTaskReader {
         metrics.processCollections = 1
         guard let stateURL = SQLiteReader.database(named: "state", in: home) else {
             metadataCache.reset()
-            throw MonitorFailure("未找到 Codex 任务数据库。请先运行 Codex，或在设置中选择数据目录。")
+            throw MonitorFailure(L10n.text("Codex task database not found. Run Codex first or choose its data directory in Settings."))
         }
         let loaded = try metadataCache.load(url: stateURL, query: Self.readMetadata)
         let metadata = loaded.value
@@ -182,19 +182,19 @@ actor LocalTaskReader {
                 parentID = parent.parentID
             }
         }
-        let warning = !evidence.reliable ? "无法核对 Codex 进程，任务状态暂不确定。"
-            : historyUnavailable ? "部分任务历史暂不可读，正在使用会话事件。"
-            : unreadable ? "部分会话记录暂不可读，明细可能不完整。" : nil
+        let warning: TaskReadWarning? = !evidence.reliable ? .processUnverified
+            : historyUnavailable ? .historyUnavailable
+            : unreadable ? .sessionUnreadable : nil
         return TaskReadResult(tasks: tasks, fetchedAt: Date(), warning: warning,
                               localQuota: LocalQuotaBucket.snapshot(buckets),
-                              quotaWarning: quotaUnreadable ? "部分本地额度记录暂不可读。" : nil, metrics: metrics,
+                              quotaWarning: quotaUnreadable ? L10n.text("Some local quota records are unreadable.") : nil, metrics: metrics,
                               ancestors: ancestors.values.sorted { $0.id < $1.id })
     }
 
     private static func readMetadata(_ db: SQLiteReader) throws -> [ThreadMetadata] {
         let columns = try db.columns(in: "threads")
         guard columns.contains("id"), columns.contains("rollout_path") else {
-            throw MonitorFailure("Codex 数据库版本暂不兼容。")
+            throw MonitorFailure(L10n.text("This Codex database version is not supported."))
         }
         let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived", "agent_path", "agent_nickname", "agent_role"]
             .map { columns.contains($0) ? $0 : "NULL AS \($0)" }
