@@ -31,4 +31,5 @@ Veyra 支持简体中文和英文，默认跟随 macOS 语言偏好。可在 **�
 
 - [使用指南](docs/user-guide.zh-CN.md)
 - [数据、隐私与兼容性](docs/data-and-privacy.zh-CN.md)
-- [开发与手动发布](docs/development.zh-CN.md)
+- [开发文档](docs/development.zh-CN.md)
+- [手动发布操作手册](docs/release.zh-CN.md)

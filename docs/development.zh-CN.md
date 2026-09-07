@@ -35,32 +35,9 @@ python3 scripts/generate_project.py
 
 ## 使用 Xcode 手动发布
 
-公开分发前需要有效的 Apple Developer Program 会员资格，以及安装在本机钥匙串中的 `Developer ID Application` 证书。仓库不保存证书、Apple Team、Apple ID 或公证凭据。
+完整步骤见[手动发布操作手册](release.zh-CN.md)，包括维护者与 Codex 的分工和授权、版本准备、Xcode Archive、Direct Distribution、公证导出、产物验证、签名配置清理、源码标签和 GitHub Release 上传。
 
-1. 运行 `python3 scripts/generate_project.py`，然后打开 `Veyra.xcodeproj`。
-2. 在 Xcode 的 **Settings → Accounts** 登录 Apple 开发者账号。
-3. 选择 Veyra target，在 **Signing & Capabilities** 中为本次 Archive 选择开发者团队和 Developer ID 签名。确认 Hardened Runtime 已启用、App Sandbox 保持关闭。
-4. 选择适用于归档的 Mac 目标，然后执行 **Product → Archive**。
-5. 在 Organizer 中选择归档，执行 **Distribute App → Direct Distribution**。让 Xcode 完成 Developer ID 签名、Apple 公证和导出。
-6. 验证导出的应用：
-
-   ```sh
-   codesign --verify --deep --strict '/path/to/Veyra.app'
-   spctl --assess --type execute --verbose=4 '/path/to/Veyra.app'
-   xcrun stapler validate '/path/to/Veyra.app'
-   ```
-
-7. 使用 `ditto` 保留 macOS bundle 元数据并生成压缩包：
-
-   ```sh
-   ditto -c -k --sequesterRsrc --keepParent \
-     '/path/to/Veyra.app' \
-     'Veyra-v1.1.0-macos-universal.zip'
-   ```
-
-8. 在 GitHub 的 Releases 页面创建与版本对应的 tag，上传 ZIP 并手动发布。
-
-发布前同步更新 `Veyra/Info.plist` 中的 `CFBundleShortVersionString` 和 `CFBundleVersion`。Xcode 完成本机签名设置后，提交其他代码前检查 `git diff`，避免将个人 Team 设置带入版本控制。
+日常开发使用默认 ad-hoc 配置。发布时在本机 Xcode 选择团队与签名身份，导出通过公证的 App 后恢复仓库默认配置；清理工程不会影响已导出的 App。发布标签中的功能、资源与版本必须对应归档，Archive 后修改这些内容需要重新归档。
 
 ## 品牌素材
 
@@ -75,7 +52,7 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 python3 scripts/generate_project.py
 ```
 
-应用、工程和 scheme 均名为 Veyra。Bundle ID 保持 `local.codexmonitor.app`，以保留已有的路径设置。
+应用、工程和 scheme 均名为 Veyra。开发默认 Bundle ID 为 `local.codexmonitor.app`；正式分发应沿用上一版正式 App 的标识，详见[发布前的 Bundle ID 核对](release.zh-CN.md#33-核对-bundle-id)。不同标识可能使用不同的偏好设置。
 
 ## 开发检查
 

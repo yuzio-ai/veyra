@@ -33,4 +33,5 @@ Detailed documentation is currently available in Chinese:
 
 - [User guide](docs/user-guide.zh-CN.md)
 - [Data, privacy, and compatibility](docs/data-and-privacy.zh-CN.md)
-- [Development and manual release](docs/development.zh-CN.md)
+- [Development](docs/development.zh-CN.md)
+- [Manual release runbook](docs/release.zh-CN.md)
