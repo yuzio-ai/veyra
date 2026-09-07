@@ -49,6 +49,7 @@ struct QuotaSnapshot: Equatable, Sendable {
     let accountID: String?
     var source: QuotaSource = .network
     var bucketDates: [String: Date] = [:]
+    var resetCredits: ResetCreditsSnapshot?
     func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
     func isStale(bucketID: String, at now: Date) -> Bool {
         guard source == .local else { return false }
@@ -85,7 +86,8 @@ struct QuotaSnapshot: Equatable, Sendable {
                 ))
             }
         }
-        return QuotaSnapshot(windows: windows, fetchedAt: date, accountID: value["accountId"].string)
+        return QuotaSnapshot(windows: windows, fetchedAt: date, accountID: value["accountId"].string,
+                             resetCredits: ResetCreditsSnapshot.parse(value["rateLimitResetCredits"], at: date))
     }
 }
 
@@ -147,6 +149,7 @@ struct QuotaDisplayState: Sendable {
     private(set) var localSnapshot: QuotaSnapshot?
     private var networkSnapshot: QuotaSnapshot?
     private var networkAccount: AccountSnapshot?
+    var resetCredits: ResetCreditsSnapshot? { networkSnapshot?.resetCredits }
 
     mutating func updateLocal(_ value: QuotaSnapshot?) {
         localSnapshot = value

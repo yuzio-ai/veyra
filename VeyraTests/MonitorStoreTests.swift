@@ -192,4 +192,33 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(store.quota.snapshot?.source, .local)
         store.stop(); clock.finish(); await drain()
     }
+
+    func testCreditsPublishIndependentlyOfNewerLocalQuotaAndClearOnSettingsChange() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        var now = Date(timeIntervalSince1970: 300)
+        let local = QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 1_000), accountID: nil, source: .local)
+        await fixture.setLocal(local)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                 now: { now }, defaults: defaults(home: folder.home))
+        await store.refreshAll()
+        for count: Int64 in [3, 2] {
+            let credits = ResetCreditsSnapshot(availableCount: count, credits: [],
+                                              fetchedAt: Date(timeIntervalSince1970: 200), hasIncompleteDetails: true)
+            var result = verifiedQuota
+            result.snapshot?.resetCredits = credits
+            await fixture.setNetwork(result)
+            await store.calibrateQuota()
+            XCTAssertEqual(store.quota.snapshot, local)
+            XCTAssertEqual(store.quota.resetCredits, credits)
+            now = now.addingTimeInterval(61)
+        }
+        await fixture.setNetwork(QuotaRefresh(error: .timeout))
+        await store.calibrateQuota()
+        XCTAssertEqual(store.quota.resetCredits?.availableCount, 2)
+        XCTAssertEqual(store.quota.error, QuotaFailure.timeout.message)
+        store.saveSettings(home: folder.home.path, executable: "/fixture/codex")
+        XCTAssertNil(store.quota.resetCredits)
+        store.stop()
+        await drain()
+    }
 }

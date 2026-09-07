@@ -168,7 +168,8 @@ final class MonitorStore {
         return stamp
     }
     private func publishQuota() {
-        if quota.snapshot != quotaState.snapshot || quota.account != quotaState.account || quota.error != quotaState.error {
+        if quota.snapshot != quotaState.snapshot || quota.account != quotaState.account || quota.error != quotaState.error
+            || quota.resetCredits != quotaState.resetCredits {
             quota = quotaState
         }
     }

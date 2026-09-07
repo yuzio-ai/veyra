@@ -8,7 +8,9 @@ Veyra 默认读取会话 JSONL 中的 `token_count.rate_limits`，按额度桶�
 
 ## 联网校准
 
-只有用户点击“联网校准”时，Veyra 才启动独立的 `codex app-server --stdio`，读取 `account/read` 和 `account/rateLimits/read`，随后关闭子进程。结果整体显示为账号额度；出现时间更新的本地记录后，界面整体切回本地来源，不混合两种来源的数据。接口说明见 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server#auth-endpoints)。
+只有用户点击“联网校准”时，Veyra 才启动独立的 `codex app-server --stdio`，读取 `account/read` 和 `account/rateLimits/read`，随后关闭子进程。额度窗口整体显示为账号额度；出现时间更新的本地记录后，额度窗口整体切回本地来源，不混合两种来源的窗口数据。接口说明见 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server#auth-endpoints)。
+
+重置次数来自同一响应中的 `rateLimitResetCredits.availableCount` 与 `credits`，仅聚合状态为 `available` 的条目，按 `expiresAt` 的 Unix 秒时间戳分组。本地日志不提供这份明细，因此重置卡片独立保留最近联网结果及校准时间，全部只缓存在内存中。网络失败保留旧结果，成功响应缺少字段则显示暂不可用；账号或配置变化会清空。已知批次到期后要求重新校准，不自行推算剩余总数，也不会自动联网或兑换重置次数。
 
 手动请求的最短间隔为 60 秒。网络失败后分别等待 5、15、30 分钟，不自动重试；服务端提供更长的等待时间时遵守服务端时间。配置错误或未登录错误可在修正后重新操作。账号认证文件发生变化时，联网校准结果失效，本地记录仍保持账号归属未确认。
 

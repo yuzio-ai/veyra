@@ -204,7 +204,7 @@ final class CoreTests: XCTestCase {
           case "$request" in
             *'"method":"initialize"'*) printf '%s\n' '{"id":'"$rpc_id"',"result":{}}' ;;
             *'"method":"account/read"'*) printf '%s\n' '{"id":'"$rpc_id"',"result":{"account":{"type":"chatgpt","email":"fixture@example.invalid"}}}' ;;
-            *'"method":"account/rateLimits/read"'*) printf '%s\n' '{"id":'"$rpc_id"',"result":{"accountId":"fixture-account","rateLimits":{"primary":{"usedPercent":25,"windowDurationMins":300}}}}' ;;
+            *'"method":"account/rateLimits/read"'*) printf '%s\n' '{"id":'"$rpc_id"',"result":{"accountId":"fixture-account","rateLimits":{"primary":{"usedPercent":25,"windowDurationMins":300}},"rateLimitResetCredits":{"availableCount":2,"credits":[{"status":"available","expiresAt":1900000000},{"status":"available","expiresAt":1900000000}]}}}' ;;
           esac
         done
         """#
@@ -218,6 +218,8 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(first.error)
         XCTAssertEqual(first.snapshot?.menuWindow?.remainingPercent, 75)
         XCTAssertEqual(second.snapshot?.menuWindow?.remainingPercent, 75)
+        XCTAssertEqual(first.snapshot?.resetCredits?.availableCount, 2)
+        XCTAssertEqual(second.snapshot?.resetCredits?.expiryGroups.map(\.count), [2])
         XCTAssertEqual(first.account?.identity, "fixture-account")
         let requests = try String(contentsOf: home.appendingPathComponent("requests"), encoding: .utf8)
             .split(separator: "\n").map { try json(String($0))["method"].string }

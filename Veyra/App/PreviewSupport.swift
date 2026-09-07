@@ -11,6 +11,10 @@ enum PreviewSupport {
         case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
         case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
         case refreshing
+        case resetCredits = "reset-credits", resetCreditsExpired = "reset-credits-expired"
+        case resetCreditsUnknown = "reset-credits-unknown", resetCreditsZero = "reset-credits-zero"
+        case resetCreditsUnavailable = "reset-credits-unavailable", resetCreditsOverflow = "reset-credits-overflow"
+        case resetCreditsOnly = "reset-credits-only"
     }
 
     static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
@@ -95,6 +99,27 @@ enum PreviewSupport {
             }
         }
         store.quota.snapshot = QuotaSnapshot(windows: windows, fetchedAt: referenceDate, accountID: nil)
+        if scenario.rawValue.hasPrefix("reset-credits") {
+            var entries: [JSONValue] = [resetCredit(after: 86_400), resetCredit(after: 86_400), resetCredit(after: 604_800)]
+            var count = 3
+            if scenario == .resetCreditsExpired { entries[0] = resetCredit(after: -1) }
+            if scenario == .resetCreditsUnknown {
+                entries = [resetCredit(after: 86_400), .object(["status": .string("available")])]
+                count = 4
+            }
+            if scenario == .resetCreditsZero { entries = []; count = 0 }
+            if scenario == .resetCreditsOverflow {
+                entries = (1...96).map { resetCredit(after: Double($0) * 86_400) }
+                count = entries.count
+            }
+            let raw: JSONValue = scenario == .resetCreditsUnavailable ? .null : .object([
+                "availableCount": .number(Double(count)), "credits": .array(entries)
+            ])
+            let snapshot = QuotaSnapshot(windows: scenario == .resetCreditsOnly ? [] : windows,
+                fetchedAt: referenceDate, accountID: nil,
+                resetCredits: ResetCreditsSnapshot.parse(raw, at: referenceDate))
+            store.quota.apply(QuotaRefresh(account: store.quota.account, snapshot: snapshot))
+        }
         if [.localQuota, .staleQuota].contains(scenario) {
             store.quota.account = nil
             store.quota.snapshot = QuotaSnapshot(windows: windows,
@@ -140,9 +165,16 @@ enum PreviewSupport {
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
             store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
                            task(3, parentID: "demo-2"), task(4, parentID: "missing-parent")]
-        case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh:
+        case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
+             .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
+             .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly:
             break
         }
+    }
+
+    private static func resetCredit(after seconds: TimeInterval) -> JSONValue {
+        .object(["status": .string("available"),
+                 "expiresAt": .number(referenceDate.addingTimeInterval(seconds).timeIntervalSince1970)])
     }
 
     private static func quota(_ id: String, _ name: String, primary: Bool, used: Double, minutes: Int64) -> QuotaWindow {
@@ -207,9 +239,9 @@ enum PreviewSupport {
                             throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name)")
                         }
                         // Layout regression budgets for these fixed fixtures only;
-                        // Include the source timestamp and explicit calibration controls;
+                        // Include the reset-credit card, source timestamp and calibration controls;
                         // production height always comes from the actual content.
-                        let heightBudget: CGFloat = scenario == .single ? 560 : scenario == .quotas ? 730 : 776
+                        let heightBudget: CGFloat = scenario == .single ? 560 : 776
                         guard measured.panelHeight <= heightBudget else {
                             throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name): \(measured.panelHeight) exceeds \(heightBudget)")
                         }

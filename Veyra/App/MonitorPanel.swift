@@ -131,6 +131,7 @@ struct MonitorPanel: View {
                     }
                 }
             }
+            ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
             if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
                 let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
                     if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
@@ -530,6 +531,65 @@ private struct TaskRow: View {
 private extension View {
     func monitorCard() -> some View {
         modifier(ControlCenterTile())
+    }
+}
+
+private struct ResetCreditsCard: View {
+    let snapshot: ResetCreditsSnapshot?
+    let isLoading: Bool
+
+    var body: some View {
+        MonitorTimeline(interval: 1, enabled: snapshot?.credits.contains { $0.expiresAt != nil } == true) { now in
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("可用重置次数").font(.system(size: 12, weight: .semibold))
+                    Spacer(minLength: 8)
+                    Text(snapshot?.totalLabel(at: now) ?? "—")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .accessibilityIdentifier("monitor.resetCredits.total")
+                }
+                .accessibilityElement(children: .combine)
+                if let snapshot {
+                    ForEach(snapshot.expiryGroups) { group in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(group.count) 次").monospacedDigit().fixedSize()
+                            Spacer(minLength: 0)
+                            expiryLabel(group, at: now)
+                                .multilineTextAlignment(.trailing)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .accessibilityElement(children: .combine)
+                    }
+                    if snapshot.availableCount == nil {
+                        detail("暂不可用")
+                    } else if snapshot.hasIncompleteDetails {
+                        detail("部分到期信息暂不可用")
+                    }
+                    detail("上次联网校准 · \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard))")
+                } else {
+                    detail(isLoading ? "正在联网校准…" : "联网校准后查看")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14).monitorCard()
+            .accessibilityIdentifier("monitor.resetCredits")
+        }
+    }
+
+    @ViewBuilder
+    private func expiryLabel(_ group: ResetCreditsSnapshot.ExpiryGroup, at now: Date) -> some View {
+        if let expiry = group.expiresAt {
+            Text(group.isExpired(at: now) ? "已到期 · 待校准" : "\(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute())) 到期")
+                .help("到期时间：\(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute().second()))")
+        } else {
+            Text("到期时间未知")
+        }
+    }
+
+    private func detail(_ text: String) -> some View {
+        Text(text).font(.system(size: 10)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
