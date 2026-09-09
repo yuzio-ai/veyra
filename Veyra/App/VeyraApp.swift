@@ -8,7 +8,7 @@ struct VeyraApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MonitorPanel(store: store,
+            MonitorPanel(store: store, updates: delegate.updates,
                          initiallyExpandedTaskIDs: PreviewSupport.expandedTaskIDs(for: PreviewSupport.menuScenario),
                          initiallyShowUnknown: PreviewSupport.menuScenario == .unknown)
                 .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
@@ -24,7 +24,7 @@ struct VeyraApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            MonitorSettings(store: store)
+            MonitorSettings(store: store, updates: delegate.updates)
         }
     }
 }
@@ -32,6 +32,16 @@ struct VeyraApp: App {
 @MainActor
 final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private var previewWindow: NSWindow?
+    let updates: UpdateStore = {
+        let arguments = CommandLine.arguments
+        if let scenario = PreviewSupport.menuScenario {
+            return UpdateStore.preview(scenario == .updateAvailable ? .available : .idle)
+        }
+        if arguments.contains("--diagnose") || arguments.contains("--render-previews") || arguments.contains("--preview-menu") {
+            return UpdateStore()
+        }
+        return UpdateStore(defaults: .standard, networkEnabled: true)
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -50,6 +60,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             PreviewSupport.configure(MonitorStore.shared, scenario: scenario)
         } else {
             MonitorStore.shared.start()
+            Task { await updates.checkAutomatically() }
             let center = NSWorkspace.shared.notificationCenter
             center.addObserver(self, selector: #selector(willSleep), name: NSWorkspace.willSleepNotification, object: nil)
             center.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
@@ -63,7 +74,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         }
         // Developer smoke-test entry point; shows the exact menu content using live data.
         if arguments.contains("--show-panel") {
-            let view = NSHostingView(rootView: MonitorPanel(store: MonitorStore.shared))
+            let view = NSHostingView(rootView: MonitorPanel(store: MonitorStore.shared, updates: updates))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 1),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.title = "Veyra"

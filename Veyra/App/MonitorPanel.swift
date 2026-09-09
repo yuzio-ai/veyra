@@ -4,6 +4,7 @@ private let monitorAccent = Color(nsColor: .systemGreen)
 
 struct MonitorPanel: View {
     @Bindable var store: MonitorStore
+    var updates: UpdateStore?
     var screenOverride: PanelScreenMetrics?
     var onSizingChange: ((PanelSizing) -> Void)?
     @State private var showUnknown = false
@@ -15,10 +16,11 @@ struct MonitorPanel: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.monitorOpaquePreview) private var opaquePreview
 
-    init(store: MonitorStore, screenOverride: PanelScreenMetrics? = nil,
+    init(store: MonitorStore, updates: UpdateStore? = nil, screenOverride: PanelScreenMetrics? = nil,
          initiallyExpandedTaskIDs: Set<String> = [], initiallyShowUnknown: Bool = false,
          onSizingChange: ((PanelSizing) -> Void)? = nil) {
         self.store = store
+        self.updates = updates
         self.screenOverride = screenOverride
         self.onSizingChange = onSizingChange
         _expandedTaskIDs = State(initialValue: initiallyExpandedTaskIDs)
@@ -62,7 +64,10 @@ struct MonitorPanel: View {
             if reduceTransparency || opaquePreview { Color(nsColor: .windowBackgroundColor) }
         }
         .background {
-            PanelWindowReader(onChange: { screen = $0 }, onVisibilityChange: { store.setPanelVisible($0) })
+            PanelWindowReader(onChange: { screen = $0 }, onVisibilityChange: { visible in
+                store.setPanelVisible(visible)
+                if visible, !store.isPreview { Task { await updates?.checkAutomatically() } }
+            })
                 .allowsHitTesting(false)
         }
         .environment(\.monitorPanelActive, store.panelVisible || store.isPreview)
@@ -228,6 +233,23 @@ struct MonitorPanel: View {
     }
 
     private var footer: some View {
+        VStack(spacing: 0) {
+            if let release = updates?.availableRelease {
+                HStack(spacing: 8) {
+                    Text(L10n.text("New version available: \(release.version)"))
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer(minLength: 4)
+                    UpdateDownloadLink(release: release).font(.system(size: 11))
+                }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .accessibilityIdentifier("updates.banner")
+                Divider()
+            }
+            footerActions
+        }
+    }
+
+    private var footerActions: some View {
         HStack(spacing: 8) {
             Label("Local tasks · Quota snapshots", systemImage: "desktopcomputer")
                 .font(.system(size: 11)).lineLimit(1)

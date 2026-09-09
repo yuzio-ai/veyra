@@ -11,6 +11,7 @@ enum PreviewSupport {
         case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
         case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
         case refreshing
+        case updateAvailable = "update-available"
         case resetCredits = "reset-credits", resetCreditsExpired = "reset-credits-expired"
         case resetCreditsUnknown = "reset-credits-unknown", resetCreditsZero = "reset-credits-zero"
         case resetCreditsUnavailable = "reset-credits-unavailable", resetCreditsOverflow = "reset-credits-overflow"
@@ -137,7 +138,7 @@ enum PreviewSupport {
             if scenario == .refreshing { store.tasksBusy = true }
         case .longTitle:
             store.tasks = [task(1, longTitle: true)]
-        case .multiple:
+        case .multiple, .updateAvailable:
             store.tasks = (1...16).map { task($0, longTitle: $0 == 2 || $0 == 4, parentID: $0 == 2 ? "demo-1" : nil) }
         case .unknown:
             store.tasks = [task(1), task(2, longTitle: true, activity: .unknown)]
@@ -195,7 +196,8 @@ enum PreviewSupport {
 
     private static func panel(store: MonitorStore, scenario: Scenario, screenHeight: CGFloat = 800, increasedContrast: Bool = false,
                               onSizingChange: @escaping (PanelSizing) -> Void) -> some View {
-        MonitorPanel(store: store, screenOverride: PanelScreenMetrics(visibleHeight: screenHeight),
+        MonitorPanel(store: store, updates: .preview(scenario == .updateAvailable ? .available : .idle),
+                     screenOverride: PanelScreenMetrics(visibleHeight: screenHeight),
                      initiallyExpandedTaskIDs: expandedTaskIDs(for: scenario),
                      initiallyShowUnknown: scenario == .unknown, onSizingChange: onSizingChange)
             .environment(\.monitorOpaquePreview, true)
@@ -256,30 +258,34 @@ enum PreviewSupport {
                     }
                 }
                 // Settings has its own width and long explanatory copy; include it in language checks.
-                for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
-                                           ("light-increased", .accessibilityHighContrastAqua),
-                                           ("dark-increased", .accessibilityHighContrastDarkAqua)] {
-                    let hosting = NSHostingView(rootView: MonitorSettings(store: store)
-                        .background(Color(nsColor: .windowBackgroundColor)))
-                    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 1),
-                                          styleMask: [.borderless], backing: .buffered, defer: false)
-                    window.appearance = NSAppearance(named: appearance)
-                    window.contentView = hosting
-                    window.orderFront(nil)
-                    retainedWindow = window
-                    for _ in 0..<5 {
-                        try await Task.sleep(for: .milliseconds(80))
-                        hosting.layoutSubtreeIfNeeded()
-                        window.setContentSize(hosting.fittingSize)
+                for updateState in UpdateStore.PreviewState.allCases {
+                    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
+                                               ("light-increased", .accessibilityHighContrastAqua),
+                                               ("dark-increased", .accessibilityHighContrastDarkAqua)] {
+                        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(updateState))
+                            .environment(\.monitorReferenceDate, referenceDate)
+                            .background(Color(nsColor: .windowBackgroundColor)))
+                        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 1),
+                                              styleMask: [.borderless], backing: .buffered, defer: false)
+                        window.appearance = NSAppearance(named: appearance)
+                        window.contentView = hosting
+                        window.orderFront(nil)
+                        retainedWindow = window
+                        for _ in 0..<5 {
+                            try await Task.sleep(for: .milliseconds(80))
+                            hosting.layoutSubtreeIfNeeded()
+                            window.setContentSize(hosting.fittingSize)
+                        }
+                        guard abs(hosting.bounds.width - 570) < 1, hosting.bounds.height > 100 else {
+                            throw PreviewError.invalidLayout("settings-\(name)")
+                        }
+                        let filename = updateState == .idle ? "settings-\(name)" : "settings-\(updateState.rawValue)-\(name)"
+                        try saveBitmap(hosting, to: directory.appendingPathComponent(filename + ".png"))
+                        results.append(["name": filename, "width": hosting.bounds.width,
+                                        "height": hosting.bounds.height])
+                        window.orderOut(nil)
+                        retainedWindow = nil
                     }
-                    guard abs(hosting.bounds.width - 570) < 1, hosting.bounds.height > 100 else {
-                        throw PreviewError.invalidLayout("settings-\(name)")
-                    }
-                    try saveBitmap(hosting, to: directory.appendingPathComponent("settings-\(name).png"))
-                    results.append(["name": "settings-\(name)", "width": hosting.bounds.width,
-                                    "height": hosting.bounds.height])
-                    window.orderOut(nil)
-                    retainedWindow = nil
                 }
                 try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
                     .write(to: directory.appendingPathComponent("layouts.json"))

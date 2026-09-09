@@ -3,6 +3,7 @@ import AppKit
 
 struct MonitorSettings: View {
     @Bindable var store: MonitorStore
+    @Bindable var updates: UpdateStore
     @State private var home = ""
     @State private var executable = ""
     @State private var saved = false
@@ -26,6 +27,8 @@ struct MonitorSettings: View {
                 Button("Save") { store.saveSettings(home: home, executable: executable); saved = true }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
+            Divider()
+            UpdateSettingsSection(updates: updates)
         }
         .padding(26).frame(width: 570)
         .onAppear { home = store.homePath; executable = store.executablePath }

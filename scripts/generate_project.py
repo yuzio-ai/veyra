@@ -38,7 +38,7 @@ app_exceptions = add_membership_exceptions('exceptions-Veyra-app', 'app', ['Info
 # files individually. Regenerate after changing the shared Core source set.
 shared_core = sorted(str(path.relative_to(ROOT / 'Veyra')) for path in ROOT.glob('Veyra/Core/**/*.swift'))
 test_exceptions = add_membership_exceptions('exceptions-Veyra-test', 'test', [
-    'App/MonitorStore.swift', *shared_core, 'Resources/Localizable.xcstrings',
+    'App/MonitorStore.swift', 'App/UpdateStore.swift', *shared_core, 'Resources/Localizable.xcstrings',
 ])
 veyra_group = add('group-Veyra', f'isa = PBXFileSystemSynchronizedRootGroup; exceptions = ({app_exceptions}, {test_exceptions},); explicitFileTypes = {{}}; explicitFolders = (); path = Veyra; sourceTree = "<group>";')
 tests_group = add('group-VeyraTests', 'isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VeyraTests; sourceTree = "<group>";')
