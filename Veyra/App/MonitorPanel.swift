@@ -113,9 +113,10 @@ struct MonitorPanel: View {
                         .accessibilityIdentifier("monitor.quotaProgress")
                 }
                 Spacer()
-                if let plan = store.quota.account?.plan {
-                    Text(plan.uppercased()).font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .tracking(0.5).padding(.horizontal, 7).padding(.vertical, 4)
+                if let plan = store.quota.account?.planDisplayName {
+                    Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .tracking(0.5).lineLimit(1).help(plan)
+                        .padding(.horizontal, 7).padding(.vertical, 4)
                         .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
                 }
                 MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in

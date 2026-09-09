@@ -7,6 +7,25 @@ struct AccountSnapshot: Equatable, Sendable {
     let plan: String?
     let authType: String
 
+    var planDisplayName: String? {
+        // Display only: preserve the API tier for identity and account matching.
+        // Verified mappings and source version: docs/plan-display-names.md.
+        guard let value = plan?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        switch value.lowercased() {
+        case "free", "free_workspace", "guest": return "FREE"
+        case "go": return "GO"
+        case "plus": return "PLUS"
+        case "pro", "prolite": return "PRO"
+        case "team", "self_serve_business_prolite", "self_serve_business_usage_based": return "BUSINESS"
+        case "business", "enterprise", "enterprise_cbp_automation", "enterprise_cbp_usage_based", "ent26":
+            return "ENTERPRISE"
+        default:
+            let readable = value.split { $0 == "_" || $0 == "-" || $0.isWhitespace }
+                .map { $0.uppercased() }.joined(separator: " ")
+            return readable.isEmpty ? value.uppercased() : readable
+        }
+    }
+
     init(json: JSONValue, accountID: String? = nil) {
         email = json["email"].string
         plan = json["planType"].string

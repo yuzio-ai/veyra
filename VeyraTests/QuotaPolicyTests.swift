@@ -183,6 +183,60 @@ final class QuotaPolicyTests: XCTestCase {
         XCTAssertEqual(policy.failures, 0)
         XCTAssertEqual(policy.nextAllowedAt, date.addingTimeInterval(60))
     }
+    func testKnownPlanDisplayNamesPreserveRawValues() {
+        let cases = [
+            ("free", "FREE"), ("free_workspace", "FREE"), ("guest", "FREE"),
+            ("go", "GO"), ("plus", "PLUS"), ("pro", "PRO"), ("prolite", "PRO"),
+            ("team", "BUSINESS"), ("self_serve_business_prolite", "BUSINESS"),
+            ("self_serve_business_usage_based", "BUSINESS"), ("business", "ENTERPRISE"),
+            ("enterprise", "ENTERPRISE"), ("enterprise_cbp_automation", "ENTERPRISE"),
+            ("enterprise_cbp_usage_based", "ENTERPRISE"), ("ent26", "ENTERPRISE")
+        ]
+        for (raw, expected) in cases {
+            for input in [raw, " \t\(raw.uppercased())\n"] {
+                let account = AccountSnapshot(json: .object(["planType": .string(input)]))
+                XCTAssertEqual(account.planDisplayName, expected, input)
+                XCTAssertEqual(account.plan, input)
+            }
+        }
+    }
+
+    func testUnmappedPlanDisplayNamesDoNotInventProductMappings() {
+        let cases = [
+            ("education", "EDUCATION"), ("edu_plus", "EDU PLUS"), ("edu_pro", "EDU PRO"),
+            ("edu", "EDU"), ("deprecated_edu", "DEPRECATED EDU"), ("k12", "K12"),
+            ("deprecated_enterprise", "DEPRECATED ENTERPRISE"),
+            ("enterprise_cbp_trial", "ENTERPRISE CBP TRIAL"), ("hc", "HC"),
+            ("finserv", "FINSERV"), ("sci", "SCI"), ("quorum", "QUORUM"), ("unknown", "UNKNOWN"),
+            ("future_enterprise_tier", "FUTURE ENTERPRISE TIER"),
+            (" \tfuture--pro__tier\n edition ", "FUTURE PRO TIER EDITION"), ("__--", "__--")
+        ]
+        for (raw, expected) in cases {
+            let account = AccountSnapshot(json: .object(["planType": .string(raw)]))
+            XCTAssertEqual(account.planDisplayName, expected, raw)
+            XCTAssertEqual(account.plan, raw)
+        }
+    }
+
+    func testMissingOrBlankPlanDisplayNameIsAbsent() {
+        for value in [JSONValue.null, .string(""), .string(" \t\n")] {
+            XCTAssertNil(AccountSnapshot(json: .object(["planType": value])).planDisplayName)
+        }
+        XCTAssertNil(AccountSnapshot(json: .object([:])).planDisplayName)
+    }
+
+    func testProDisplayNamePreservesDistinctAccountTiers() throws {
+        let lite = AccountSnapshot(json: try JSONValue.decode(Data(
+            #"{"type":"chatgpt","email":"fixture@example.invalid","planType":"prolite"}"#.utf8)))
+        let pro = AccountSnapshot(json: try JSONValue.decode(Data(
+            #"{"type":"chatgpt","email":"fixture@example.invalid","planType":"pro"}"#.utf8)))
+        XCTAssertEqual(lite.planDisplayName, "PRO")
+        XCTAssertEqual(pro.planDisplayName, "PRO")
+        XCTAssertEqual(lite.plan, "prolite")
+        XCTAssertNotEqual(lite.identity, pro.identity)
+        XCTAssertFalse(lite.matches(pro))
+    }
+
     func testFreshSidecarFailureRetainsVerifiedSnapshotWithoutReplacingAccountIdentity() throws {
         let raw = try JSONValue.decode(Data(#"{"type":"chatgpt","email":"fixture@example.invalid","planType":"pro"}"#.utf8))
         let verified = AccountSnapshot(json: raw, accountID: "verified-id")

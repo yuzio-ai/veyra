@@ -16,6 +16,8 @@ enum PreviewSupport {
         case resetCreditsUnknown = "reset-credits-unknown", resetCreditsZero = "reset-credits-zero"
         case resetCreditsUnavailable = "reset-credits-unavailable", resetCreditsOverflow = "reset-credits-overflow"
         case resetCreditsOnly = "reset-credits-only"
+        case planProLite = "plan-prolite", planBusiness = "plan-business", planEnterprise = "plan-enterprise"
+        case planUnknown = "plan-unknown"
     }
 
     static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
@@ -68,8 +70,16 @@ enum PreviewSupport {
             store.quotaBusy = true
             return
         }
+        let plan: String
+        switch scenario {
+        case .planProLite: plan = "prolite"
+        case .planBusiness: plan = "self_serve_business_prolite"
+        case .planEnterprise: plan = "business"
+        case .planUnknown: plan = "future_enterprise_subscription_with_a_very_long_unknown_tier"
+        default: plan = "pro"
+        }
         store.quota.account = AccountSnapshot(json: .object([
-            "type": .string("chatgpt"), "planType": .string("pro"), "email": .string("preview@example.invalid")
+            "type": .string("chatgpt"), "planType": .string(plan), "email": .string("preview@example.invalid")
         ]))
         var windows = [quota("codex", "Codex", primary: true, used: 52, minutes: 10_080)]
         if [.quotas, .multiple, .expanded].contains(scenario) {
@@ -138,7 +148,7 @@ enum PreviewSupport {
             if scenario == .refreshing { store.tasksBusy = true }
         case .longTitle:
             store.tasks = [task(1, longTitle: true)]
-        case .multiple, .updateAvailable:
+        case .multiple, .updateAvailable, .planProLite, .planBusiness, .planEnterprise, .planUnknown:
             store.tasks = (1...16).map { task($0, longTitle: $0 == 2 || $0 == 4, parentID: $0 == 2 ? "demo-1" : nil) }
         case .unknown:
             store.tasks = [task(1), task(2, longTitle: true, activity: .unknown)]
