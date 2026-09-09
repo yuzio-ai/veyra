@@ -80,22 +80,86 @@ final class QuotaPolicyTests: XCTestCase {
         XCTAssertEqual(upgraded.lastReadByteCount, 0)
         XCTAssertEqual(upgraded.lastOpenCount, 0)
     }
-    func testSourceSwitchingNeverLeaksNetworkAccountIntoLocalSnapshot() throws {
-        let account = AccountSnapshot(json: try JSONValue.decode(Data(#"{"type":"chatgpt","email":"test@example.invalid"}"#.utf8)))
-        let network = QuotaSnapshot(windows: [], fetchedAt: date, accountID: "a")
+    private func quota(_ id: String, used: Double, primary: Bool = true) -> QuotaWindow {
+        QuotaWindow(id: "\(id):\(primary ? "primary" : "secondary")", bucketID: id, bucketName: id,
+                    isPrimary: primary, usedPercent: used, durationMinutes: primary ? 300 : 10_080,
+                    resetsAt: nil)
+    }
+
+    func testNewerLocalBucketPreservesOtherOnlineBucketsAndVerifiedPlan() throws {
+        let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "planType": .string("prolite")]), accountID: "a")
+        let spark = [quota("spark", used: 0), quota("spark", used: 0, primary: false)]
+        let network = QuotaSnapshot(windows: [quota("codex", used: 80)] + spark, fetchedAt: date, accountID: "a")
+        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex",
+            windows: [quota("codex", used: 89)], recordedAt: date.addingTimeInterval(10))])!
         var state = QuotaDisplayState()
-        state.updateLocal(QuotaSnapshot(windows: [], fetchedAt: date.addingTimeInterval(-10), accountID: nil, source: .local))
         state.apply(QuotaRefresh(account: account, snapshot: network))
-        XCTAssertEqual(state.snapshot?.source, .network)
-        XCTAssertEqual(state.account, account)
-        let local = QuotaSnapshot(windows: [], fetchedAt: date.addingTimeInterval(1), accountID: nil, source: .local)
-        state.updateLocal(local)
+        for _ in 0..<3 {
+            state.updateLocal(local)
+            let displayed = try XCTUnwrap(state.snapshot)
+            XCTAssertEqual(displayed.windows, local.windows + spark)
+            XCTAssertEqual(displayed.source(for: "codex"), .local)
+            XCTAssertEqual(displayed.source(for: "spark"), .network)
+            XCTAssertEqual(displayed.recordedAt(for: "codex"), local.fetchedAt)
+            XCTAssertEqual(displayed.recordedAt(for: "spark"), date)
+            XCTAssertEqual(displayed.source, .local)
+            XCTAssertTrue(displayed.isStale(bucketID: "codex", at: date.addingTimeInterval(400)))
+            XCTAssertFalse(displayed.isStale(bucketID: "spark", at: date.addingTimeInterval(400)))
+            XCTAssertNil(displayed.accountID)
+            XCTAssertEqual(state.account, account)
+        }
+        state.apply(QuotaRefresh(error: .timeout))
+        XCTAssertEqual(state.snapshot?.windows, local.windows + spark)
+        state.invalidateAccount()
         XCTAssertEqual(state.snapshot, local)
         XCTAssertNil(state.account)
-        state.invalidateAccount()
         state.updateLocal(nil)
         XCTAssertNil(state.snapshot)
-        XCTAssertNil(state.account)
+    }
+
+    func testLocalFreshnessIsComparedPerBucketAndEqualDatesPreferOnline() {
+        let network = QuotaSnapshot(windows: [quota("codex", used: 40), quota("spark", used: 50)],
+                                    fetchedAt: date, accountID: "a")
+        for offset: TimeInterval in [-10, 0] {
+            let local = LocalQuotaBucket.snapshot([
+                "codex": LocalQuotaBucket(id: "codex", windows: [quota("codex", used: 1)], recordedAt: date.addingTimeInterval(offset)),
+                "spark": LocalQuotaBucket(id: "spark", windows: [quota("spark", used: 60)], recordedAt: date.addingTimeInterval(10)),
+                "old": LocalQuotaBucket(id: "old", windows: [quota("old", used: 1)], recordedAt: date.addingTimeInterval(-10))
+            ])!
+            var state = QuotaDisplayState()
+            state.updateLocal(local)
+            state.apply(QuotaRefresh(snapshot: network))
+            XCTAssertEqual(state.snapshot?.windows, [quota("codex", used: 40), quota("spark", used: 60)])
+            XCTAssertEqual(state.snapshot?.source, .network)
+            XCTAssertEqual(state.snapshot?.source(for: "spark"), .local)
+        }
+    }
+
+    func testLocalReplacementRemovesMissingWindowsAndExplicitlyEmptyBuckets() {
+        let network = QuotaSnapshot(windows: [quota("codex", used: 40), quota("codex", used: 50, primary: false),
+                                              quota("spark", used: 0)], fetchedAt: date, accountID: "a")
+        for windows in [[quota("codex", used: 60)], []] {
+            let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: windows,
+                recordedAt: date.addingTimeInterval(10))])!
+            var state = QuotaDisplayState()
+            state.apply(QuotaRefresh(snapshot: network))
+            state.updateLocal(local)
+            XCTAssertEqual(state.snapshot?.windows, windows + [quota("spark", used: 0)])
+            // A new authoritative sync must remove old buckets, even for an empty response.
+            let empty = QuotaSnapshot(windows: [], fetchedAt: date.addingTimeInterval(20), accountID: "a")
+            state.apply(QuotaRefresh(snapshot: empty))
+            XCTAssertEqual(state.snapshot, empty)
+        }
+    }
+
+    func testAbsentLocalBucketsCannotEraseOnlineQuota() {
+        let network = QuotaSnapshot(windows: [quota("spark", used: 0)], fetchedAt: date, accountID: "a")
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(QuotaSnapshot(windows: [], fetchedAt: date.addingTimeInterval(10), accountID: nil, source: .local))
+        XCTAssertEqual(state.snapshot, network)
+        state.updateLocal(nil)
+        XCTAssertEqual(state.snapshot, network)
     }
     func testCalibrationCooldownBackoffAndStructuredRetryAfter() throws {
         var policy = QuotaCalibrationPolicy()

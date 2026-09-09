@@ -153,6 +153,49 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertFalse(store.quotaBusy)
         store.stop(); clock.finish(); await drain()
     }
+    func testReopeningPanelKeepsSparkAndPlanAfterNewerLocalCodexRecord() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
+        let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "planType": .string("prolite")]),
+                                      accountID: "account-a")
+        let codex = verifiedQuota.snapshot!.windows[0]
+        let spark = QuotaWindow(id: "spark:primary", bucketID: "spark", bucketName: "Spark", isPrimary: true,
+                                usedPercent: 0, durationMinutes: 300, resetsAt: nil)
+        let network = QuotaSnapshot(windows: [codex, spark], fetchedAt: Date(timeIntervalSince1970: 200), accountID: "account-a")
+        await fixture.setNetwork(QuotaRefresh(account: account, snapshot: network, didRequestQuota: true))
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                 clock: clock.clock, defaults: defaults(home: folder.home))
+        store.start()
+        await store.refreshAll()
+        store.setPanelVisible(true)
+        await store.refreshAll()
+        await store.calibrateQuota()
+        XCTAssertEqual(store.quota.snapshot, network)
+
+        let updated = QuotaWindow(id: codex.id, bucketID: "codex", bucketName: "Codex", isPrimary: true,
+                                  usedPercent: 89, durationMinutes: 300, resetsAt: nil)
+        let local = QuotaSnapshot(windows: [updated], fetchedAt: Date(timeIntervalSince1970: 210), accountID: nil, source: .local)
+        await fixture.setLocal(local)
+        for _ in 0..<3 {
+            store.setPanelVisible(false)
+            store.setPanelVisible(true)
+            // Join the local read scheduled by reopening the menu.
+            await store.refreshAll()
+            XCTAssertEqual(store.quota.snapshot?.windows, [updated, spark])
+            XCTAssertEqual(store.quota.account?.plan, "prolite")
+            XCTAssertEqual(store.quota.snapshot?.source(for: "spark"), .network)
+            XCTAssertEqual(store.quota.snapshot?.recordedAt(for: "spark"), network.fetchedAt)
+            XCTAssertEqual(store.quota.snapshot?.source(for: "codex"), .local)
+            XCTAssertTrue(store.menuLabel.contains("11%"))
+            XCTAssertTrue(store.menuLabel.contains("~"))
+        }
+        let counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1)
+        try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"))
+        await store.refreshAll()
+        XCTAssertEqual(store.quota.snapshot, local)
+        XCTAssertNil(store.quota.account)
+        store.stop(); clock.finish(); await drain()
+    }
     func testManualRequestsCoalesceAndAuthenticationChangeInvalidatesNetworkResult() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let now = Date(timeIntervalSince1970: 300)
@@ -196,7 +239,9 @@ final class MonitorStoreTests: XCTestCase {
     func testCreditsPublishIndependentlyOfNewerLocalQuotaAndClearOnSettingsChange() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         var now = Date(timeIntervalSince1970: 300)
-        let local = QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 1_000), accountID: nil, source: .local)
+        let local = QuotaSnapshot(windows: [QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex",
+            isPrimary: true, usedPercent: 89, durationMinutes: 300, resetsAt: nil)],
+            fetchedAt: Date(timeIntervalSince1970: 1_000), accountID: nil, source: .local)
         await fixture.setLocal(local)
         let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                  now: { now }, defaults: defaults(home: folder.home))
@@ -208,7 +253,8 @@ final class MonitorStoreTests: XCTestCase {
             result.snapshot?.resetCredits = credits
             await fixture.setNetwork(result)
             await store.calibrateQuota()
-            XCTAssertEqual(store.quota.snapshot, local)
+            XCTAssertEqual(store.quota.snapshot?.windows, local.windows)
+            XCTAssertEqual(store.quota.snapshot?.source(for: "codex"), .local)
             XCTAssertEqual(store.quota.resetCredits, credits)
             now = now.addingTimeInterval(61)
         }

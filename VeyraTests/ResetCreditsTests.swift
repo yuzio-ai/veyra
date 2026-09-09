@@ -98,7 +98,7 @@ final class ResetCreditsTests: XCTestCase {
         state.apply(QuotaRefresh(account: account, snapshot: network))
         let local = QuotaSnapshot(windows: [], fetchedAt: now.addingTimeInterval(10), accountID: nil, source: .local)
         state.updateLocal(local)
-        XCTAssertEqual(state.snapshot, local)
+        XCTAssertEqual(state.snapshot, network)
         XCTAssertEqual(state.resetCredits, credits)
         state.apply(QuotaRefresh(account: account, error: .timeout))
         XCTAssertEqual(state.resetCredits, credits)

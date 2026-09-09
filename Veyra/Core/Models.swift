@@ -59,16 +59,44 @@ struct QuotaSnapshot: Equatable, Sendable {
     let accountID: String?
     var source: QuotaSource = .network
     var bucketDates: [String: Date] = [:]
+    var bucketSources: [String: QuotaSource] = [:]
     var resetCredits: ResetCreditsSnapshot?
     func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
+    func source(for bucketID: String) -> QuotaSource { bucketSources[bucketID] ?? source }
     func isStale(bucketID: String, at now: Date) -> Bool {
-        guard source == .local else { return false }
+        guard source(for: bucketID) == .local else { return false }
         return now.timeIntervalSince(recordedAt(for: bucketID)) > 300
             || windows.contains { $0.bucketID == bucketID && ($0.resetsAt.map { $0 <= now } ?? false) }
     }
     var menuWindow: QuotaWindow? {
         windows.first { $0.bucketID == "codex" && $0.isPrimary }
             ?? windows.first { $0.bucketID == "codex" } ?? windows.first
+    }
+
+    /// Local events describe complete individual buckets, not the whole account.
+    /// Keep untouched online buckets and their provenance until the next sync.
+    func updatingBuckets(from local: QuotaSnapshot) -> QuotaSnapshot {
+        let localIDs = Set(local.windows.map(\.bucketID)).union(local.bucketDates.keys)
+        let newerIDs = localIDs.filter { local.recordedAt(for: $0) > recordedAt(for: $0) }
+        guard !newerIDs.isEmpty else { return self }
+        let ids = Set(windows.map(\.bucketID)).union(newerIDs).sorted {
+            if ($0 == "codex") != ($1 == "codex") { return $0 == "codex" }
+            return $0 < $1
+        }
+        var dates: [String: Date] = [:]
+        var sources: [String: QuotaSource] = [:]
+        let merged = ids.flatMap { id -> [QuotaWindow] in
+            let selected = newerIDs.contains(id) ? local : self
+            dates[id] = selected.recordedAt(for: id)
+            sources[id] = selected.source(for: id)
+            return selected.windows.filter { $0.bucketID == id }
+        }
+        var result = QuotaSnapshot(windows: merged, fetchedAt: dates.values.max() ?? fetchedAt,
+                                   accountID: nil, bucketDates: dates, bucketSources: sources,
+                                   resetCredits: resetCredits)
+        // The summary source follows the menu's quota; cards use their own source.
+        result.source = result.menuWindow.map { result.source(for: $0.bucketID) } ?? source
+        return result
     }
 
     static func parse(_ value: JSONValue, at date: Date = Date()) -> QuotaSnapshot {
@@ -170,11 +198,14 @@ struct QuotaDisplayState: Sendable {
         account = nil; snapshot = localSnapshot
     }
     private mutating func selectSource() {
-        if let localSnapshot, networkSnapshot == nil || localSnapshot.fetchedAt > networkSnapshot!.fetchedAt {
+        guard let networkSnapshot else {
             snapshot = localSnapshot; account = nil
-        } else {
-            snapshot = networkSnapshot; account = networkSnapshot == nil ? nil : networkAccount
+            return
         }
+        snapshot = localSnapshot.map { networkSnapshot.updatingBuckets(from: $0) } ?? networkSnapshot
+        // Account metadata remains independently verified until authentication changes.
+        // Local/combined quota snapshots never acquire the network account ID.
+        account = networkAccount
     }
     mutating func apply(_ result: QuotaRefresh) {
         let changedAccount = networkAccount.flatMap { previous in result.account.map { !previous.matches($0) } } ?? false

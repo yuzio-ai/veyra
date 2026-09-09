@@ -8,7 +8,7 @@ Veyra 默认读取会话 JSONL 中的 `token_count.rate_limits`，按额度桶�
 
 ## 联网校准
 
-只有用户点击“联网校准”时，Veyra 才启动独立的 `codex app-server --stdio`，读取 `account/read` 和 `account/rateLimits/read`，随后关闭子进程。额度窗口整体显示为账号额度；出现时间更新的本地记录后，额度窗口整体切回本地来源，不混合两种来源的窗口数据。接口说明见 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server#auth-endpoints)。
+只有用户点击“联网校准”时，Veyra 才启动独立的 `codex app-server --stdio`，读取 `account/read` 和 `account/rateLimits/read`，随后关闭子进程。联网结果保留完整额度列表；后续本地记录只按各额度桶的记录时间更新对应卡片，未涉及的联网额度（例如 Spark）继续保留。每张卡片分别标注来源和时间，同一额度桶内仍采用一份完整快照，不补回该快照中缺失的窗口。时间相同时优先采用联网结果，下一次成功联网校准会替换之前的联网列表。套餐信息独立保留至账号认证或配置变化，本地记录不会被赋予联网账号 ID。接口说明见 [Codex App Server 文档](https://learn.chatgpt.com/docs/app-server#auth-endpoints)。
 
 重置次数来自同一响应中的 `rateLimitResetCredits.availableCount` 与 `credits`，仅聚合状态为 `available` 的条目，按 `expiresAt` 的 Unix 秒时间戳分组。本地日志不提供这份明细，因此重置卡片独立保留最近联网结果及校准时间，全部只缓存在内存中。网络失败保留旧结果，成功响应缺少字段则显示暂不可用；账号或配置变化会清空。已知批次到期后要求重新校准，不自行推算剩余总数，也不会自动联网或兑换重置次数。
 

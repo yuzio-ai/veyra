@@ -149,7 +149,7 @@ struct MonitorPanel: View {
                                 QuotaWindowView(window: window)
                             }
                         }
-                        Text(L10n.text("\(snapshot.source == .local ? L10n.text("Local snapshot") : L10n.text("Online sync")) · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))"))
+                        Text(L10n.text("\(snapshot.source(for: id) == .local ? L10n.text("Local snapshot") : L10n.text("Online sync")) · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))"))
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                     }
                     .padding(14).monitorCard()
