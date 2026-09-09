@@ -89,7 +89,7 @@ python3 scripts/generate_project.py
 
 # 自动检查顶部、中部、底部、快速滚动和同一弹窗动态收缩
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
-  --preview-menu multiple --exercise-menu-to "$PWD/build/menu-check"
+  --preview-menu multiple --show-menu --exercise-menu-to "$PWD/build/menu-check"
 
 # 启动后点击菜单栏，导出真实菜单布局位图并打印窗口编号和尺寸
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \

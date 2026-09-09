@@ -16,9 +16,13 @@ enum SettingsLayout {
 struct MonitorSettings: View {
     @Bindable var store: MonitorStore
     @Bindable var updates: UpdateStore
+    var shortcuts: ShortcutStore?
+    @State private var previewShortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar())
 
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing / 2) {
+            ShortcutSettingsSection(shortcuts: shortcuts ?? previewShortcuts)
+            Divider()
             CodexSettingsSection(store: store)
             Divider()
             UpdateSettingsSection(updates: updates)

@@ -7,6 +7,7 @@ struct MonitorPanel: View {
     var updates: UpdateStore?
     var screenOverride: PanelScreenMetrics?
     var onSizingChange: ((PanelSizing) -> Void)?
+    var openSettings: (() -> Void)?
     @State private var showUnknown = false
     @State private var expandedTaskIDs: Set<String> = []
     @State private var contentHeight: CGFloat = 1
@@ -18,11 +19,12 @@ struct MonitorPanel: View {
 
     init(store: MonitorStore, updates: UpdateStore? = nil, screenOverride: PanelScreenMetrics? = nil,
          initiallyExpandedTaskIDs: Set<String> = [], initiallyShowUnknown: Bool = false,
-         onSizingChange: ((PanelSizing) -> Void)? = nil) {
+         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil) {
         self.store = store
         self.updates = updates
         self.screenOverride = screenOverride
         self.onSizingChange = onSizingChange
+        self.openSettings = openSettings
         _expandedTaskIDs = State(initialValue: initiallyExpandedTaskIDs)
         _showUnknown = State(initialValue: initiallyShowUnknown)
     }
@@ -257,7 +259,7 @@ struct MonitorPanel: View {
             Spacer(minLength: 0)
             MonitorGlassGroup {
                 HStack(spacing: 8) {
-                    SettingsLink {
+                    Button { openSettings?() } label: {
                         Image(systemName: "gearshape").font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.primary).frame(width: 18, height: 18)
                     }

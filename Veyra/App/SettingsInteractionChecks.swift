@@ -20,7 +20,11 @@ enum SettingsInteractionChecks {
             CodexConfigurationReport(location: location, state: .valid)
         })
         store.isPreview = true
-        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle)))
+        let registrar = SettingsHotKeyFixture()
+        let shortcuts = ShortcutStore(registrar: registrar, defaults: defaults)
+        shortcuts.start()
+        defer { shortcuts.stop() }
+        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle), shortcuts: shortcuts))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 1),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -38,6 +42,27 @@ enum SettingsInteractionChecks {
         try require(executableField.accessibilityLabel() == L10n.text("Executable"), "executable accessibility label")
         try require(abs(homeField.frame.width - executableField.frame.width) < 1, "matching path widths")
         try require(homeField.lineBreakMode == .byTruncatingMiddle, "native middle truncation")
+
+        guard let recorder = recorder(in: hosting) else { throw CheckError.failed("shortcut recorder exists") }
+        recorder.performClick(nil)
+        try await wait { shortcuts.isRecording }
+        try require(!shortcuts.isRegistered, "recording suspends registration")
+        sendKey(9, flags: [], in: window)
+        try await pause()
+        try require(shortcuts.isRecording && shortcuts.errorMessage != nil, "bare key rejected")
+        sendKey(53, flags: [], in: window)
+        try await wait { !shortcuts.isRecording && shortcuts.isRegistered }
+        recorder.performClick(nil)
+        sendKey(40, flags: [.command, .shift, .capsLock], in: window)
+        try await wait { shortcuts.preferences.shortcut.keyCode == 40 }
+        try require(shortcuts.preferences.shortcut.modifiers == [.command, .shift], "Caps Lock ignored")
+        recorder.performClick(nil)
+        window.makeFirstResponder(homeField)
+        try await wait { !shortcuts.isRecording && shortcuts.isRegistered }
+        recorder.performClick(nil)
+        window.resignKey()
+        try await wait { !shortcuts.isRecording && shortcuts.isRegistered }
+        window.makeKeyAndOrderFront(nil)
 
         // Focusing, selecting and submitting an unchanged detected path must not create an override.
         let homeEditor = try focus(homeField, in: window)
@@ -98,7 +123,8 @@ enum SettingsInteractionChecks {
         try await wait { homeField.stringValue == home.path && executableField.stringValue == executable.path }
         try require(!store.hasManualPaths, "restore clears both overrides and drafts")
         let checks = ["matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
-                      "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore"]
+                      "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore",
+                      "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur"]
         try JSONSerialization.data(withJSONObject: ["passed": checks], options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("settings-native-checks.json"))
         print("Passed \(checks.count) native Settings interaction checks")
@@ -107,6 +133,19 @@ enum SettingsInteractionChecks {
     private static func fields(in view: NSView) -> [NSTextField] {
         if let field = view as? NSTextField, field.isEditable { return [field] }
         return view.subviews.flatMap { fields(in: $0) }
+    }
+
+    private static func recorder(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton, button.accessibilityIdentifier() == "settings.shortcut.recorder" { return button }
+        return view.subviews.lazy.compactMap { recorder(in: $0) }.first
+    }
+
+    private static func sendKey(_ code: UInt16, flags: NSEvent.ModifierFlags, in window: NSWindow) {
+        if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+            characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code) {
+            NSApp.sendEvent(event)
+        }
     }
 
     private static func focus(_ field: NSTextField, in window: NSWindow) throws -> NSTextView {
@@ -135,4 +174,14 @@ enum SettingsInteractionChecks {
     }
 
     private enum CheckError: Error { case failed(String) }
+}
+
+@MainActor
+private final class SettingsHotKeyFixture: HotKeyRegistering {
+    private var nextID = 0
+    func register(_ shortcut: GlobalShortcut, handler: @escaping @MainActor (HotKeyEvent) -> Void) throws -> Int {
+        nextID += 1
+        return nextID
+    }
+    func unregister(_ token: Int) {}
 }

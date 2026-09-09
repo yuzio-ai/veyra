@@ -3,6 +3,8 @@ import AppKit
 
 @MainActor
 enum Diagnostics {
+    static var menuWindow: (() -> NSWindow?)?
+    static var toggleMenu: (() -> Void)?
     /// Opt-in interaction smoke test against the actual menu window, not a substitute window.
     /// Images remain layout-only; this never requests screen recording permission.
     static func exerciseNextMenu(to directory: URL) {
@@ -11,9 +13,8 @@ enum Diagnostics {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 for _ in 0..<300 {
                     try await Task.sleep(for: .milliseconds(200))
-                    guard let window = NSApp.windows.first(where: {
-                        $0.isVisible && abs($0.frame.width - PanelSizing.width) < 4 && $0.frame.height > 100
-                    }), let view = window.contentView else { continue }
+                    guard let window = menuWindow?(), window.isVisible,
+                          let view = window.contentView else { continue }
                     try await Task.sleep(for: .milliseconds(700))
                     guard let scroll = scrollView(in: view), let document = scroll.documentView else {
                         throw MenuCheckError.missingScrollView
@@ -49,6 +50,22 @@ enum Diagnostics {
                     guard window.frame.height < originalHeight else { throw MenuCheckError.didNotShrink }
                     try PreviewSupport.saveBitmap(view, to: directory.appendingPathComponent("shrunk-layout.png"))
                     records.append(["position": "shrunk", "windowHeight": window.frame.height])
+                    // Exercise the same controller used by the registered hotkey and status button.
+                    toggleMenu?()
+                    try await Task.sleep(for: .milliseconds(150))
+                    guard !window.isVisible else { throw MenuCheckError.didNotClose }
+                    toggleMenu?()
+                    try await Task.sleep(for: .milliseconds(150))
+                    guard let reopened = menuWindow?(), reopened.isVisible else { throw MenuCheckError.didNotOpen }
+                    if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: reopened.windowNumber, context: nil,
+                        characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
+                        NSApp.sendEvent(escape)
+                    }
+                    try await Task.sleep(for: .milliseconds(150))
+                    guard !reopened.isVisible else { throw MenuCheckError.escapeDidNotClose }
+                    toggleMenu?()
+                    records.append(["position": "controls", "toggleAndEscapePassed": true])
                     try JSONSerialization.data(withJSONObject: records, options: [.prettyPrinted, .sortedKeys])
                         .write(to: directory.appendingPathComponent("menu-check.json"))
                     print("Menu checks passed: top, middle, bottom, rapid scrolling, live shrink. Window \(window.windowNumber)")
@@ -68,18 +85,18 @@ enum Diagnostics {
 
     private enum MenuCheckError: Error {
         case missingScrollView, expectedOverflow, unstableHeight, didNotShrink, timedOut
+        case didNotClose, didNotOpen, escapeDidNotClose
     }
 
-    /// Capture our own real MenuBarExtra, avoiding a fixed preview window that
+    /// Capture our own real popover, avoiding a fixed preview window that
     /// can hide intrinsic-size regressions. This bitmap checks layout, not live glass;
     /// use the printed window number with macOS screencapture for compositor output.
     static func captureNextMenu(to destination: URL) {
         Task { @MainActor in
             for _ in 0..<150 {
                 try? await Task.sleep(for: .milliseconds(200))
-                guard let window = NSApp.windows.first(where: {
-                    $0.isVisible && abs($0.frame.width - PanelSizing.width) < 4 && $0.frame.height > 100
-                }), let view = window.contentView else { continue }
+                guard let window = menuWindow?(), window.isVisible,
+                      let view = window.contentView else { continue }
                 try? await Task.sleep(for: .milliseconds(600))
                 view.layoutSubtreeIfNeeded()
                 let description = "Menu window: \(window.windowNumber), size: \(window.frame.size), screen: \(window.screen.map { String(describing: $0.visibleFrame) } ?? "unknown")\n"

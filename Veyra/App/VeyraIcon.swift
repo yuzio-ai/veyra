@@ -6,7 +6,7 @@ struct VeyraIcon: View {
     var size: CGFloat = 18
     var isTemplate = false
 
-    // MenuBarExtra uses the NSImage's logical size, so set it before handing the
+    // The menu bar uses the NSImage's logical size, so set it before handing the
     // image to SwiftUI instead of relying only on a resizable frame.
     private static let original = load(isTemplate: false)
     private static let template = load(isTemplate: true)
