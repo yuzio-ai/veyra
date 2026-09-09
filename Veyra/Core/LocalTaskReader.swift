@@ -42,6 +42,8 @@ enum TurnResolution: Equatable, Sendable {
 }
 
 enum TaskResolver {
+    static let recentActivityWindow: TimeInterval = 86_400
+
     static func mergeBoundaries(rollout: TurnBoundary?, stored: TurnBoundary?) -> TurnResolution {
         guard let fileTurn = rollout else { return stored.map { .known($0) } ?? .absent }
         guard let dbTurn = stored else { return .known(fileTurn) }
@@ -65,7 +67,7 @@ enum TaskResolver {
         return .ambiguous
     }
 
-    static func resolve(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, evidence: ProcessEvidence, processMatch: Bool? = nil) -> TaskSnapshot? {
+    static func resolve(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, evidence: ProcessEvidence, processMatch: Bool? = nil, now: Date = Date()) -> TaskSnapshot? {
         guard !metadata.isInternal else { return nil }
         let resolution = mergeBoundaries(rollout: rollout.boundary, stored: storedTurn)
         let boundary: TurnBoundary?
@@ -73,6 +75,15 @@ enum TaskResolver {
         guard boundary?.isRunning != false else { return nil }
         let hasProcess = processMatch ?? evidence.matches(threadID: metadata.id, path: metadata.rolloutPath)
         guard hasProcess || boundary?.isRunning == true || resolution == .ambiguous else { return nil }
+        // Historical inProgress records can outlive their process indefinitely.
+        // Use recorded activity, never file timestamps that a migration may refresh.
+        if evidence.reliable && !hasProcess {
+            let latestActivity = [metadata.updatedAt, rollout.usageDate, rollout.boundary?.date, storedTurn?.date]
+                .compactMap { $0?.timeIntervalSince1970 }
+                .filter { $0.isFinite && $0 > 0 }
+                .max()
+            if let latestActivity, now.timeIntervalSince1970 - latestActivity >= recentActivityWindow { return nil }
+        }
         let activity: TaskActivity = boundary?.isRunning == true && hasProcess && evidence.reliable ? .running : .unknown
         let usage = rollout.usage ?? TokenUsage(total: metadata.tokens)
         return TaskSnapshot(id: metadata.id, title: metadata.displayTitle, model: rollout.model ?? metadata.model,
@@ -90,13 +101,21 @@ actor LocalTaskReader {
     private let metadataCache = SQLiteReadCache<[ThreadMetadata]>()
     private let historyCache = SQLiteReadCache<[String: TurnBoundary]>()
     private var quotaByPath: [String: [String: LocalQuotaBucket]] = [:]
+    private let now: @Sendable () -> Date
     private let collectEvidence: @Sendable (URL) async -> ProcessEvidence
 
     init(collectEvidence: @escaping @Sendable (URL) async -> ProcessEvidence = ProcessEvidence.collect) {
+        self.init(now: { Date() }, collectEvidence: collectEvidence)
+    }
+
+    init(now: @escaping @Sendable () -> Date,
+         collectEvidence: @escaping @Sendable (URL) async -> ProcessEvidence = ProcessEvidence.collect) {
+        self.now = now
         self.collectEvidence = collectEvidence
     }
 
     func fetch(home: URL) async throws -> TaskReadResult {
+        let checkedAt = now()
         if lastHome != home {
             rollouts = RolloutReader(); lastHome = home
             metadataCache.reset(); historyCache.reset(); quotaByPath = [:]
@@ -128,7 +147,7 @@ actor LocalTaskReader {
         }.prefix(20).map(\.rolloutPath))
         var tasks: [TaskSnapshot] = [], unreadable = false, quotaUnreadable = false
         var readPaths: [String: RolloutState] = [:]
-        let recent = Date().addingTimeInterval(-86_400)
+        let recent = checkedAt.addingTimeInterval(-TaskResolver.recentActivityWindow)
         // Task reads go first so a shared path is never tail-read and then reopened.
         for thread in metadata where !thread.archived {
             let hasProcess = evidence.matches(threadID: thread.id, path: thread.rolloutPath)
@@ -146,7 +165,7 @@ actor LocalTaskReader {
                 quotaByPath[thread.rolloutPath] = rollout.quotaBuckets
             } catch { rollout = RolloutState(); unreadable = true }
             if let snapshot = TaskResolver.resolve(metadata: thread, rollout: rollout, storedTurn: stored,
-                                                   evidence: evidence, processMatch: hasProcess) {
+                                                   evidence: evidence, processMatch: hasProcess, now: checkedAt) {
                 tasks.append(snapshot)
             }
         }
@@ -185,7 +204,7 @@ actor LocalTaskReader {
         let warning: TaskReadWarning? = !evidence.reliable ? .processUnverified
             : historyUnavailable ? .historyUnavailable
             : unreadable ? .sessionUnreadable : nil
-        return TaskReadResult(tasks: tasks, fetchedAt: Date(), warning: warning,
+        return TaskReadResult(tasks: tasks, fetchedAt: checkedAt, warning: warning,
                               localQuota: LocalQuotaBucket.snapshot(buckets),
                               quotaWarning: quotaUnreadable ? L10n.text("Some local quota records are unreadable.") : nil, metrics: metrics,
                               ancestors: ancestors.values.sorted { $0.id < $1.id })

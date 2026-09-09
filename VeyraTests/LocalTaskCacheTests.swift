@@ -115,7 +115,7 @@ final class LocalTaskCacheTests: XCTestCase {
         try fixture.insert("task", path: path)
         try fixture.execute("PRAGMA journal_mode=WAL; CREATE TABLE thread_turns(thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER, status TEXT, started_at INTEGER, completed_at INTEGER); CREATE UNIQUE INDEX idx_thread_turns_page ON thread_turns(thread_id, rollout_ordinal); INSERT INTO thread_turns VALUES('task','one',1,'inProgress',1788397200,NULL)", database: "thread_history_1")
         let evidence = EvidenceFixture(ProcessEvidence(threadIDs: ["task"]))
-        let reader = LocalTaskReader { _ in await evidence.get() }
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788400001) }) { _ in await evidence.get() }
         let first = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(first.tasks.first?.activity, .running)
         XCTAssertEqual(first.metrics.metadataQueries, 1)
@@ -187,6 +187,129 @@ final class LocalTaskCacheTests: XCTestCase {
         XCTAssertEqual(ProcessEvidence.parse(text, home: real).threadIDs, [id])
         XCTAssertTrue(ProcessEvidence.parse(text, home: fixture.home.appendingPathComponent("other")).threadIDs.isEmpty)
     }
+
+    private func unfinishedHistory(_ fixture: SQLiteFixture) throws {
+        try fixture.execute("""
+            PRAGMA journal_mode=WAL;
+            CREATE TABLE thread_turns(thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER,
+                status TEXT, started_at INTEGER, completed_at INTEGER);
+            """, database: "thread_history_1")
+    }
+
+    private func unfinishedTask(_ id: String, fixture: SQLiteFixture, resumed: Bool = false) throws -> URL {
+        let path = try fixture.log(id)
+        try fixture.insert(id, path: path, updated: 1788397200)
+        if resumed {
+            try Data((#"{"type":"event_msg","timestamp":"2026-09-02T01:00:00Z","payload":{"type":"task_started","turn_id":"previous"}}"# + "\n" +
+                #"{"type":"event_msg","timestamp":"2026-09-02T01:01:00Z","payload":{"type":"turn_aborted","turn_id":"previous"}}"# + "\n").utf8).appendTo(path)
+            try fixture.execute("INSERT INTO thread_turns VALUES('\(id)','previous',1,'interrupted',NULL,NULL)", database: "thread_history_1")
+        }
+        try Data((#"{"type":"event_msg","timestamp":"2026-09-03T01:00:00Z","payload":{"type":"task_started","turn_id":"last"}}"# + "\n" +
+            #"{"type":"turn_context","payload":{"model":"test"}}"# + "\n").utf8).appendTo(path)
+        try fixture.execute("INSERT INTO thread_turns VALUES('\(id)','last',9,'inProgress',NULL,NULL)", database: "thread_history_1")
+        return path
+    }
+
+    func testHistoricalUnfinishedTasksExpireOnCacheHitsAndKeepQuotaDiscovery() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        _ = try unfinishedTask("started-only", fixture: fixture)
+        _ = try unfinishedTask("resumed", fixture: fixture, resumed: true)
+        let lastActivity = Date(timeIntervalSince1970: 1788397200)
+        let clock = TaskReaderClock(lastActivity.addingTimeInterval(86_399.999))
+        let reader = LocalTaskReader(now: { clock.get() }) { _ in ProcessEvidence() }
+        let recent = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(Set(recent.tasks.map(\.id)), ["started-only", "resumed"])
+        XCTAssertTrue(recent.tasks.allSatisfy { $0.activity == .unknown })
+        XCTAssertEqual(recent.fetchedAt, clock.get())
+
+        for age in [86_400.0, 180.0 * 86_400] {
+            clock.set(lastActivity.addingTimeInterval(age))
+            let expired = try await reader.fetch(home: fixture.home)
+            XCTAssertTrue(expired.tasks.isEmpty)
+            XCTAssertNil(expired.warning)
+            XCTAssertEqual(expired.fetchedAt, clock.get())
+            XCTAssertEqual(expired.metrics.metadataQueries, 0)
+            XCTAssertEqual(expired.metrics.historyQueries, 0)
+            XCTAssertEqual(expired.metrics.rolloutBytes, 0)
+            XCTAssertEqual(expired.metrics.rolloutOpens, 0)
+            XCTAssertEqual(expired.localQuota?.menuWindow?.remainingPercent, 80)
+        }
+    }
+
+    func testRecentLogActivitySurvivesOldMetadataAndMigrationDoesNotReviveStaleTasks() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        let stale = try unfinishedTask("stale", fixture: fixture)
+        let started = try unfinishedTask("fresh-start", fixture: fixture)
+        let usage = try unfinishedTask("fresh-usage", fixture: fixture)
+        try Data((#"{"type":"event_msg","timestamp":"2026-09-05T01:00:00Z","payload":{"type":"task_started","turn_id":"new"}}"# + "\n").utf8).appendTo(started)
+        try Data((#"{"type":"event_msg","timestamp":"2026-09-05T01:00:00Z","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}}"# + "\n").utf8).appendTo(usage)
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788570001) }) { _ in ProcessEvidence() }
+        let first = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(Set(first.tasks.map(\.id)), ["fresh-start", "fresh-usage"])
+        // A migration may rewrite the file and project identical turn rows with new file metadata.
+        let original = try Data(contentsOf: stale)
+        try original.write(to: stale, options: .atomic)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1788570001)], ofItemAtPath: stale.path)
+        try fixture.execute("DELETE FROM thread_turns WHERE thread_id='stale'; INSERT INTO thread_turns VALUES('stale','last',9,'inProgress',NULL,NULL)", database: "thread_history_1")
+        let migrated = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(Set(migrated.tasks.map(\.id)), ["fresh-start", "fresh-usage"])
+        XCTAssertEqual(migrated.metrics.historyQueries, 1)
+        XCTAssertGreaterThan(migrated.metrics.rolloutBytes, 0)
+        XCTAssertNotNil(migrated.localQuota)
+    }
+
+    func testUnreadableRolloutUsesStoredActivityAndProcessFailuresKeepWarning() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        let path = try unfinishedTask("task", fixture: fixture)
+        try FileManager.default.removeItem(at: path)
+        let evidence = EvidenceFixture(ProcessEvidence())
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788570001) }) { _ in await evidence.get() }
+        let stale = try await reader.fetch(home: fixture.home)
+        XCTAssertTrue(stale.tasks.isEmpty)
+        XCTAssertEqual(stale.warning, .sessionUnreadable)
+
+        await evidence.set(ProcessEvidence(reliable: false))
+        let unavailable = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(unavailable.tasks.first?.activity, .unknown)
+        XCTAssertEqual(unavailable.warning, .processUnverified)
+
+        await evidence.set(ProcessEvidence(threadIDs: ["task"]))
+        let live = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(live.tasks.first?.activity, .running)
+
+        await evidence.set(ProcessEvidence())
+        try fixture.execute("UPDATE thread_turns SET started_at=1788570000", database: "thread_history_1")
+        let recent = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(recent.tasks.first?.activity, .unknown)
+        XCTAssertEqual(recent.warning, .sessionUnreadable)
+    }
+
+    func testFetchCapturesOneTimeBeforeAwaitingProcessCollection() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads()
+        let path = try fixture.log("recent-without-history")
+        try fixture.insert("task", path: path, updated: 1788397200)
+        try Data((#"{"type":"event_msg","timestamp":"2026-09-03T01:00:00Z","payload":{"type":"task_started","turn_id":"one"}}"# + "\n").utf8).appendTo(path)
+        let beforeExpiry = Date(timeIntervalSince1970: 1788397200 + 86_399)
+        let clock = TaskReaderClock(beforeExpiry)
+        let reader = LocalTaskReader(now: { clock.get() }) { _ in
+            clock.set(beforeExpiry.addingTimeInterval(2))
+            return ProcessEvidence()
+        }
+        let result = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(result.fetchedAt, beforeExpiry)
+        XCTAssertEqual(result.tasks.first?.activity, .unknown)
+        let next = try await reader.fetch(home: fixture.home)
+        XCTAssertTrue(next.tasks.isEmpty)
+    }
+}
+
+// Synchronous Sendable clock closure; every access to its mutable date is locked.
+private final class TaskReaderClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var date: Date
+    init(_ date: Date) { self.date = date }
+    func get() -> Date { lock.withLock { date } }
+    func set(_ date: Date) { lock.withLock { self.date = date } }
 }
 
 private actor EvidenceFixture {

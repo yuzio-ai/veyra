@@ -25,6 +25,8 @@ Click the Veyra menu bar icon to inspect active task families, task status, elap
 
 Veyra monitors existing local data in read-only mode. It does not create, resume, or control tasks, trigger model requests, copy credentials, or modify Codex databases and session files.
 
+Uncertain tasks are hidden after 24 hours without recorded activity when a successful process check finds no matching Codex process. Tasks with matching processes remain visible regardless of age; failed process checks keep the existing uncertain status and warning. This display filter does not modify task history.
+
 Veyra supports English and Simplified Chinese and follows your macOS language preferences. To choose a language just for Veyra, add it under **System Settings → General → Language & Region → Applications**, then restart Veyra. English is used when none of your preferred languages is supported. Dates and times follow your regional settings. Task titles and original Codex progress text are shown as recorded.
 
 ## Documentation
