@@ -50,6 +50,25 @@ final class UpdateStoreTests: XCTestCase {
                     now: { clock.date }, fetch: { try await fixture.fetch() })
     }
 
+    func testSettingsStatusIsLocalizedAndHidesFailureDetails() {
+        for language in ["en", "zh-Hans"] {
+            L10n.$languageOverride.withValue(language) {
+                let chinese = language == "zh-Hans"
+                XCTAssertEqual(UpdateStore.preview(.idle).settingsStatus, chinese ? "当前版本 1.1.0" : "Current version 1.1.0")
+                XCTAssertEqual(UpdateStore.preview(.current).settingsStatus, chinese
+                    ? "当前版本 1.1.0 · 已是最新版本" : "Current version 1.1.0 · You’re up to date")
+                XCTAssertEqual(UpdateStore.preview(.checking).settingsStatus, chinese ? "正在检查更新…" : "Checking for updates…")
+                for state: UpdateStore.PreviewState in [.failed, .limited, .availableFailed] {
+                    let store = UpdateStore.preview(state)
+                    XCTAssertEqual(store.settingsStatus, chinese ? "当前版本 1.1.0 · 暂时无法检查更新"
+                        : "Current version 1.1.0 · Unable to check for updates right now")
+                    XCTAssertFalse(store.settingsStatus.contains("GitHub"))
+                    if state == .availableFailed { XCTAssertEqual(store.availableRelease?.version, "1.2.0") }
+                }
+            }
+        }
+    }
+
     func testAutomaticChecksAreThrottledAcrossFailuresAndRelaunches() async {
         let fixture = UpdateFixture(), clock = UpdateTestClock(), defaults = defaults()
         let store = store(fixture, clock, defaults: defaults)

@@ -14,32 +14,52 @@ struct UpdateDownloadLink: View {
 
 struct UpdateSettingsSection: View {
     @Bindable var updates: UpdateStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsLayout.contentSpacing) {
+            Text("Software Update").font(.headline)
+            VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+                VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
+                    HStack {
+                        Text("Automatically check for updates")
+                        Spacer()
+                        Toggle("Automatically check for updates", isOn: Binding(
+                            get: { updates.automaticallyChecks }, set: { updates.setAutomaticallyChecks($0) }))
+                            .toggleStyle(.switch).labelsHidden()
+                            .accessibilityIdentifier("updates.automatic")
+                    }
+                    Text("Checks for a new version at most once a day.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                UpdateStatusRow(updates: updates)
+            }
+        }
+        .accessibilityIdentifier("updates.settings")
+    }
+}
+
+private struct UpdateStatusRow: View {
+    @Bindable var updates: UpdateStore
     @Environment(\.monitorReferenceDate) private var referenceDate
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("App Updates").font(.headline)
-                Spacer()
-                Text(L10n.text("Current version: \(updates.currentVersion)"))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-            Toggle("Automatically check for updates", isOn: Binding(
-                get: { updates.automaticallyChecks }, set: { updates.setAutomaticallyChecks($0) }))
-                .accessibilityIdentifier("updates.automatic")
-            Text("Checks GitHub on launch or when opening the menu, at most once every 24 hours. Downloads and installation are manual.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
             TimelineView(.explicit([updates.nextManualCheckAt ?? .distantPast])) { context in
                 let date = referenceDate ?? context.date
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 10) {
-                        Button("Check for Updates") { Task { await updates.checkManually() } }
+                VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
+                    HStack(spacing: SettingsLayout.labelSpacing) {
+                        if updates.isChecking {
+                            ProgressView().controlSize(.small).accessibilityHidden(true)
+                        }
+                        Text(updates.settingsStatus)
+                            .font(.subheadline).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("updates.status")
+                        Spacer(minLength: SettingsLayout.labelSpacing)
+                        Button("Check for Updates…") { Task { await updates.checkManually() } }
                             .disabled(updates.isChecking || updates.nextManualCheckAt.map { date < $0 } == true)
                             .accessibilityIdentifier("updates.check")
-                        if updates.isChecking {
-                            ProgressView().controlSize(.small)
-                            Text("Checking for updates…").font(.callout).foregroundStyle(.secondary)
-                        }
                     }
                     if !updates.isChecking, let next = updates.nextManualCheckAt, next > date {
                         Text(L10n.text("Check again after \(next.formatted(date: .omitted, time: .standard))"))
@@ -47,27 +67,19 @@ struct UpdateSettingsSection: View {
                     }
                 }
             }
-            if !updates.isChecking {
-                switch updates.result {
-                case .notChecked:
-                    Text("Updates have not been checked yet.").font(.callout).foregroundStyle(.secondary)
-                case .upToDate:
-                    Text("You’re up to date.").font(.callout).foregroundStyle(.secondary)
-                case .failed(let failure):
-                    Text(failure.message).font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .available: EmptyView()
-                }
-            }
             if let release = updates.availableRelease {
-                HStack {
-                    Text(L10n.text("New version available: \(release.version)"))
-                        .font(.callout.weight(.medium))
-                    Spacer()
+                HStack(alignment: .firstTextBaseline, spacing: SettingsLayout.labelSpacing) {
+                    VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
+                        Text(L10n.text("New version available: \(release.version)"))
+                            .font(.subheadline.weight(.medium))
+                        Text("Download and install the new version manually.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: SettingsLayout.labelSpacing)
                     UpdateDownloadLink(release: release)
                 }
             }
         }
-        .accessibilityIdentifier("updates.settings")
     }
 }

@@ -1,11 +1,23 @@
 import Foundation
 import Observation
+import OSLog
 
 @MainActor @Observable
 final class UpdateStore {
     enum CheckResult: Equatable {
         case notChecked, upToDate, available
         case failed(UpdateFailure)
+    }
+
+    private static let logger = Logger(subsystem: "local.codexmonitor.app", category: "updates")
+
+    var settingsStatus: String {
+        if isChecking { return L10n.text("Checking for updates…") }
+        switch result {
+        case .notChecked, .available: return L10n.text("Current version \(currentVersion)")
+        case .upToDate: return L10n.text("Current version \(currentVersion) · You’re up to date")
+        case .failed: return L10n.text("Current version \(currentVersion) · Unable to check for updates right now")
+        }
     }
 
     let currentVersion: String
@@ -79,6 +91,7 @@ final class UpdateStore {
             defaults?.removeObject(forKey: "updates.rateLimitedUntil")
         } catch {
             let failure = error as? UpdateFailure ?? .network
+            Self.logger.error("Update check failed: \(failure.diagnosticCategory, privacy: .public)")
             if case .rateLimited(let until) = failure {
                 rateLimitedUntil = until
                 nextManualCheckAt = max(nextManualCheckAt ?? until, until)
@@ -98,7 +111,7 @@ final class UpdateStore {
         result = availableRelease == nil ? .upToDate : .available
     }
 
-    enum PreviewState: String, CaseIterable { case idle, checking, available, current, failed, limited }
+    enum PreviewState: String, CaseIterable { case idle, checking, available, current, failed, limited, availableFailed }
 
     static func preview(_ state: PreviewState = .idle) -> UpdateStore {
         let store = UpdateStore(currentVersion: "1.1.0")
@@ -111,6 +124,11 @@ final class UpdateStore {
             }
         case .current: store.result = .upToDate
         case .failed: store.result = .failed(.network)
+        case .availableFailed:
+            if let release = try? AppRelease(version: "1.2.0", pageURL: URL(string: "https://github.com/yuzio-ai/veyra/releases/tag/v1.2.0")!) {
+                store.apply(release)
+            }
+            store.result = .failed(.network)
         case .limited:
             let until = Date(timeIntervalSince1970: 1_788_410_400 + 3_600)
             store.result = .failed(.rateLimited(until: until))

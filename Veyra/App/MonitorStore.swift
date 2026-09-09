@@ -24,6 +24,10 @@ final class MonitorStore {
     var quotaFailureDetails: QuotaFailureDetails?
     var homePath: String
     var executablePath: String
+    private(set) var pathResetRevision = 0
+    private(set) var configurationState: CodexConfigurationState = .detecting
+    private(set) var configurationLocation: CodexLocation?
+    var hasManualPaths: Bool { !homePath.isEmpty || !executablePath.isEmpty }
     var isPreview = false
     private(set) var menuLabel = L10n.text("Quota — · Running —")
 
@@ -31,6 +35,10 @@ final class MonitorStore {
     @ObservationIgnored private var calibrationPolicy = QuotaCalibrationPolicy()
     @ObservationIgnored private var calibrationTask: Task<Void, Never>?
     @ObservationIgnored private var revision = 0
+    @ObservationIgnored private var detectionRevision = 0
+    @ObservationIgnored private var pathRevisions: [CodexPathField: Int] = [:]
+    @ObservationIgnored private let inspectConfiguration: @Sendable (String, String) async -> CodexConfigurationReport
+    @ObservationIgnored private let validatePath: @Sendable (String, CodexPathField) async -> CodexPathError?
     @ObservationIgnored private var authStamp: String?
     @ObservationIgnored private var suspended = false
     @ObservationIgnored private var attemptedLocalRead = false
@@ -47,7 +55,11 @@ final class MonitorStore {
     init(readLocal: (@Sendable (URL) async throws -> TaskReadResult)? = nil,
          fetchQuota: (@Sendable (CodexLocation) async -> QuotaRefresh)? = nil,
          clock: PollingClock = .continuous(), now: @escaping @MainActor () -> Date = Date.init,
-         defaults: UserDefaults = .standard) {
+         defaults: UserDefaults = .standard,
+         inspectConfiguration: @escaping @Sendable (String, String) async -> CodexConfigurationReport = CodexConfiguration.inspect,
+         validatePath: @escaping @Sendable (String, CodexPathField) async -> CodexPathError? = CodexConfiguration.validate) {
+        self.inspectConfiguration = inspectConfiguration
+        self.validatePath = validatePath
         let reader = LocalTaskReader()
         self.readLocal = readLocal ?? { try await reader.fetch(home: $0) }
         self.fetchQuota = fetchQuota ?? { location in
@@ -179,9 +191,52 @@ final class MonitorStore {
             quota = quotaState
         }
     }
+    func displayedPath(for field: CodexPathField) -> String {
+        switch field {
+        case .home: homePath.isEmpty ? configurationLocation?.home.path ?? "" : homePath
+        case .executable: executablePath.isEmpty ? configurationLocation?.executable?.path ?? "" : executablePath
+        }
+    }
+
+    func detectConfiguration() async {
+        detectionRevision += 1
+        let request = detectionRevision, version = revision
+        configurationState = .detecting
+        let report = await inspectConfiguration(homePath, executablePath)
+        guard request == detectionRevision, version == revision, !Task.isCancelled else { return }
+        configurationLocation = report.location
+        configurationState = report.state
+    }
+
+    func commitPath(_ text: String, field: CodexPathField, resetVersion: Int? = nil) async -> CodexPathCommitResult {
+        guard resetVersion == nil || resetVersion == pathResetRevision else { return .superseded }
+        let path = CodexConfiguration.normalized(text)
+        pathRevisions[field, default: 0] += 1
+        let request = pathRevisions[field]
+        let error = await validatePath(path, field)
+        guard request == pathRevisions[field], !Task.isCancelled else { return .superseded }
+        if let error { return .rejected(error) }
+        let oldPath = field == .home ? homePath : executablePath
+        guard path != oldPath else { return .unchanged }
+        saveSettings(home: field == .home ? path : homePath,
+                     executable: field == .executable ? path : executablePath)
+        await detectConfiguration()
+        return .applied
+    }
+
+    func restoreAutomaticPaths() async {
+        // Invalidate pending and queued field validations before clearing both overrides.
+        pathResetRevision += 1
+        for field in CodexPathField.allCases { pathRevisions[field, default: 0] += 1 }
+        if hasManualPaths { saveSettings(home: "", executable: "") }
+        await detectConfiguration()
+    }
+
     func saveSettings(home: String, executable: String) {
         stop()
         revision += 1
+        detectionRevision += 1
+        configurationState = .detecting
         calibrationTask = nil
         homePath = home.trimmingCharacters(in: .whitespacesAndNewlines)
         executablePath = executable.trimmingCharacters(in: .whitespacesAndNewlines)

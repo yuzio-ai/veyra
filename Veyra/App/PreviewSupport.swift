@@ -20,6 +20,40 @@ enum PreviewSupport {
         case planUnknown = "plan-unknown"
     }
 
+    enum SettingsScenario: String, CaseIterable {
+        case automatic, manual, detecting, missing, invalidDirectory, invalidExecutable, invalidDraft, longPath
+    }
+
+    private static func settingsStore(_ scenario: SettingsScenario) -> MonitorStore {
+        let home = URL(fileURLWithPath: "/Users/preview/.codex")
+        let executable = URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex")
+        let state: CodexConfigurationState
+        switch scenario {
+        case .detecting: state = .detecting
+        case .missing: state = .notFound
+        case .invalidDirectory: state = .invalid(.home)
+        case .invalidExecutable: state = .invalid(.executable)
+        default: state = .valid
+        }
+        let location = CodexLocation(home: home, executable: scenario == .missing ? nil : executable)
+        let store = MonitorStore(defaults: UserDefaults(suiteName: "veyra-settings-preview")!,
+                                 inspectConfiguration: { _, _ in CodexConfigurationReport(location: location, state: state) })
+        store.isPreview = true
+        store.homePath = ""
+        store.executablePath = ""
+        if [.manual, .invalidDirectory, .invalidExecutable, .longPath].contains(scenario) {
+            store.homePath = home.path
+            store.executablePath = scenario == .longPath
+                ? "/Users/preview/Library/Application Support/" + String(repeating: "Long Installation Directory/", count: 8) + "Resources/codex"
+                : executable.path
+        }
+        return store
+    }
+
+    private static func settingsFields(in view: NSView) -> [NSTextField] {
+        (view as? NSTextField).map { $0.isEditable ? [$0] : [] } ?? view.subviews.flatMap { settingsFields(in: $0) }
+    }
+
     static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
     private static var retainedWindow: NSWindow?
 
@@ -219,6 +253,11 @@ enum PreviewSupport {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                if CommandLine.arguments.contains("--exercise-settings-only") {
+                    try await SettingsInteractionChecks.run(to: directory)
+                    NSApp.terminate(nil)
+                    return
+                }
                 let store = MonitorStore()
                 var results: [[String: Any]] = []
                 let scenarios = CommandLine.arguments.contains("--preview-settings-only") ? [] : Scenario.allCases
@@ -267,35 +306,49 @@ enum PreviewSupport {
                         retainedWindow = nil
                     }
                 }
-                // Settings has its own width and long explanatory copy; include it in language checks.
-                for updateState in UpdateStore.PreviewState.allCases {
+                // Fixed settings fixtures never expose the user's configured paths.
+                let settingsCases = UpdateStore.PreviewState.allCases.map { (SettingsScenario.automatic, $0) }
+                    + SettingsScenario.allCases.filter { $0 != .automatic }.map { ($0, UpdateStore.PreviewState.idle) }
+                for (settingsScenario, updateState) in settingsCases {
+                    let settingsStore = settingsStore(settingsScenario)
                     for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
                                                ("light-increased", .accessibilityHighContrastAqua),
                                                ("dark-increased", .accessibilityHighContrastDarkAqua)] {
-                        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(updateState))
+                        let hosting = NSHostingView(rootView: MonitorSettings(store: settingsStore, updates: .preview(updateState))
                             .environment(\.monitorReferenceDate, referenceDate)
                             .background(Color(nsColor: .windowBackgroundColor)))
-                        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 1),
-                                              styleMask: [.borderless], backing: .buffered, defer: false)
+                        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 1),
+                                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                        window.title = L10n.text("Veyra Settings")
                         window.appearance = NSAppearance(named: appearance)
                         window.contentView = hosting
                         window.orderFront(nil)
                         retainedWindow = window
-                        for _ in 0..<5 {
+                        for iteration in 0..<5 {
                             try await Task.sleep(for: .milliseconds(80))
                             hosting.layoutSubtreeIfNeeded()
                             window.setContentSize(hosting.fittingSize)
+                            if settingsScenario == .invalidDraft, iteration == 1,
+                               let field = settingsFields(in: hosting).first {
+                                field.stringValue = "relative/invalid-path"
+                                field.delegate?.controlTextDidChange?(Notification(name: NSControl.textDidChangeNotification, object: field))
+                                field.delegate?.controlTextDidEndEditing?(Notification(name: NSControl.textDidEndEditingNotification, object: field))
+                            }
                         }
-                        guard abs(hosting.bounds.width - 570) < 1, hosting.bounds.height > 100 else {
+                        guard abs(hosting.bounds.width - SettingsLayout.width) < 1, hosting.bounds.height > 100 else {
                             throw PreviewError.invalidLayout("settings-\(name)")
                         }
-                        let filename = updateState == .idle ? "settings-\(name)" : "settings-\(updateState.rawValue)-\(name)"
+                        let filename = settingsScenario != .automatic ? "settings-\(settingsScenario.rawValue)-\(name)"
+                            : (updateState == .idle ? "settings-\(name)" : "settings-\(updateState.rawValue)-\(name)")
                         try saveBitmap(hosting, to: directory.appendingPathComponent(filename + ".png"))
                         results.append(["name": filename, "width": hosting.bounds.width,
                                         "height": hosting.bounds.height])
                         window.orderOut(nil)
                         retainedWindow = nil
                     }
+                }
+                if CommandLine.arguments.contains("--exercise-settings") {
+                    try await SettingsInteractionChecks.run(to: directory)
                 }
                 try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
                     .write(to: directory.appendingPathComponent("layouts.json"))

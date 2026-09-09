@@ -73,6 +73,9 @@ python3 scripts/generate_project.py
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
   --render-previews "$PWD/build/previews-zh" -AppleLanguages '("zh-Hans")' -AppleLocale zh_CN
 # 仅复查设置页时，在上述命令后追加 --preview-settings-only
+# 使用临时目录和独立偏好设置验证原生输入、键盘、窗口关闭及无障碍标签
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
+  --render-previews "$PWD/build/settings-checks" --exercise-settings-only
 
 # 在独立窗口中使用真实数据检查内容布局，不用于验收菜单栏材质
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --show-panel
@@ -127,6 +130,6 @@ python3 scripts/measure_energy.py \
 
 ### 更新检查验证
 
-`update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 和 `--exercise-menu-to` 检查实际菜单与滚动。设置页渲染包含未检查、检查中、有新版、已是最新、失败及限流六种状态；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
+`update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 和 `--exercise-menu-to` 检查实际菜单与滚动。设置页渲染包含未检查、检查中、有新版、已是最新、失败、限流及检查失败但仍有缓存新版七种更新状态，以及自动/手动路径、检测中、未找到、无效路径、无效草稿和长路径场景；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
 
 新增的更新状态文件与 Core 源码一同加入独立 XCTest target；调整成员关系后运行工程生成脚本。

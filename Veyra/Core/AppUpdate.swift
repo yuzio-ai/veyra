@@ -48,6 +48,15 @@ enum UpdateFailure: Error, Equatable, Sendable {
     case network, noRelease, invalidData
     case rateLimited(until: Date)
 
+    var diagnosticCategory: String {
+        switch self {
+        case .network: "network"
+        case .noRelease: "no_release"
+        case .invalidData: "invalid_data"
+        case .rateLimited: "rate_limited"
+        }
+    }
+
     var message: String {
         switch self {
         case .network: L10n.text("Unable to check for updates. Check your connection and try again.")

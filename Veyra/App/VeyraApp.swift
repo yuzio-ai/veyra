@@ -26,6 +26,7 @@ struct VeyraApp: App {
         Settings {
             MonitorSettings(store: store, updates: delegate.updates)
         }
+        .windowResizability(.contentSize)
     }
 }
 

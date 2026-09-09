@@ -220,6 +220,22 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertNil(store.quota.account)
         store.stop(); clock.finish(); await drain()
     }
+    func testAutomaticPathCommitRefreshesLocallyWithoutRequestingQuota() async throws {
+        let firstHome = try SQLiteFixture(), secondHome = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                 clock: clock.clock, defaults: defaults(home: firstHome.home))
+        await store.refreshAll()
+        let before = await fixture.counts()
+        let result = await store.commitPath(secondHome.home.path, field: .home)
+        XCTAssertEqual(result, .applied)
+        await store.refreshAll()
+        let after = await fixture.counts()
+        XCTAssertGreaterThan(after.0, before.0)
+        XCTAssertEqual(after.1, 0)
+        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        store.stop(); clock.finish(); await drain()
+    }
+
     func testSavingSettingsClearsCachesWithoutNetworkRequest() async throws {
         let firstHome = try SQLiteFixture(), secondHome = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
