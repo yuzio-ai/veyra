@@ -172,7 +172,8 @@ final class CoreTests: XCTestCase {
     func testSubtasksAndInternalFiltering() {
         let child = metadata(id: "child", source: #"{"subagent":{"thread_spawn":{"parent_thread_id":"root"}}}"#)
         XCTAssertEqual(child.parentID, "root")
-        XCTAssertEqual(child.sourceLabel, L10n.text("Subtask"))
+        XCTAssertEqual(child.taskSource, .subtask)
+        XCTAssertEqual(child.taskSource.label, L10n.text("Subtask"))
         XCTAssertFalse(child.isInternal)
         let guardThread = metadata(source: #"{"subagent":{"other":"guardian"}}"#)
         XCTAssertTrue(guardThread.isInternal)

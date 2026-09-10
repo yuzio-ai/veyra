@@ -8,6 +8,7 @@ enum PreviewSupport {
         case loading, empty, single, longTitle = "long-title", multiple, quotas, error, expanded, unknown
         case edgeCases = "edge-cases"
         case localQuota = "local-quota", staleQuota = "stale-quota", noQuota = "no-quota", cooldown
+        case customModel = "custom-model"
         case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
         case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
         case refreshing
@@ -89,6 +90,7 @@ enum PreviewSupport {
     static func configure(_ store: MonitorStore, scenario: Scenario) {
         store.isPreview = true
         store.quota = QuotaDisplayState()
+        store.modelConfig = nil
         store.taskError = nil
         store.taskWarning = nil
         store.tasksBusy = false
@@ -172,6 +174,10 @@ enum PreviewSupport {
                 accountID: nil, source: .local)
         }
         if scenario == .noQuota { store.quota = QuotaDisplayState() }
+        if scenario == .customModel {
+            store.quota = QuotaDisplayState()
+            store.modelConfig = CodexModelConfig(model: "kimi-k3", provider: "moonshot")
+        }
         if scenario == .cooldown {
             store.quota.error = QuotaFailure.rateLimited.message
             store.nextCalibrationAt = referenceDate.addingTimeInterval(300)
@@ -189,11 +195,11 @@ enum PreviewSupport {
         case .edgeCases:
             store.tasks = [
                 TaskSnapshot(id: "demo-1", title: "检查长数值换行、缺失数据与已经到期的额度窗口，保持所有摘要可读",
-                             model: "a-long-model-name-for-layout-validation", sourceLabel: L10n.text("Desktop"), parentID: nil,
+                             model: "a-long-model-name-for-layout-validation", source: .desktop, parentID: nil,
                              startedAt: referenceDate.addingTimeInterval(-9_876_543), updatedAt: referenceDate,
                              tokens: TokenUsage(input: Int64.max / 2, output: Int64.max / 2, total: Int64.max - 1),
                              activity: .running),
-                TaskSnapshot(id: "demo-2", title: "缺失用量与开始时间的子任务", model: nil, sourceLabel: L10n.text("Subtask"),
+                TaskSnapshot(id: "demo-2", title: "缺失用量与开始时间的子任务", model: nil, source: .subtask,
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
             ]
@@ -201,7 +207,7 @@ enum PreviewSupport {
             store.tasks = [task(1), task(2, parentID: "demo-1"), task(3, parentID: "demo-1", activity: .unknown),
                            task(4, parentID: "demo-2")]
             store.tasks[1] = TaskSnapshot(id: "demo-2", title: "ios phone auth r2 review", model: "gpt-5.6-sol",
-                sourceLabel: L10n.text("Subtask"), parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
+                source: .subtask, parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
                 updatedAt: referenceDate, tokens: TokenUsage(input: 240_400, output: 1_300, total: 241_700), activity: .running,
                 agentPath: "/root/ios_phone_auth_r2_review", agentNickname: "Lorentz", agentRole: "reviewer",
                 progress: TaskProgress(kind: .message, text: "已核对认证表单与传输边界，目前正在检查快照失效、缓存提交和账号接续后的资料选择，确保长进展文本能正确截断并通过悬停查看。"))
@@ -210,6 +216,10 @@ enum PreviewSupport {
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
             store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
                            task(3, parentID: "demo-2"), task(4, parentID: "missing-parent")]
+        case .customModel:
+            store.tasks = [TaskSnapshot(id: "demo-1", title: "代码审查 · veyra 未提交更改", model: "kimi-k3", source: .desktop,
+                                        parentID: nil, startedAt: referenceDate.addingTimeInterval(-9), updatedAt: referenceDate,
+                                        tokens: TokenUsage(input: 5_230_000, output: 57_500, total: 5_290_000), activity: .running)]
         case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
              .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
              .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly:
@@ -232,7 +242,7 @@ enum PreviewSupport {
                              activity: TaskActivity = .running) -> TaskSnapshot {
         TaskSnapshot(id: "demo-\(number)",
                      title: longTitle ? "检查额度读取与并行任务监控，验证非常长的任务名称能够正确换行并保持界面整齐" : "优化菜单栏弹窗与滚动体验 · \(number)",
-                     model: "gpt-5.6-sol", sourceLabel: parentID == nil ? L10n.text("Desktop") : L10n.text("Subtask"), parentID: parentID,
+                     model: "gpt-5.6-sol", source: parentID == nil ? .desktop : .subtask, parentID: parentID,
                      startedAt: referenceDate.addingTimeInterval(-752), updatedAt: referenceDate,
                      tokens: TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, reasoningOutput: 2_891, total: 884_100),
                      activity: activity)

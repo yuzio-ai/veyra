@@ -29,9 +29,9 @@ struct ThreadMetadata: Sendable {
         guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return false }
         return value["subagent"]["other"].string != nil
     }
-    var sourceLabel: String {
-        if parentID != nil { return L10n.text("Subtask") }
-        return ["cli", "exec"].contains(source) ? "CLI" : L10n.text("Desktop")
+    var taskSource: TaskSource {
+        if parentID != nil { return .subtask }
+        return ["cli", "exec"].contains(source) ? .cli : .desktop
     }
 }
 
@@ -87,7 +87,7 @@ enum TaskResolver {
         let activity: TaskActivity = boundary?.isRunning == true && hasProcess && evidence.reliable ? .running : .unknown
         let usage = rollout.usage ?? TokenUsage(total: metadata.tokens)
         return TaskSnapshot(id: metadata.id, title: metadata.displayTitle, model: rollout.model ?? metadata.model,
-                            sourceLabel: metadata.sourceLabel, parentID: metadata.parentID,
+                            source: metadata.taskSource, parentID: metadata.parentID,
                             startedAt: boundary?.isRunning == true ? boundary?.date : nil,
                             updatedAt: rollout.usageDate ?? metadata.updatedAt, tokens: usage, activity: activity,
                             agentPath: metadata.agentPath, agentNickname: metadata.agentNickname, agentRole: metadata.agentRole,
@@ -116,6 +116,7 @@ actor LocalTaskReader {
 
     func fetch(home: URL) async throws -> TaskReadResult {
         let checkedAt = now()
+        let modelConfig = CodexModelConfig.load(home: home)
         if lastHome != home {
             rollouts = RolloutReader(); lastHome = home
             metadataCache.reset(); historyCache.reset(); quotaByPath = [:]
@@ -208,7 +209,7 @@ actor LocalTaskReader {
             : unreadable ? .sessionUnreadable : nil
         return TaskReadResult(tasks: tasks, fetchedAt: checkedAt, warning: warning,
                               localQuota: LocalQuotaBucket.snapshot(buckets),
-                              quotaWarning: quotaUnreadable ? L10n.text("Some local quota records are unreadable.") : nil, metrics: metrics,
+                              quotaWarning: quotaUnreadable ? L10n.text("Some local quota records are unreadable.") : nil, modelConfig: modelConfig, metrics: metrics,
                               ancestors: ancestors.values.sorted { $0.id < $1.id })
     }
 

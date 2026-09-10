@@ -320,11 +320,23 @@ struct TokenUsage: Equatable, Sendable {
 
 enum TaskActivity: String, Sendable { case running, unknown }
 
+enum TaskSource: Sendable {
+    case cli, desktop, subtask
+
+    var label: String {
+        switch self {
+        case .cli: "CLI"
+        case .desktop: L10n.text("Desktop")
+        case .subtask: L10n.text("Subtask")
+        }
+    }
+}
+
 struct TaskSnapshot: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let model: String?
-    let sourceLabel: String
+    let source: TaskSource
     let parentID: String?
     let startedAt: Date?
     let updatedAt: Date
@@ -334,6 +346,7 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     var agentNickname: String?
     var agentRole: String?
     var progress: TaskProgress?
+    var sourceLabel: String { source.label }
 }
 
 struct TaskReadResult: Sendable {
@@ -342,6 +355,7 @@ struct TaskReadResult: Sendable {
     let warning: TaskReadWarning?
     var localQuota: QuotaSnapshot?
     var quotaWarning: String?
+    var modelConfig: CodexModelConfig?
     var metrics = TaskReadMetrics()
     var ancestors: [TaskReference] = []
 }

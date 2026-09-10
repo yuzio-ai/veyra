@@ -106,74 +106,87 @@ struct MonitorPanel: View {
 
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 7) {
+            if let config = store.modelConfig, let provider = config.customProvider {
                 sectionTitle("Quota")
-                if store.quotaBusy {
-                    ProgressView().controlSize(.small).scaleEffect(0.8)
-                        .frame(width: 14, height: 14)
-                        .accessibilityLabel("Syncing quota online")
-                        .accessibilityIdentifier("monitor.quotaProgress")
+                customModelCard(name: config.model ?? provider)
+            } else {
+                HStack(spacing: 7) {
+                    sectionTitle("Quota")
+                    if store.quotaBusy {
+                        ProgressView().controlSize(.small).scaleEffect(0.8)
+                            .frame(width: 14, height: 14)
+                            .accessibilityLabel("Syncing quota online")
+                            .accessibilityIdentifier("monitor.quotaProgress")
+                    }
+                    Spacer()
+                    if let plan = store.quota.account?.planDisplayName {
+                        Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .tracking(0.5).lineLimit(1).help(plan)
+                            .padding(.horizontal, 7).padding(.vertical, 4)
+                            .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
+                    }
+                    MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
+                        HStack(spacing: 7) {
+                            if let next = store.nextCalibrationAt, next > now {
+                                Text(L10n.text("Sync after \(next.formatted(date: .omitted, time: .standard))"))
+                                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                            }
+                            Button { Task { await store.calibrateQuota() } } label: {
+                                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary).frame(width: 18, height: 18)
+                            }
+                            .modifier(MonitorActionStyle())
+                            .help("Sync quota online")
+                            .accessibilityLabel("Sync quota")
+                            .accessibilityIdentifier("monitor.calibrate")
+                            .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
+                        }
+                    }
                 }
-                Spacer()
-                if let plan = store.quota.account?.planDisplayName {
-                    Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .tracking(0.5).lineLimit(1).help(plan)
-                        .padding(.horizontal, 7).padding(.vertical, 4)
-                        .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
-                }
-                MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
-                    HStack(spacing: 7) {
-                        if let next = store.nextCalibrationAt, next > now {
-                            Text(L10n.text("Sync after \(next.formatted(date: .omitted, time: .standard))"))
+                ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
+                if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
+                    let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
+                        if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
+                    }
+                    ForEach(bucketIDs, id: \.self) { id in
+                        let windows = snapshot.windows.filter { $0.bucketID == id }
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(windows.first?.bucketName ?? id)
+                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
+                            VStack(spacing: 12) {
+                                ForEach(windows) { window in
+                                    if window.id != windows.first?.id {
+                                        Divider().accessibilityHidden(true)
+                                    }
+                                    QuotaWindowView(window: window)
+                                }
+                            }
+                            Text(L10n.text("\(snapshot.source(for: id) == .local ? L10n.text("Local snapshot") : L10n.text("Online sync")) · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))"))
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
                         }
-                        Button { Task { await store.calibrateQuota() } } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.primary).frame(width: 18, height: 18)
-                        }
-                        .modifier(MonitorActionStyle())
-                        .help("Sync quota online")
-                        .accessibilityLabel("Sync quota")
-                        .accessibilityIdentifier("monitor.calibrate")
-                        .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
+                        .padding(14).monitorCard()
                     }
+                } else if store.quotaBusy {
+                    HStack(spacing: 9) {
+                        ProgressView().controlSize(.small)
+                        Text("Syncing quota online…").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, minHeight: 56).monitorCard()
+                } else {
+                    Text("No local quota records").font(.system(size: 12)).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
                 }
+                if let warning = store.localQuotaWarning { notice(warning) }
+                if let error = store.quota.error { notice(error) }
             }
-            ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
-            if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
-                let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
-                    if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
-                }
-                ForEach(bucketIDs, id: \.self) { id in
-                    let windows = snapshot.windows.filter { $0.bucketID == id }
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(windows.first?.bucketName ?? id)
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
-                        VStack(spacing: 12) {
-                            ForEach(windows) { window in
-                                if window.id != windows.first?.id {
-                                    Divider().accessibilityHidden(true)
-                                }
-                                QuotaWindowView(window: window)
-                            }
-                        }
-                        Text(L10n.text("\(snapshot.source(for: id) == .local ? L10n.text("Local snapshot") : L10n.text("Online sync")) · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))"))
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                    }
-                    .padding(14).monitorCard()
-                }
-            } else if store.quotaBusy {
-                HStack(spacing: 9) {
-                    ProgressView().controlSize(.small)
-                    Text("Syncing quota online…").font(.system(size: 12)).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, minHeight: 56).monitorCard()
-            } else {
-                Text("No local quota records").font(.system(size: 12)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
-            }
-            if let warning = store.localQuotaWarning { notice(warning) }
-            if let error = store.quota.error { notice(error) }
         }
+    }
+
+    private func customModelCard(name: String) -> some View {
+        Label(L10n.text("Custom model \(name) in use. ChatGPT quotas and reset credits do not apply."), systemImage: "info.circle")
+            .font(.system(size: 12)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.horizontal, 14).monitorCard()
     }
 
     private var tasksSection: some View {
@@ -433,11 +446,14 @@ private struct TaskRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(task.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true).help(task.title)
-                    Text("\(task.sourceLabel) · \(task.model ?? L10n.text("Unknown model"))")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).help(task.model ?? "")
+                    HStack(spacing: 6) {
+                        TaskBadge(task.sourceLabel, systemImage: task.source.iconName).fixedSize()
+                        TaskBadge(task.model ?? L10n.text("Unknown model"), systemImage: "sparkles")
+                            .lineLimit(1).help(task.model ?? "")
+                    }
                 }
                 Spacer(minLength: 0)
                 Circle().fill(task.activity == .running ? monitorAccent : .orange).frame(width: 6, height: 6).padding(.top, 5)
@@ -546,6 +562,37 @@ private struct TaskRow: View {
             Spacer()
             Text((value.map { $0.formatted() } ?? "—") + suffix).monospacedDigit()
         }.font(.system(size: 11))
+    }
+}
+
+private struct TaskBadge: View {
+    let text: String
+    let systemImage: String
+
+    init(_ text: String, systemImage: String) {
+        self.text = text
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.system(size: 10, weight: .semibold, design: .rounded))
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(.primary.opacity(0.08), in: Capsule())
+        .foregroundStyle(.secondary)
+    }
+}
+
+private extension TaskSource {
+    var iconName: String {
+        switch self {
+        case .cli: "terminal"
+        case .desktop: "desktopcomputer"
+        case .subtask: "arrow.triangle.branch"
+        }
     }
 }
 

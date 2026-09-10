@@ -3160,6 +3160,23 @@
         }
       }
     },
+    "Custom model %@ in use. ChatGPT quotas and reset credits do not apply." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom model %@ in use. ChatGPT quotas and reset credits do not apply."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用自定义模型 %@，ChatGPT 额度与重置次数不适用。"
+          }
+        }
+      }
+    },
     "Download and install the new version manually." : {
       "extractionState" : "manual",
       "localizations" : {

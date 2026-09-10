@@ -17,6 +17,7 @@ final class MonitorStore {
     var taskError: String? { didSet { updateMenuLabel() } }
     var taskWarning: TaskReadWarning? { didSet { updateMenuLabel() } }
     var localQuotaWarning: String?
+    var modelConfig: CodexModelConfig?
     var quotaBusy = false
     var tasksBusy = false
     var panelVisible = false
@@ -157,6 +158,7 @@ final class MonitorStore {
             if taskWarning != result.warning { taskWarning = result.warning }
             if taskError != nil { taskError = nil }
             if localQuotaWarning != result.quotaWarning { localQuotaWarning = result.quotaWarning }
+            if modelConfig != result.modelConfig { modelConfig = result.modelConfig }
             quotaState.updateLocal(result.localQuota)
             publishQuota()
             lastReadMetrics = result.metrics
@@ -247,6 +249,7 @@ final class MonitorStore {
         tasks = []; tasksUpdatedAt = nil; taskError = nil; taskWarning = nil
         taskAncestors = []
         localQuotaWarning = nil; quotaFailureDetails = nil; quotaBusy = false; tasksBusy = false
+        modelConfig = nil
         attemptedLocalRead = false
         // Join any old local read, then immediately read the new location once it has drained.
         let version = revision

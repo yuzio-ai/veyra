@@ -3,7 +3,7 @@ import Foundation
 
 final class TaskPresentationTests: XCTestCase {
     private func task(_ id: String, parent: String? = nil, activity: TaskActivity = .running) -> TaskSnapshot {
-        TaskSnapshot(id: id, title: id, model: nil, sourceLabel: parent == nil ? L10n.text("Desktop") : L10n.text("Subtask"),
+        TaskSnapshot(id: id, title: id, model: nil, source: parent == nil ? .desktop : .subtask,
                      parentID: parent, startedAt: nil, updatedAt: .distantPast,
                      tokens: TokenUsage(total: 100), activity: activity)
     }
