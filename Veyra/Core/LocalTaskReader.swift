@@ -157,7 +157,8 @@ actor LocalTaskReader {
             do {
                 if let cached = readPaths[thread.rolloutPath] { rollout = cached }
                 else {
-                    rollout = try rollouts.read(URL(fileURLWithPath: thread.rolloutPath), requireBoundary: stored == nil)
+                    rollout = try rollouts.read(URL(fileURLWithPath: thread.rolloutPath),
+                                                requireBoundary: stored == nil, modelHint: thread.model)
                     metrics.rolloutBytes += rollouts.lastReadByteCount
                     metrics.rolloutOpens += rollouts.lastOpenCount
                     readPaths[thread.rolloutPath] = rollout
@@ -169,9 +170,10 @@ actor LocalTaskReader {
                 tasks.append(snapshot)
             }
         }
+        let modelByPath = Dictionary(metadata.map { ($0.rolloutPath, $0.model) }, uniquingKeysWith: { first, _ in first })
         for path in quotaPaths where readPaths[path] == nil {
             do {
-                let rollout = try rollouts.read(URL(fileURLWithPath: path), quotaOnly: true)
+                let rollout = try rollouts.read(URL(fileURLWithPath: path), quotaOnly: true, modelHint: modelByPath[path] ?? nil)
                 metrics.rolloutBytes += rollouts.lastReadByteCount
                 metrics.rolloutOpens += rollouts.lastOpenCount
                 quotaByPath[path] = rollout.quotaBuckets

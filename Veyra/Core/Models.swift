@@ -68,6 +68,12 @@ struct QuotaWindow: Identifiable, Equatable, Sendable {
         default: isPrimary ? L10n.text("Primary quota") : L10n.text("Secondary quota")
         }
     }
+
+    func rebucketed(to bucketID: String, name: String) -> QuotaWindow {
+        QuotaWindow(id: "\(bucketID):\(isPrimary ? "primary" : "secondary")", bucketID: bucketID,
+                    bucketName: name, isPrimary: isPrimary, usedPercent: usedPercent,
+                    durationMinutes: durationMinutes, resetsAt: resetsAt)
+    }
 }
 
 enum QuotaSource: String, Sendable { case local, network }
@@ -79,6 +85,9 @@ struct QuotaSnapshot: Equatable, Sendable {
     var source: QuotaSource = .network
     var bucketDates: [String: Date] = [:]
     var bucketSources: [String: QuotaSource] = [:]
+    /// Local snapshots only: session model that produced each bucket, used to
+    /// match buckets against online limit names during the merge.
+    var bucketModels: [String: String] = [:]
     var resetCredits: ResetCreditsSnapshot?
     func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
     func source(for bucketID: String) -> QuotaSource { bucketSources[bucketID] ?? source }
@@ -96,7 +105,17 @@ struct QuotaSnapshot: Equatable, Sendable {
     /// Keep untouched online buckets and their provenance until the next sync.
     func updatingBuckets(from local: QuotaSnapshot) -> QuotaSnapshot {
         let localIDs = Set(local.windows.map(\.bucketID)).union(local.bucketDates.keys)
-        let newerIDs = localIDs.filter { local.recordedAt(for: $0) > recordedAt(for: $0) }
+        // token_count events report the limit governing the request under a
+        // generic limit_id, so re-target each local bucket to the online bucket
+        // matching its session model; the newest record wins target collisions.
+        var retargeted: [String: (date: Date, sourceID: String, windows: [QuotaWindow])] = [:]
+        for id in localIDs.sorted() {
+            let target = targetBucketID(for: id, model: local.bucketModels[id])
+            let date = local.recordedAt(for: id)
+            guard retargeted[target].map({ date > $0.date }) ?? true else { continue }
+            retargeted[target] = (date, id, local.windows.filter { $0.bucketID == id })
+        }
+        let newerIDs = Set(retargeted.keys.filter { retargeted[$0]!.date > recordedAt(for: $0) })
         guard !newerIDs.isEmpty else { return self }
         let ids = Set(windows.map(\.bucketID)).union(newerIDs).sorted {
             if ($0 == "codex") != ($1 == "codex") { return $0 == "codex" }
@@ -105,10 +124,16 @@ struct QuotaSnapshot: Equatable, Sendable {
         var dates: [String: Date] = [:]
         var sources: [String: QuotaSource] = [:]
         let merged = ids.flatMap { id -> [QuotaWindow] in
-            let selected = newerIDs.contains(id) ? local : self
-            dates[id] = selected.recordedAt(for: id)
-            sources[id] = selected.source(for: id)
-            return selected.windows.filter { $0.bucketID == id }
+            if let replacement = retargeted[id], newerIDs.contains(id) {
+                dates[id] = replacement.date
+                sources[id] = local.source(for: replacement.sourceID)
+                guard replacement.sourceID != id else { return replacement.windows }
+                let name = bucketName(for: id) ?? replacement.windows.first?.bucketName ?? id
+                return replacement.windows.map { $0.rebucketed(to: id, name: name) }
+            }
+            dates[id] = recordedAt(for: id)
+            sources[id] = source(for: id)
+            return windows.filter { $0.bucketID == id }
         }
         var result = QuotaSnapshot(windows: merged, fetchedAt: dates.values.max() ?? fetchedAt,
                                    accountID: nil, bucketDates: dates, bucketSources: sources,
@@ -116,6 +141,25 @@ struct QuotaSnapshot: Equatable, Sendable {
         // The summary source follows the menu's quota; cards use their own source.
         result.source = result.menuWindow.map { result.source(for: $0.bucketID) } ?? source
         return result
+    }
+
+    private func bucketName(for bucketID: String) -> String? {
+        windows.first { $0.bucketID == bucketID }?.bucketName
+    }
+
+    /// Match a local bucket to its online bucket by session model. Local
+    /// limit_ids do not distinguish model families, while online limit names
+    /// mirror the model slug (gpt-5.3-codex-spark matches GPT-5.3-Codex-Spark).
+    private func targetBucketID(for localID: String, model: String?) -> String {
+        guard let slug = model.map(Self.normalized), !slug.isEmpty else { return localID }
+        let ids = Set(windows.map(\.bucketID)).sorted()
+        for id in ids where Self.normalized(bucketName(for: id) ?? "") == slug { return id }
+        for id in ids where Self.normalized(id) == slug { return id }
+        return localID
+    }
+
+    static func normalized(_ value: String) -> String {
+        String(value.lowercased().filter { $0.isLetter || $0.isNumber })
     }
 
     static func parse(_ value: JSONValue, at date: Date = Date()) -> QuotaSnapshot {

@@ -1,12 +1,23 @@
 import Foundation
 
 /// One event is one complete bucket snapshot. Missing windows never inherit old values.
+/// The session model is kept alongside: token_count events report the limit
+/// governing the request under a generic limit_id, so the model is the only
+/// local signal identifying the model family the bucket belongs to.
 struct LocalQuotaBucket: Equatable, Sendable {
     let id: String
     let windows: [QuotaWindow]
     let recordedAt: Date
+    let model: String?
 
-    static func parse(_ value: JSONValue, at date: Date) -> LocalQuotaBucket? {
+    init(id: String, windows: [QuotaWindow], recordedAt: Date, model: String? = nil) {
+        self.id = id
+        self.windows = windows
+        self.recordedAt = recordedAt
+        self.model = model
+    }
+
+    static func parse(_ value: JSONValue, at date: Date, model: String? = nil) -> LocalQuotaBucket? {
         guard value.object != nil else { return nil }
         let id = value["limit_id"].string.flatMap { $0.isEmpty ? nil : $0 } ?? "codex"
         let name = value["limit_name"].string ?? (id == "codex" ? "Codex" : id)
@@ -18,7 +29,7 @@ struct LocalQuotaBucket: Equatable, Sendable {
                                durationMinutes: window["window_minutes"].integer,
                                resetsAt: window["resets_at"].double.map(Date.init(timeIntervalSince1970:)))
         }
-        return LocalQuotaBucket(id: id, windows: windows, recordedAt: date)
+        return LocalQuotaBucket(id: id, windows: windows, recordedAt: date, model: model)
     }
 
     static func snapshot(_ buckets: [String: LocalQuotaBucket]) -> QuotaSnapshot? {
@@ -28,7 +39,8 @@ struct LocalQuotaBucket: Equatable, Sendable {
             return $0.id < $1.id
         }
         return QuotaSnapshot(windows: ordered.flatMap(\.windows), fetchedAt: latest, accountID: nil,
-                             source: .local, bucketDates: buckets.mapValues(\.recordedAt))
+                             source: .local, bucketDates: buckets.mapValues(\.recordedAt),
+                             bucketModels: buckets.compactMapValues(\.model))
     }
 }
 

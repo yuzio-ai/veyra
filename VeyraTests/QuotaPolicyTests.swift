@@ -44,6 +44,7 @@ final class QuotaPolicyTests: XCTestCase {
             for line in reverse ? Array(events.reversed()) : events {
                 RolloutEvent.apply(line, to: &state, newestFirst: reverse)
             }
+            if reverse { RolloutEvent.flushPendingQuota(into: &state, model: nil) }
             XCTAssertEqual(state.quotaBuckets["codex"]?.windows.count, 1)
             XCTAssertEqual(state.quotaBuckets["codex"]?.windows.first?.remainingPercent, 30)
         }
@@ -160,6 +161,82 @@ final class QuotaPolicyTests: XCTestCase {
         XCTAssertEqual(state.snapshot, network)
         state.updateLocal(nil)
         XCTAssertEqual(state.snapshot, network)
+    }
+
+    private func sparkOnline(_ used: Double, primary: Bool = true) -> QuotaWindow {
+        QuotaWindow(id: "codex_bengalfox:\(primary ? "primary" : "secondary")", bucketID: "codex_bengalfox",
+                    bucketName: "GPT-5.3-Codex-Spark", isPrimary: primary, usedPercent: used,
+                    durationMinutes: primary ? 300 : 10_080, resetsAt: nil)
+    }
+
+    // A Spark task reports its governing limit under the generic limit_id "codex";
+    // the session model must steer the record to the matching online bucket.
+    func testLocalBucketRetargetsToOnlineBucketMatchingSessionModel() throws {
+        let exhausted = quota("codex", used: 100, primary: false)
+        let network = QuotaSnapshot(windows: [exhausted, sparkOnline(0), sparkOnline(0, primary: false)],
+                                    fetchedAt: date, accountID: "a")
+        let localWindows = [quota("codex", used: 7), quota("codex", used: 3, primary: false)]
+        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: localWindows,
+            recordedAt: date.addingTimeInterval(10), model: "gpt-5.3-codex-spark")])!
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        for _ in 0..<3 {
+            state.updateLocal(local)
+            let displayed = try XCTUnwrap(state.snapshot)
+            XCTAssertEqual(displayed.windows, [exhausted,
+                localWindows[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
+                localWindows[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
+            XCTAssertEqual(displayed.source(for: "codex"), .network)
+            XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
+            XCTAssertEqual(displayed.recordedAt(for: "codex"), date)
+            XCTAssertEqual(displayed.recordedAt(for: "codex_bengalfox"), date.addingTimeInterval(10))
+            XCTAssertEqual(displayed.menuWindow?.remainingPercent, 0)
+        }
+    }
+
+    func testLocalBucketWithoutModelMatchKeepsReportedLimitID() throws {
+        let network = QuotaSnapshot(windows: [quota("codex", used: 100), sparkOnline(0)],
+                                    fetchedAt: date, accountID: "a")
+        for model in [nil, "", "gpt-6-astra", "gpt-5.3-codex"] {
+            let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: [quota("codex", used: 7)],
+                recordedAt: date.addingTimeInterval(10), model: model)])!
+            var state = QuotaDisplayState()
+            state.apply(QuotaRefresh(snapshot: network))
+            state.updateLocal(local)
+            XCTAssertEqual(state.snapshot?.windows, [quota("codex", used: 7), sparkOnline(0)], model ?? "nil")
+            XCTAssertEqual(state.snapshot?.source(for: "codex"), .local)
+            XCTAssertEqual(state.snapshot?.source(for: "codex_bengalfox"), .network)
+        }
+    }
+
+    func testRetargetCollisionsKeepNewestLocalRecord() {
+        let network = QuotaSnapshot(windows: [quota("codex", used: 100), sparkOnline(0)],
+                                    fetchedAt: date, accountID: "a")
+        let local = LocalQuotaBucket.snapshot([
+            "codex": LocalQuotaBucket(id: "codex", windows: [quota("codex", used: 7)],
+                                      recordedAt: date.addingTimeInterval(10), model: "gpt-5.3-codex-spark"),
+            "spark": LocalQuotaBucket(id: "spark", windows: [quota("spark", used: 50)],
+                                      recordedAt: date.addingTimeInterval(5), model: "gpt-5.3-codex-spark")
+        ])!
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(local)
+        XCTAssertEqual(state.snapshot?.windows, [quota("codex", used: 100),
+                                                 quota("codex", used: 7).rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
+        XCTAssertEqual(state.snapshot?.recordedAt(for: "codex_bengalfox"), date.addingTimeInterval(10))
+        XCTAssertEqual(state.snapshot?.source(for: "codex_bengalfox"), .local)
+    }
+
+    func testForwardQuotaEventsCarryTurnContextModelIntoSnapshot() {
+        var state = RolloutState()
+        RolloutEvent.apply(Data(#"{"type":"turn_context","payload":{"model":"gpt-5.3-codex-spark"}}"#.utf8), to: &state)
+        RolloutEvent.apply(event(), to: &state)
+        RolloutEvent.apply(event(bucket: "spark", used: 90), to: &state)
+        let snapshot = LocalQuotaBucket.snapshot(state.quotaBuckets)
+        XCTAssertEqual(snapshot?.bucketModels, ["codex": "gpt-5.3-codex-spark", "spark": "gpt-5.3-codex-spark"])
+        RolloutEvent.apply(Data(#"{"type":"turn_context","payload":{"model":"gpt-6-astra"}}"#.utf8), to: &state)
+        RolloutEvent.apply(event(used: 40, date: "2026-09-03T01:02:00Z"), to: &state)
+        XCTAssertEqual(LocalQuotaBucket.snapshot(state.quotaBuckets)?.bucketModels["codex"], "gpt-6-astra")
     }
     func testCalibrationCooldownBackoffAndStructuredRetryAfter() throws {
         var policy = QuotaCalibrationPolicy()

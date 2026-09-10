@@ -118,6 +118,80 @@ final class RolloutReaderTests: XCTestCase {
         XCTAssertEqual(reader.lastOpenCount, 0)
     }
 
+    private func quotaLine(_ limitID: String, used: Int, date: String) -> String {
+        #"{"type":"event_msg","timestamp":""# + date + #"","payload":{"type":"token_count","rate_limits":{"limit_id":""# +
+            limitID + #"","primary":{"used_percent":\#(used),"window_minutes":300}}}}"#
+    }
+
+    func testReverseQuotaScanAttributesEventsToTheirTurnModel() throws {
+        // Reverse scans meet the quota event before the turn_context it belongs to.
+        let context = #"{"type":"turn_context","payload":{"model":"gpt-5.3-codex-spark"}}"#
+        let url = try file(context + "\n" + quotaLine("codex", used: 7, date: "2026-09-03T01:00:00Z") + "\n")
+        var reader = RolloutReader()
+        let state = try reader.read(url, quotaOnly: true)
+        XCTAssertEqual(state.quotaBuckets["codex"]?.model, "gpt-5.3-codex-spark")
+        XCTAssertEqual(state.quotaBuckets["codex"]?.windows.first?.remainingPercent, 93)
+    }
+
+    func testReverseQuotaScanSeparatesModelsAcrossTurns() throws {
+        let url = try file(#"{"type":"turn_context","payload":{"model":"model-a"}}"# + "\n" +
+                           quotaLine("codex", used: 20, date: "2026-09-03T01:00:00Z") + "\n" +
+                           #"{"type":"turn_context","payload":{"model":"model-b"}}"# + "\n" +
+                           quotaLine("premium", used: 7, date: "2026-09-03T01:05:00Z") + "\n")
+        var reader = RolloutReader()
+        let state = try reader.read(url, quotaOnly: true)
+        XCTAssertEqual(state.quotaBuckets["codex"]?.model, "model-a")
+        XCTAssertEqual(state.quotaBuckets["premium"]?.model, "model-b")
+    }
+
+    func testQuotaTailWithoutTurnContextFallsBackToModelHint() throws {
+        let url = try file(quotaLine("codex", used: 7, date: "2026-09-03T01:00:00Z") + "\n")
+        var hinted = RolloutReader()
+        let state = try hinted.read(url, quotaOnly: true, modelHint: "gpt-5.3-codex-spark")
+        XCTAssertEqual(state.quotaBuckets["codex"]?.model, "gpt-5.3-codex-spark")
+        var plain = RolloutReader()
+        XCTAssertNil(try plain.read(url, quotaOnly: true).quotaBuckets["codex"]?.model)
+    }
+
+    func testIncrementalReadsAttributeQuotaToTheLatestTurnModel() throws {
+        let url = try file(#"{"type":"turn_context","payload":{"model":"model-a"}}"# + "\n")
+        var reader = RolloutReader()
+        _ = try reader.read(url, quotaOnly: true)
+        try append(quotaLine("codex", used: 7, date: "2026-09-03T01:00:00Z") + "\n", to: url)
+        XCTAssertEqual(try reader.read(url, quotaOnly: true).quotaBuckets["codex"]?.model, "model-a")
+        try append(#"{"type":"turn_context","payload":{"model":"model-b"}}"# + "\n" +
+                   quotaLine("codex", used: 9, date: "2026-09-03T01:05:00Z") + "\n", to: url)
+        let state = try reader.read(url, quotaOnly: true)
+        XCTAssertEqual(state.quotaBuckets["codex"]?.model, "model-b")
+        XCTAssertEqual(state.quotaBuckets["codex"]?.windows.first?.remainingPercent, 91)
+    }
+
+    func testTaskUpgradeRescanKeepsCachedModelAttributionOnTie() throws {
+        // The upgraded task read rescans from the tail; the quota record it
+        // buffers before reaching any turn_context flushes with no model and
+        // must not replace the identical cached record's attribution.
+        let chunk = 256 * 1_024
+        let contextA = #"{"type":"turn_context","payload":{"model":"model-a"}}"# + "\n"
+        let quota = #"{"type":"event_msg","timestamp":"2026-09-03T01:00:00Z","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":5}},"rate_limits":{"limit_id":"codex","primary":{"used_percent":7,"window_minutes":300}}}}"# + "\n"
+        let contextB = #"{"type":"turn_context","payload":{"model":"model-b"}}"# + "\n"
+        let started = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-b"}}"# + "\n"
+        let url = try file(String(repeating: " ", count: chunk) + "\n" + contextA + quota)
+        var reader = RolloutReader()
+        XCTAssertEqual(try reader.read(url, requireBoundary: false).quotaBuckets["codex"]?.model, "model-a")
+
+        // Leave quota fully inside the next tail chunk while contextA straddles
+        // its boundary, so the rescan buffers the record without a context.
+        let tail = chunk - 20
+        let gap = tail - quota.utf8.count - contextB.utf8.count - started.utf8.count
+        try append(String(repeating: " ", count: gap - 1) + "\n" + contextB + started, to: url)
+        let state = try reader.read(url, requireBoundary: true)
+        XCTAssertEqual(state.quotaBuckets["codex"]?.model, "model-a")
+        XCTAssertEqual(state.quotaBuckets["codex"]?.windows.first?.remainingPercent, 93)
+        XCTAssertEqual(state.model, "model-b")
+        XCTAssertEqual(state.boundary?.turnID, "turn-b")
+        XCTAssertEqual(state.usage?.total, 5)
+    }
+
     func testTaskUpgradeRestoresMissingPrefixBeforeTheLineIsComplete() throws {
         let url = try file(Data((start + model + token).utf8) + context(byteCount: 300_000))
         var reader = RolloutReader()

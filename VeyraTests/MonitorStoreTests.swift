@@ -196,6 +196,54 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertNil(store.quota.account)
         store.stop(); clock.finish(); await drain()
     }
+    func testLocalSparkRecordRefreshesSparkCardWithoutTouchingExhaustedCodex() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
+        let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "planType": .string("prolite")]),
+                                      accountID: "account-a")
+        let exhausted = QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex", isPrimary: true,
+                                    usedPercent: 100, durationMinutes: 10_080,
+                                    resetsAt: Date(timeIntervalSince1970: 1_789_543_273))
+        let spark5h = QuotaWindow(id: "codex_bengalfox:primary", bucketID: "codex_bengalfox",
+                                  bucketName: "GPT-5.3-Codex-Spark", isPrimary: true,
+                                  usedPercent: 0, durationMinutes: 300, resetsAt: nil)
+        let sparkWeek = QuotaWindow(id: "codex_bengalfox:secondary", bucketID: "codex_bengalfox",
+                                    bucketName: "GPT-5.3-Codex-Spark", isPrimary: false,
+                                    usedPercent: 0, durationMinutes: 10_080, resetsAt: nil)
+        let network = QuotaSnapshot(windows: [exhausted, spark5h, sparkWeek],
+                                    fetchedAt: Date(timeIntervalSince1970: 200), accountID: "account-a")
+        await fixture.setNetwork(QuotaRefresh(account: account, snapshot: network, didRequestQuota: true))
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
+                                 clock: clock.clock, defaults: defaults(home: folder.home))
+        store.start()
+        await store.refreshAll()
+        await store.calibrateQuota()
+        XCTAssertEqual(store.quota.snapshot, network)
+
+        // A Spark task then reports its governing limit under the generic limit_id "codex".
+        let reported = [QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex", isPrimary: true,
+                                    usedPercent: 7, durationMinutes: 300, resetsAt: nil),
+                        QuotaWindow(id: "codex:secondary", bucketID: "codex", bucketName: "Codex", isPrimary: false,
+                                    usedPercent: 3, durationMinutes: 10_080, resetsAt: nil)]
+        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: reported,
+            recordedAt: Date(timeIntervalSince1970: 210), model: "gpt-5.3-codex-spark")])!
+        await fixture.setLocal(local)
+        for _ in 0..<3 {
+            store.setPanelVisible(false)
+            store.setPanelVisible(true)
+            // Join the local read scheduled by reopening the menu.
+            await store.refreshAll()
+            let displayed = try XCTUnwrap(store.quota.snapshot)
+            XCTAssertEqual(displayed.windows, [exhausted,
+                                               reported[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
+                                               reported[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
+            XCTAssertEqual(displayed.source(for: "codex"), .network)
+            XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
+            XCTAssertEqual(displayed.recordedAt(for: "codex"), network.fetchedAt)
+            XCTAssertEqual(displayed.menuWindow?.remainingPercent, 0)
+            XCTAssertEqual(store.quota.account?.plan, "prolite")
+        }
+        store.stop(); clock.finish(); await drain()
+    }
     func testManualRequestsCoalesceAndAuthenticationChangeInvalidatesNetworkResult() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let now = Date(timeIntervalSince1970: 300)
