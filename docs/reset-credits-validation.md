@@ -5,7 +5,8 @@
 ## 构建与回归
 
 - Release 构建通过，保持 Swift 6 严格并发及 macOS 14 部署目标。
-- `VEYRA_DERIVED_DATA_PATH=/tmp/veyra-reset-tests ./scripts/test.sh`：90 项 XCTest、8 项隔离应用诊断全部通过。
+- `VEYRA_DERIVED_DATA_PATH=/tmp/veyra-reset-tests ./scripts/test.sh`：167 项 XCTest、8 项隔离应用诊断全部通过。
+- 本记录是 2026-09-07 的验收快照，当时为 90 项 XCTest；用例数会随功能增加而增长，最新数量以本文档上方命令的当次输出为准，后续日期有独立验收记录。
 - 新增测试覆盖精确到期分组、排序、重复 ID、未知有效期、非法数值、非可用状态、明细与总数不一致、到期边界、缺少额度窗口、独立发布、网络失败和账号／配置失效。
 - 首次构建受沙箱中的 Swift 宏插件限制；正常环境构建后，原有 `build/` 下的测试包加载失败。使用独立构建目录完成测试，没有修改工程配置绕过检查。
 

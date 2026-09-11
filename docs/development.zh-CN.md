@@ -15,6 +15,18 @@
 VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 ```
 
+`test.sh` 在启动 xcodebuild 前先探测派生数据目录是否可写：探测失败会直接以非零状态退出并提示改用 `VEYRA_DERIVED_DATA_PATH`，而不是让 xcodebuild 在 workspace arena 阶段报出难懂的 `Unable to write to info file`。已存在且属主正确不代表可写，受限环境（例如文件沙箱中的自动化会话）即使目录归当前用户所有也可能拒绝写入。
+
+受限环境还会让 Swift 宏插件失效：`ObservationMacros` 与 `SwiftMacros` 的宏实现需要 `swift-plugin-server`，该辅助进程在文件沙箱下无法正常工作，编译会报 `External macro implementation type ... could not be found` / `produced malformed response`。这与派生数据路径无关，`VEYRA_DERIVED_DATA_PATH` 不能解决；需要为构建进程放行，或改用不受限的构建环境。放行后验证结论与普通开发机一致。
+
+测试脚本最后运行 `scripts/verify_configuration.py`，只读校验那些只存在于工程生成脚本和 `Info.plist` 中、XCTest 无法覆盖的打包不变量：App Sandbox 关闭、应用 target 开启 Hardened Runtime 且测试 target 关闭、ad-hoc 手动签名、`LSUIElement` 菜单栏模式、macOS 14 部署目标、Swift 6 严格并发、应用仍链接系统 `libsqlite3`，以及测试 target 仍通过成员例外看到共享 Core 源码和本地化资源。传入 `--app` 时同时检查测试宿主二进制的架构。带 `--derived-data` 且存在 Release 构建时，额外检查发行二进制同时包含 arm64 与 x86_64；没有 Release 构建时该检查显示为跳过。单独运行：
+
+```sh
+python3 scripts/verify_configuration.py --app "$PWD/build/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra"
+```
+
+脚本按普通文本读取生成后的 `project.pbxproj` 与 `Veyra/Info.plist`，不写入任何文件；版本号与 tag 一致性只在 HEAD 存在 `vX.Y.Z` 标签时比较。构建配置的权威来源是 `scripts/generate_project.py`，修改不变量时先改生成脚本并重新生成，再更新本脚本的期望值。
+
 构建完成后可直接打开开发产物：
 
 ```sh
@@ -98,12 +110,16 @@ python3 scripts/generate_project.py
 
 布局位图不包含完整的 WindowServer 玻璃合成。最终验收需要打开真实菜单，在浅色、深色、减少透明度和增加对比度环境下检查顶部、中部、底部、快速滚动、回弹及窗口动态收缩。
 
-固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`local-quota`、`stale-quota`、`no-quota`、`cooldown`、`task-family`、`family-expanded`、`family-context`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`。
+固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`local-quota`、`stale-quota`、`no-quota`、`cooldown`、`custom-model`、`task-family`、`family-expanded`、`family-context`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`。
+
+`custom-model` 使用自定义 provider，额度区域改为固定提示卡片，用于确认此时不展示 ChatGPT 额度与重置次数的本地值。
 
 套餐徽标场景为 `plan-prolite`、`plan-business`、`plan-enterprise`、`plan-unknown`，均包含溢出列表。
 映射依据、未知值处理和验证范围见[套餐显示名称映射](plan-display-names.md)。
 
 重置次数场景包括 `reset-credits`（多批次）、`reset-credits-expired`（已到期）、`reset-credits-unknown`（明细不足与未知有效期）、`reset-credits-zero`、`reset-credits-unavailable`、`reset-credits-only`（没有额度窗口）和 `reset-credits-overflow`（96 个批次，可配合 `--exercise-menu-to` 验证大屏滚动）。
+
+以上固定场景共 33 个；菜单场景 33 个、设置夹具 14 个，合计 47 个固定夹具，`--render-previews` 按浅色、深色和两种增加对比度各渲染一次，共 188 张布局位图。新增场景后需要同步本节和 `PreviewSupport.Scenario`。
 
 核心测试覆盖额度窗口、缓存、累计 token、日志增量读取、文件替换与截断、父子任务、状态合并、进程证据、只读 SQLite、RPC 初始化与断管重连，以及诊断输出的隐私边界。尺寸测试覆盖自然高度、溢出上限、窗口边距、展开与收起及多屏尺寸变化。任务家族的专项结果见[父子任务卡片验收](task-family-validation.md)。
 

@@ -4,7 +4,8 @@
 
 ## 构建与回归
 
-- `VEYRA_DERIVED_DATA_PATH=/private/tmp/veyra-task-family-tests ./scripts/test.sh`：69 项 XCTest 通过。
+- `VEYRA_DERIVED_DATA_PATH=/private/tmp/veyra-task-family-tests ./scripts/test.sh`：167 项 XCTest 通过。
+- 本记录是 2026-09-03 的验收快照，当时为 69 项 XCTest；用例数会随功能增加而增长，最新数量以本文档上方命令的当次输出为准，后续日期有独立验收记录。
 - `python3 scripts/test_diagnostics.py --app /private/tmp/veyra-task-family-tests/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra`：8 项独立诊断检查通过，包括父任务标题、子任务路径、角色及进展正文不泄漏。
 - `./scripts/build.sh`：Release 构建通过，保留 macOS 14 部署目标与 Swift 6 严格并发检查。
 - 初次受沙盒限制的 Swift 宏构建失败；放行后现有构建缓存中的测试包加载失败。独立构建目录完成全部测试，未修改工程配置以绕过检查。
