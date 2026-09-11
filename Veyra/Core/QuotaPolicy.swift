@@ -9,18 +9,23 @@ struct LocalQuotaBucket: Equatable, Sendable {
     let windows: [QuotaWindow]
     let recordedAt: Date
     let model: String?
+    /// Reported limit name. A generic "codex" record naming the account limit
+    /// describes that family-neutral bucket, not a model-family bucket.
+    let limitName: String?
 
-    init(id: String, windows: [QuotaWindow], recordedAt: Date, model: String? = nil) {
+    init(id: String, windows: [QuotaWindow], recordedAt: Date, model: String? = nil, limitName: String? = nil) {
         self.id = id
         self.windows = windows
         self.recordedAt = recordedAt
         self.model = model
+        self.limitName = limitName
     }
 
     static func parse(_ value: JSONValue, at date: Date, model: String? = nil) -> LocalQuotaBucket? {
         guard value.object != nil else { return nil }
         let id = value["limit_id"].string.flatMap { $0.isEmpty ? nil : $0 } ?? "codex"
-        let name = value["limit_name"].string ?? (id == "codex" ? "Codex" : id)
+        let reportedName = value["limit_name"].string.flatMap { $0.isEmpty ? nil : $0 }
+        let name = reportedName ?? (id == "codex" ? "Codex" : id)
         let windows = ["primary", "secondary"].compactMap { kind -> QuotaWindow? in
             let window = value[kind]
             guard window.object != nil else { return nil }
@@ -29,7 +34,7 @@ struct LocalQuotaBucket: Equatable, Sendable {
                                durationMinutes: window["window_minutes"].integer,
                                resetsAt: window["resets_at"].double.map(Date.init(timeIntervalSince1970:)))
         }
-        return LocalQuotaBucket(id: id, windows: windows, recordedAt: date, model: model)
+        return LocalQuotaBucket(id: id, windows: windows, recordedAt: date, model: model, limitName: reportedName)
     }
 
     static func snapshot(_ buckets: [String: LocalQuotaBucket]) -> QuotaSnapshot? {
@@ -40,7 +45,8 @@ struct LocalQuotaBucket: Equatable, Sendable {
         }
         return QuotaSnapshot(windows: ordered.flatMap(\.windows), fetchedAt: latest, accountID: nil,
                              source: .local, bucketDates: buckets.mapValues(\.recordedAt),
-                             bucketModels: buckets.compactMapValues(\.model))
+                             bucketModels: buckets.compactMapValues(\.model),
+                             bucketLimitNames: buckets.compactMapValues(\.limitName))
     }
 }
 

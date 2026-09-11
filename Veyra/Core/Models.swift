@@ -88,6 +88,9 @@ struct QuotaSnapshot: Equatable, Sendable {
     /// Local snapshots only: session model that produced each bucket, used to
     /// match buckets against online limit names during the merge.
     var bucketModels: [String: String] = [:]
+    /// Local snapshots only: reported limit name per bucket, used to recognize a
+    /// generic account-limit record that belongs to no model family.
+    var bucketLimitNames: [String: String] = [:]
     var resetCredits: ResetCreditsSnapshot?
     func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
     func source(for bucketID: String) -> QuotaSource { bucketSources[bucketID] ?? source }
@@ -108,12 +111,17 @@ struct QuotaSnapshot: Equatable, Sendable {
         // token_count events report the limit governing the request under a
         // generic limit_id, so re-target each local bucket to the online bucket
         // matching its session model; the newest record wins target collisions.
+        // A record that fits no online bucket is dropped rather than relabeled,
+        // so a model card and the account card never trade their windows.
         var retargeted: [String: (date: Date, sourceID: String, windows: [QuotaWindow])] = [:]
         for id in localIDs.sorted() {
-            let target = targetBucketID(for: id, model: local.bucketModels[id])
+            let recordedWindows = local.windows.filter { $0.bucketID == id }
+            guard let target = bucketTargeting(localID: id, model: local.bucketModels[id],
+                                               reportedLimitName: local.bucketLimitNames[id],
+                                               windows: recordedWindows) else { continue }
             let date = local.recordedAt(for: id)
             guard retargeted[target].map({ date > $0.date }) ?? true else { continue }
-            retargeted[target] = (date, id, local.windows.filter { $0.bucketID == id })
+            retargeted[target] = (date, id, recordedWindows)
         }
         let newerIDs = Set(retargeted.keys.filter { retargeted[$0]!.date > recordedAt(for: $0) })
         guard !newerIDs.isEmpty else { return self }
@@ -147,15 +155,50 @@ struct QuotaSnapshot: Equatable, Sendable {
         windows.first { $0.bucketID == bucketID }?.bucketName
     }
 
-    /// Match a local bucket to its online bucket by session model. Local
-    /// limit_ids do not distinguish model families, while online limit names
-    /// mirror the model slug (gpt-5.3-codex-spark matches GPT-5.3-Codex-Spark).
-    private func targetBucketID(for localID: String, model: String?) -> String {
-        guard let slug = model.map(Self.normalized), !slug.isEmpty else { return localID }
+    /// Model family a bucket stands for: the model slug mirrored by its name,
+    /// falling back to its identifier for online buckets such as
+    /// "codex_bengalfox" whose response carries no limit name.
+    private func family(of bucketID: String) -> String? {
+        guard let window = windows.first(where: { $0.bucketID == bucketID }) else { return nil }
+        return Self.normalized(window.bucketName) == Self.normalized(bucketID)
+            ? Self.normalized(bucketID) : Self.normalized(window.bucketName)
+    }
+
+    /// Online bucket a local record may rewrite, or nil when the record belongs
+    /// to no bucket here. Local limit_ids do not distinguish model families, so
+    /// the session model first steers the record to the bucket of its own
+    /// family; a record whose family has no bucket may still describe the
+    /// account bucket its raw limit_id reports, but only when that bucket's
+    /// windows have the same structure, so a model-specific quota is never
+    /// written into the account card.
+    private func bucketTargeting(localID: String, model: String?, reportedLimitName: String?,
+                                 windows localWindows: [QuotaWindow]) -> String? {
         let ids = Set(windows.map(\.bucketID)).sorted()
-        for id in ids where Self.normalized(bucketName(for: id) ?? "") == slug { return id }
-        for id in ids where Self.normalized(id) == slug { return id }
-        return localID
+        let slug = model.map(Self.normalized)
+        if let slug, !slug.isEmpty, let own = ids.first(where: { family(of: $0) == slug }) { return own }
+        if let reported = reportedLimitName.map(Self.normalized), !reported.isEmpty,
+           let named = ids.first(where: { Self.normalized(bucketName(for: $0) ?? "") == reported }) {
+            return named
+        }
+        let candidate = ids.first { $0 == localID }
+        guard let candidate, hasSameStructure(localWindows, as: candidate) else { return nil }
+        return candidate
+    }
+
+    /// A record may refresh the account bucket only when that bucket accounts
+    /// for every window the record carries: the account limit has one weekly
+    /// window, so a record with an extra 5h window describes another quota and
+    /// must not be written into the account card.
+    private func hasSameStructure(_ localWindows: [QuotaWindow], as bucketID: String) -> Bool {
+        let bucket = windows.filter { $0.bucketID == bucketID }
+        guard !bucket.isEmpty, bucket.count >= localWindows.count else { return false }
+        var available = bucket.compactMap(\.durationMinutes)
+        return localWindows.allSatisfy { window in
+            guard let duration = window.durationMinutes else { return true }
+            guard let index = available.firstIndex(of: duration) else { return false }
+            available.remove(at: index)
+            return true
+        }
     }
 
     static func normalized(_ value: String) -> String {

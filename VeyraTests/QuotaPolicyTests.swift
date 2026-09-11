@@ -227,6 +227,152 @@ final class QuotaPolicyTests: XCTestCase {
         XCTAssertEqual(state.snapshot?.source(for: "codex_bengalfox"), .local)
     }
 
+    // A session running one model family reports the account limit and that
+    // family's limit under the same generic limit_id in different turns. The
+    // newest record must not relabel the other family's online card.
+    func testSparkRecordReportingCodexLimitDoesNotRewriteAccountBucket() throws {
+        let accountWeekly = accountWeeklyWindow()[0]
+        let network = QuotaSnapshot(windows: [accountWeekly],
+                                    fetchedAt: date, accountID: "a")
+        let reported = [quota("codex", used: 6), quota("codex", used: 38, primary: false)]
+        for _ in 0..<3 {
+            let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: reported,
+                recordedAt: date.addingTimeInterval(10), model: "gpt-5.3-codex-spark")])!
+            var state = QuotaDisplayState()
+            state.apply(QuotaRefresh(snapshot: network))
+            state.updateLocal(local)
+            let displayed = try XCTUnwrap(state.snapshot)
+            XCTAssertEqual(displayed.windows, [accountWeekly])
+            XCTAssertEqual(displayed.source(for: "codex"), .network)
+            XCTAssertEqual(displayed.recordedAt(for: "codex"), date)
+            XCTAssertEqual(displayed.menuWindow?.remainingPercent, 0)
+        }
+    }
+
+    // The same collision next to a model-family card: the record refreshes that
+    // card and leaves the account card on its own windows.
+    func testSparkRecordReportingCodexLimitRefreshesOnlySparkBucket() throws {
+        let accountWeekly = accountWeeklyWindow()[0]
+        let network = QuotaSnapshot(windows: [accountWeekly, sparkOnline(0), sparkOnline(0, primary: false)],
+                                    fetchedAt: date, accountID: "a")
+        let reported = [quota("codex", used: 6), quota("codex", used: 38, primary: false)]
+        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: reported,
+            recordedAt: date.addingTimeInterval(10), model: "gpt-5.3-codex-spark")])!
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(local)
+        let displayed = try XCTUnwrap(state.snapshot)
+        XCTAssertEqual(displayed.windows, [accountWeekly,
+            reported[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
+            reported[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
+        XCTAssertEqual(displayed.source(for: "codex"), .network)
+        XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
+    }
+
+    // A record from a model that has no card of its own may name the account
+    // limit it reports and refresh that card.
+    func testGenericAccountLimitNameStillRefreshesNamedBucket() throws {
+        let accountWeekly = accountWeeklyWindow()[0]
+        let network = QuotaSnapshot(windows: [accountWeekly, sparkOnline(0), sparkOnline(0, primary: false)],
+                                    fetchedAt: date, accountID: "a")
+        let reported = [quota("codex", used: 6, primary: false)]
+        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: reported,
+            recordedAt: date.addingTimeInterval(10), model: "kimi-k3", limitName: "Codex")])!
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(local)
+        let displayed = try XCTUnwrap(state.snapshot)
+        XCTAssertEqual(displayed.windows, [QuotaWindow(id: "codex:secondary", bucketID: "codex", bucketName: "codex",
+                                                       isPrimary: false, usedPercent: 6, durationMinutes: 10_080, resetsAt: nil),
+                                           sparkOnline(0), sparkOnline(0, primary: false)])
+        XCTAssertEqual(displayed.source(for: "codex"), .local)
+        XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .network)
+    }
+
+    // The session model owns the routing: the same record naming the account
+    // limit belongs to its family's card when that card exists.
+    func testSessionModelRoutingWinsOverReportedLimitName() throws {
+        let accountWeekly = accountWeeklyWindow()[0]
+        let network = QuotaSnapshot(windows: [accountWeekly, sparkOnline(0), sparkOnline(0, primary: false)],
+                                    fetchedAt: date, accountID: "a")
+        let reported = [quota("codex", used: 6), quota("codex", used: 38, primary: false)]
+        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: reported,
+            recordedAt: date.addingTimeInterval(10), model: "gpt-5.3-codex-spark", limitName: "Codex")])!
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(local)
+        let displayed = try XCTUnwrap(state.snapshot)
+        XCTAssertEqual(displayed.windows, [accountWeekly,
+            reported[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
+            reported[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
+        XCTAssertEqual(displayed.source(for: "codex"), .network)
+        XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
+    }
+
+    // Higher tiers expose a second account window (plus: 5h + weekly). A
+    // family-free record then covers only the windows it reports, and a
+    // misattributed family record must not trade places with the account card.
+    func testTwoWindowAccountBucketKeepsItsWindowsWhenFamilyHasTheSameShape() throws {
+        let account5h = quota("codex", used: 90)
+        let accountWeek = quota("codex", used: 38, primary: false)
+
+        // A session model with no card of its own reports both account windows.
+        let full = [quota("codex", used: 6), quota("codex", used: 38, primary: false)]
+        let network = QuotaSnapshot(windows: [account5h, accountWeek, sparkOnline(0), sparkOnline(0, primary: false)],
+                                    fetchedAt: date, accountID: "a")
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: full,
+            recordedAt: date.addingTimeInterval(10), model: "kimi-k3", limitName: "Codex")])!)
+        XCTAssertEqual(state.snapshot?.windows, full.map { $0.rebucketed(to: "codex", name: "codex") }
+            + [sparkOnline(0), sparkOnline(0, primary: false)])
+        XCTAssertEqual(state.snapshot?.source(for: "codex"), .local)
+
+        // A Spark session reports the account limit; the family card exists, so
+        // the account card keeps both of its own windows.
+        state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: full,
+            recordedAt: date.addingTimeInterval(20), model: "gpt-5.3-codex-spark")])!)
+        XCTAssertEqual(state.snapshot?.windows, [account5h, accountWeek,
+            full[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
+            full[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
+        XCTAssertEqual(state.snapshot?.source(for: "codex"), .network)
+        XCTAssertEqual(state.snapshot?.source(for: "codex_bengalfox"), .local)
+
+        // Without a family card the account bucket is the only card for that
+        // quota, so a same-shape family record describes it; the structure check
+        // exists to refuse shapes the card cannot represent, not to invent a
+        // second card.
+        state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: QuotaSnapshot(windows: [account5h, accountWeek],
+                                                         fetchedAt: date, accountID: "a")))
+        state.updateLocal(LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: full,
+            recordedAt: date.addingTimeInterval(20), model: "gpt-5.3-codex-spark")])!)
+        XCTAssertEqual(state.snapshot?.windows, full.map { $0.rebucketed(to: "codex", name: "codex") })
+        XCTAssertEqual(state.snapshot?.source(for: "codex"), .local)
+    }
+
+    // A family-free record may be a partial report: it still replaces the
+    // windows it covers, exactly like the single-window account case.
+    func testTwoWindowAccountBucketAcceptsPartialFamilyFreeRecord() throws {
+        let account5h = quota("codex", used: 90)
+        let network = QuotaSnapshot(windows: [account5h, quota("codex", used: 38, primary: false)],
+                                    fetchedAt: date, accountID: "a")
+        let partial = [quota("codex", used: 6)]
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: network))
+        state.updateLocal(LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: partial,
+            recordedAt: date.addingTimeInterval(10), model: "kimi-k3", limitName: "Codex")])!)
+        XCTAssertEqual(state.snapshot?.windows, partial.map { $0.rebucketed(to: "codex", name: "codex") })
+        XCTAssertEqual(state.snapshot?.source(for: "codex"), .local)
+    }
+
+    private func accountWeeklyWindow() -> [QuotaWindow] {
+        [QuotaWindow(id: "codex:secondary", bucketID: "codex", bucketName: "Codex", isPrimary: false,
+                     usedPercent: 100, durationMinutes: 10_080, resetsAt: nil)]
+    }
+
     func testForwardQuotaEventsCarryTurnContextModelIntoSnapshot() {
         var state = RolloutState()
         RolloutEvent.apply(Data(#"{"type":"turn_context","payload":{"model":"gpt-5.3-codex-spark"}}"#.utf8), to: &state)

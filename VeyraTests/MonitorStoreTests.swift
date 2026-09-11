@@ -233,12 +233,14 @@ final class MonitorStoreTests: XCTestCase {
             // Join the local read scheduled by reopening the menu.
             await store.refreshAll()
             let displayed = try XCTUnwrap(store.quota.snapshot)
+            // The Spark record refreshes the Spark card and never rewrites the
+            // exhausted Codex card, which still owns its own weekly window.
             XCTAssertEqual(displayed.windows, [exhausted,
                                                reported[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
                                                reported[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
             XCTAssertEqual(displayed.source(for: "codex"), .network)
-            XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
             XCTAssertEqual(displayed.recordedAt(for: "codex"), network.fetchedAt)
+            XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
             XCTAssertEqual(displayed.menuWindow?.remainingPercent, 0)
             XCTAssertEqual(store.quota.account?.plan, "prolite")
         }
