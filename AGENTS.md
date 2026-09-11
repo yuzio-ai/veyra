@@ -15,10 +15,11 @@ Veyra is a Swift 6/SwiftUI macOS menu bar app monitoring Codex quotas and local 
 Use Xcode 26/Swift 6 targeting macOS 14. Run from the repository root:
 
 - `./scripts/build.sh`: build the Release app with local ad-hoc signing.
-- `./scripts/test.sh`: run the XCTest suite in Debug on macOS. When the repository sits inside ~/Documents, ~/Desktop, or ~/Downloads, derived data moves to `~/Library/Developer/Xcode/DerivedData/Veyra` because the TCC-protected folders block the test runner from reading the bundle; override with `VEYRA_DERIVED_DATA_PATH`.
+- `./scripts/test.sh`: run the XCTest suite in Debug on macOS, then the isolated app diagnostics, then `scripts/verify_configuration.py`. When the repository sits inside ~/Documents, ~/Desktop, or ~/Downloads, derived data moves to `~/Library/Developer/Xcode/DerivedData/Veyra` because the TCC-protected folders block the test runner from reading the bundle; override with `VEYRA_DERIVED_DATA_PATH`.
 - `open build/Build/Products/Release/Veyra.app`: launch the menu bar app.
 - `open Veyra.xcodeproj`: develop using the `Veyra` scheme.
 - `python3 scripts/generate_project.py`: regenerate project configuration. Xcode synchronized folders automatically pick up file additions/removals for their default targets; regenerate after adding/removing/renaming shared Core sources to update test membership exceptions. Make persistent project configuration and target membership changes in this generator.
+- `python3 scripts/verify_configuration.py`: read-only check of packaging invariants that only live in the generator and `Info.plist` (App Sandbox off, app Hardened Runtime on, `LSUIElement` menu-bar mode, macOS 14 target, Swift 6 strict concurrency, sqlite3 linkage, test membership exceptions, and the universal Release binary when `--derived-data` is supplied). Update its expectations whenever an invariant in the generator changes.
 
 See `README.md` for brand regeneration and preview commands.
 
@@ -39,6 +40,12 @@ History uses concise imperative subjects with `feat:` or `fix:` prefixes. Keep c
 ## Security & Configuration
 
 Preserve read-only monitoring: never modify Codex databases, control tasks, or persist credentials. Respect configurable paths and `CODEX_HOME`; keep diagnostics free of private account or session content.
+
+## Automated Sessions
+
+`./scripts/test.sh` probes whether the derived data directory is writable and exits with a clear message if it is not, naming `VEYRA_DERIVED_DATA_PATH` as the override. A file sandbox that confines writes to the workspace cannot use the `~/Library/Developer/Xcode/DerivedData/Veyra` fallback, so pass `VEYRA_DERIVED_DATA_PATH="$PWD/build/TestDerivedData"` in that case.
+
+A file sandbox also breaks the Swift macro plugin server (`swift-plugin-server`), so `ObservationMacros`/`SwiftMacros` expansion fails with `produced malformed response` regardless of the derived data path. Build and test steps need unsandboxed execution; report that requirement instead of treating the failure as a code defect.
 
 ## Agent Instructions
 
