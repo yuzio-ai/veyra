@@ -511,7 +511,6 @@
         }
       }
     },
-    "%@" : {},
     "%@ · %@" : {
       "extractionState" : "manual",
       "localizations" : {

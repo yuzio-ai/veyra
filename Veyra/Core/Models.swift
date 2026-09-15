@@ -94,11 +94,6 @@ struct QuotaSnapshot: Equatable, Sendable {
     var resetCredits: ResetCreditsSnapshot?
     func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
     func source(for bucketID: String) -> QuotaSource { bucketSources[bucketID] ?? source }
-    func isStale(bucketID: String, at now: Date) -> Bool {
-        guard source(for: bucketID) == .local else { return false }
-        return now.timeIntervalSince(recordedAt(for: bucketID)) > 300
-            || windows.contains { $0.bucketID == bucketID && ($0.resetsAt.map { $0 <= now } ?? false) }
-    }
     var menuWindow: QuotaWindow? {
         windows.first { $0.bucketID == "codex" && $0.isPrimary }
             ?? windows.first { $0.bucketID == "codex" } ?? windows.first

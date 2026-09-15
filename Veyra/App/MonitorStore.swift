@@ -22,7 +22,6 @@ final class MonitorStore {
     var tasksBusy = false
     var panelVisible = false
     var nextCalibrationAt: Date?
-    var quotaFailureDetails: QuotaFailureDetails?
     var homePath: String
     var executablePath: String
     private(set) var pathResetRevision = 0
@@ -48,7 +47,6 @@ final class MonitorStore {
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let clock: PollingClock
     @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private(set) var lastReadMetrics = TaskReadMetrics()
     @ObservationIgnored private lazy var scheduler = PollingScheduler(clock: clock) { [weak self] in
         await self?.refreshLocal()
     }
@@ -76,7 +74,9 @@ final class MonitorStore {
     var location: CodexLocation { .resolve(homePath: homePath, executablePath: executablePath) }
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
     var unknownTasks: [TaskSnapshot] { tasks.filter { $0.activity == .unknown } }
-    var pollingSeconds: Int { panelVisible || !runningTasks.isEmpty ? 5 : 30 }
+    var pollingSeconds: Int {
+        Int(TaskPollingPolicy.interval(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty).components.seconds)
+    }
 
     var menuAccessibilityLabel: String {
         quota.snapshot?.source == .local
@@ -131,7 +131,6 @@ final class MonitorStore {
             guard let self, version == self.revision else { return }
             self.calibrationPolicy.finished(result, startedAt: started, now: self.now())
             self.nextCalibrationAt = self.calibrationPolicy.nextAllowedAt
-            self.quotaFailureDetails = result.failureDetails
             let currentAuth = AppServerClient.authenticationStamp(at: location.home)
             if currentAuth != initialAuth {
                 self.quotaState.invalidateAccount()
@@ -161,7 +160,6 @@ final class MonitorStore {
             if modelConfig != result.modelConfig { modelConfig = result.modelConfig }
             quotaState.updateLocal(result.localQuota)
             publishQuota()
-            lastReadMetrics = result.metrics
         } catch {
             guard version == revision else { return }
             let message = L10n.text("Unable to read local task records. Check the data directory.")
@@ -181,7 +179,6 @@ final class MonitorStore {
         if let authStamp, authStamp != stamp {
             quotaState.invalidateAccount()
             quotaState.error = nil
-            quotaFailureDetails = nil
             publishQuota()
         }
         authStamp = stamp
@@ -248,7 +245,7 @@ final class MonitorStore {
         calibrationPolicy = QuotaCalibrationPolicy(); nextCalibrationAt = nil; authStamp = nil
         tasks = []; tasksUpdatedAt = nil; taskError = nil; taskWarning = nil
         taskAncestors = []
-        localQuotaWarning = nil; quotaFailureDetails = nil; quotaBusy = false; tasksBusy = false
+        localQuotaWarning = nil; quotaBusy = false; tasksBusy = false
         modelConfig = nil
         attemptedLocalRead = false
         // Join any old local read, then immediately read the new location once it has drained.

@@ -112,6 +112,8 @@ python3 scripts/generate_project.py
 
 固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`local-quota`、`stale-quota`、`no-quota`、`cooldown`、`custom-model`、`task-family`、`family-expanded`、`family-context`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`。
 
+`stale-quota` 使用记录时间早于预览参考时间 10 分钟的本地快照，用于检查旧记录时间的显示。
+
 `custom-model` 使用自定义 provider，额度区域改为固定提示卡片，用于确认此时不展示 ChatGPT 额度与重置次数的本地值。
 
 套餐徽标场景为 `plan-prolite`、`plan-business`、`plan-enterprise`、`plan-unknown`，均包含溢出列表。

@@ -22,8 +22,6 @@ final class QuotaPolicyTests: XCTestCase {
         XCTAssertEqual(snapshot.source, .local)
         XCTAssertNil(snapshot.accountID)
         XCTAssertGreaterThan(snapshot.recordedAt(for: "codex"), snapshot.recordedAt(for: "spark"))
-        XCTAssertFalse(snapshot.isStale(bucketID: "codex", at: snapshot.fetchedAt.addingTimeInterval(300)))
-        XCTAssertTrue(snapshot.isStale(bucketID: "spark", at: snapshot.fetchedAt.addingTimeInterval(300)))
     }
     func testMissingWindowsInvalidTimestampAndResetNeverInventAllowance() {
         var state = RolloutState()
@@ -31,7 +29,6 @@ final class QuotaPolicyTests: XCTestCase {
         RolloutEvent.apply(event(used: 0, date: "invalid"), to: &state)
         let snapshot = LocalQuotaBucket.snapshot(state.quotaBuckets)!
         XCTAssertEqual(snapshot.menuWindow?.remainingPercent, 0)
-        XCTAssertTrue(snapshot.isStale(bucketID: "codex", at: Date(timeIntervalSince1970: 1_789_000_001)))
         let missing = LocalQuotaBucket.parse(.object(["primary": .object([:])]), at: date)!
         XCTAssertNil(missing.windows.first?.remainingPercent)
         XCTAssertNil(LocalQuotaBucket.parse(.null, at: date))
@@ -104,8 +101,6 @@ final class QuotaPolicyTests: XCTestCase {
             XCTAssertEqual(displayed.recordedAt(for: "codex"), local.fetchedAt)
             XCTAssertEqual(displayed.recordedAt(for: "spark"), date)
             XCTAssertEqual(displayed.source, .local)
-            XCTAssertTrue(displayed.isStale(bucketID: "codex", at: date.addingTimeInterval(400)))
-            XCTAssertFalse(displayed.isStale(bucketID: "spark", at: date.addingTimeInterval(400)))
             XCTAssertNil(displayed.accountID)
             XCTAssertEqual(state.account, account)
         }
