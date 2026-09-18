@@ -56,9 +56,13 @@ final class QuotaPolicyTests: XCTestCase {
         var incremental = RolloutReader(), upgraded = RolloutReader()
         _ = try incremental.read(url, quotaOnly: true)
         _ = try upgraded.read(url, quotaOnly: true)
-        let fields = Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n" +
-            #"{"type":"turn_context","payload":{"model":"test"}}"# + "\n" +
-            #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}}"# + "\n").utf8)
+        // Split into separate statements: the single chained concatenation exceeded
+        // the type checker's per-expression budget once the test target grew.
+        // Byte-identical to a + "\n" + b + "\n" + c + "\n".
+        let startedEvent = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"#
+        let contextEvent = #"{"type":"turn_context","payload":{"model":"test"}}"#
+        let tokenCountEvent = #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}}"#
+        let fields = Data(([startedEvent, contextEvent, tokenCountEvent].joined(separator: "\n") + "\n").utf8)
         let added = filler + fields + event(used: 70) + newline + event(used: 5, date: "2026-09-03T00:59:59Z", secondary: true) + newline
         let file = try FileHandle(forWritingTo: url)
         try file.seekToEnd(); try file.write(contentsOf: added); try file.close()

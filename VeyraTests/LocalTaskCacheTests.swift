@@ -49,9 +49,10 @@ final class LocalTaskCacheTests: XCTestCase {
                 agent_nickname='Lorentz', agent_role='reviewer',
                 source='{"subagent":{"thread_spawn":{"parent_thread_id":"parent"}}}' WHERE id='child';
             """)
-        try Data((#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"child-turn"}}"# + "\n" +
-                  #"{"type":"turn_context","payload":{"model":"test"}}"# + "\n" +
-                  #"{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"正在检查认证边界"}],"internal_chat_message_metadata_passthrough":{"turn_id":"child-turn"}}}"# + "\n").utf8).appendTo(childPath)
+        let childEvents = [#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"child-turn"}}"#,
+                           #"{"type":"turn_context","payload":{"model":"test"}}"#,
+                           #"{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"正在检查认证边界"}],"internal_chat_message_metadata_passthrough":{"turn_id":"child-turn"}}}"#]
+        try Data((childEvents.joined(separator: "\n") + "\n").utf8).appendTo(childPath)
         let reader = LocalTaskReader { _ in ProcessEvidence(threadIDs: ["child"]) }
         let first = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(first.tasks.count, 1)
@@ -200,12 +201,14 @@ final class LocalTaskCacheTests: XCTestCase {
         let path = try fixture.log(id)
         try fixture.insert(id, path: path, updated: 1788397200)
         if resumed {
-            try Data((#"{"type":"event_msg","timestamp":"2026-09-02T01:00:00Z","payload":{"type":"task_started","turn_id":"previous"}}"# + "\n" +
-                #"{"type":"event_msg","timestamp":"2026-09-02T01:01:00Z","payload":{"type":"turn_aborted","turn_id":"previous"}}"# + "\n").utf8).appendTo(path)
+            let previousEvents = [#"{"type":"event_msg","timestamp":"2026-09-02T01:00:00Z","payload":{"type":"task_started","turn_id":"previous"}}"#,
+                                  #"{"type":"event_msg","timestamp":"2026-09-02T01:01:00Z","payload":{"type":"turn_aborted","turn_id":"previous"}}"#]
+            try Data((previousEvents.joined(separator: "\n") + "\n").utf8).appendTo(path)
             try fixture.execute("INSERT INTO thread_turns VALUES('\(id)','previous',1,'interrupted',NULL,NULL)", database: "thread_history_1")
         }
-        try Data((#"{"type":"event_msg","timestamp":"2026-09-03T01:00:00Z","payload":{"type":"task_started","turn_id":"last"}}"# + "\n" +
-            #"{"type":"turn_context","payload":{"model":"test"}}"# + "\n").utf8).appendTo(path)
+        let lastEvents = [#"{"type":"event_msg","timestamp":"2026-09-03T01:00:00Z","payload":{"type":"task_started","turn_id":"last"}}"#,
+                          #"{"type":"turn_context","payload":{"model":"test"}}"#]
+        try Data((lastEvents.joined(separator: "\n") + "\n").utf8).appendTo(path)
         try fixture.execute("INSERT INTO thread_turns VALUES('\(id)','last',9,'inProgress',NULL,NULL)", database: "thread_history_1")
         return path
     }
