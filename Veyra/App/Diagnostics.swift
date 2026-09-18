@@ -163,7 +163,10 @@ enum Diagnostics {
                 // names, branches and PR URLs never reach this output.
                 var payload = result
                 if Self.reportsSources {
-                    let sources = await MonitorStore.shared.sourceDiagnostics()
+                    // This entry point runs before the store is started, so the
+                    // Codex count has to come from the read above; otherwise the
+                    // row would report a zero that means "never loaded".
+                    let sources = await MonitorStore.shared.sourceDiagnostics(codexTaskCount: incremental.tasks.count)
                     payload["sources"] = .array(sources.map { entry in
                         .object(["tool": .string(entry.tool.rawValue),
                                  "availability": .string(entry.availability.diagnosticCode),

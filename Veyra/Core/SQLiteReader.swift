@@ -129,7 +129,10 @@ final class SQLiteReadCache<Value> {
         if identity != stamp { reset(); identity = stamp }
         if reader == nil { reader = try SQLiteReader(url: url, sourceLabel: sourceLabel) }
         guard let reader else {
-            throw SQLiteReadError(kind: .unavailable, message: L10n.text("Unable to read the database."))
+            // Unreachable: the line above either throws or assigns a non-nil
+            // reader. Kept byte-identical to the pre-adapter wording so the
+            // Codex path's diagnostics stay comparable with earlier runs.
+            throw SQLiteReadError(kind: .unavailable, message: L10n.text("Unable to read the Codex database."))
         }
         let currentData = try reader.version("data_version")
         let currentSchema = try reader.version("schema_version")

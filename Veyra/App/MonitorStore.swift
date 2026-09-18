@@ -84,14 +84,27 @@ final class MonitorStore {
             return result
         }
         self.clock = clock; self.now = now; self.defaults = defaults
-        self.registry = registry ?? AgentToolRegistry(adapters: [])
+        let resolvedRegistry = registry ?? AgentToolRegistry(adapters: [])
+        self.registry = resolvedRegistry
         // Property observers do not fire during initialization, so restoring the
         // stored selection here never writes it back.
-        selectedTool = defaults.string(forKey: Self.selectedToolKey)
-            .flatMap(AgentTool.init(rawValue:)) ?? AgentTool.defaultTool
+        selectedTool = Self.restoredSelection(from: defaults.string(forKey: Self.selectedToolKey),
+                                              available: resolvedRegistry.tools)
         homePath = defaults.string(forKey: "codexHome") ?? ""
         executablePath = defaults.string(forKey: "codexExecutable") ?? ""
     }
+
+    /// A stored selection only counts when it has a tab to land on. A retired or
+    /// not-yet-registered source falls back exactly like "no history", so the
+    /// panel can never open on a source the tab bar is unable to select.
+    /// Unreachable today: `live()` registers all three cases and none is retired.
+    private static func restoredSelection(from stored: String?, available: [AgentTool]) -> AgentTool {
+        guard let tool = stored.flatMap(AgentTool.init(rawValue:)), available.contains(tool) else {
+            return AgentTool.defaultTool
+        }
+        return tool
+    }
+
     var location: CodexLocation { .resolve(homePath: homePath, executablePath: executablePath) }
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
     var unknownTasks: [TaskSnapshot] { tasks.filter { $0.activity == .unknown } }
@@ -215,12 +228,19 @@ final class MonitorStore {
     /// Machine-readable status of every tab, for the opt-in `--sources`
     /// diagnostics flag. Returns counts and field names only: never a task
     /// title, project name, branch or PR URL.
-    func sourceDiagnostics() async -> [SourceDiagnostic] {
+    ///
+    /// `codexTaskCount` is supplied by the caller because the Codex row has no
+    /// section to read: its tasks live in `tasks`, which only a *started* store
+    /// fills. An isolated entry point such as `--diagnose` never starts the
+    /// store, so it must hand over the count it read itself — otherwise the row
+    /// reports a structural zero that no reader can tell from "no tasks".
+    func sourceDiagnostics(codexTaskCount: Int? = nil) async -> [SourceDiagnostic] {
         var report: [SourceDiagnostic] = []
         for tool in availableTools {
             guard tool != .codex else {
                 report.append(SourceDiagnostic(tool: .codex, availability: codexAvailability,
-                                               quotaCapability: .supported, taskCount: tasks.count))
+                                               quotaCapability: .supported,
+                                               taskCount: codexTaskCount ?? tasks.count))
                 continue
             }
             guard let adapter = registry.adapter(for: tool) else { continue }

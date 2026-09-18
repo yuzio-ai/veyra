@@ -30,15 +30,21 @@ final class AgentToolSelectionTests: XCTestCase {
         XCTAssertEqual(makeStore(scopedDefaults()).selectedTool, .codex)
     }
 
+    /// Registry with the named auxiliary sources, so a selection test only ever
+    /// lands on a tab that exists (the built-in Codex always leads).
+    private static func registry(_ tools: AgentTool...) -> AgentToolRegistry {
+        AgentToolRegistry(adapters: tools.map { StubAgentToolAdapter($0) })
+    }
+
     func testStoredChoiceIsRestoredOnRelaunch() {
         let defaults = scopedDefaults()
         defaults.set(AgentTool.qwenWork.rawValue, forKey: MonitorStore.selectedToolKey)
-        XCTAssertEqual(makeStore(defaults).selectedTool, .qwenWork)
+        XCTAssertEqual(makeStore(defaults, registry: Self.registry(.qwenWork)).selectedTool, .qwenWork)
     }
 
     func testChangingTheSelectionPersistsIt() {
         let defaults = scopedDefaults()
-        let store = makeStore(defaults)
+        let store = makeStore(defaults, registry: Self.registry(.workBuddy))
         store.selectedTool = .workBuddy
         XCTAssertEqual(defaults.string(forKey: MonitorStore.selectedToolKey), "workBuddy")
     }
@@ -63,7 +69,7 @@ final class AgentToolSelectionTests: XCTestCase {
     func testReassigningTheSameToolDoesNotRewriteTheKey() {
         let defaults = scopedDefaults()
         defaults.set(AgentTool.workBuddy.rawValue, forKey: MonitorStore.selectedToolKey)
-        let store = makeStore(defaults)
+        let store = makeStore(defaults, registry: Self.registry(.workBuddy))
         defaults.removeObject(forKey: MonitorStore.selectedToolKey)
         store.selectedTool = .workBuddy
         XCTAssertNil(defaults.string(forKey: MonitorStore.selectedToolKey),
@@ -78,17 +84,20 @@ final class AgentToolSelectionTests: XCTestCase {
         XCTAssertNotEqual(store.availableTools, AgentTool.allCases)
     }
 
-    func testStoredSelectionForAnUnregisteredSourceIsKeptRatherThanClamped() {
-        // Current behaviour recorded rather than endorsed: a stored tool with no
-        // tab stays selected. Unreachable today, because all three cases ship in
-        // `live()` and `AgentTool` has no retired members — but if a source is
-        // ever dropped, this line decides whether the launch lands on an empty
-        // tab. Raising it here rather than letting it be discovered by a user.
+    func testStoredSelectionWithoutATabFallsBackToTheDefaultTool() {
+        // `review-01` R2. A stored tool with no tab must not stay selected, or
+        // the panel would render a source the segmented control cannot
+        // highlight. Unreachable today — all three cases ship in `live()` and no
+        // case is retired — so this guards a future source removal. The stored
+        // value is left in place rather than erased, matching how an unmappable
+        // value is treated: if the source comes back, so does the choice.
         let defaults = scopedDefaults()
         defaults.set(AgentTool.workBuddy.rawValue, forKey: MonitorStore.selectedToolKey)
         let store = makeStore(defaults)
-        XCTAssertEqual(store.selectedTool, .workBuddy)
+        XCTAssertEqual(store.selectedTool, .codex)
         XCTAssertEqual(store.availableTools, [.codex])
+        XCTAssertEqual(defaults.string(forKey: MonitorStore.selectedToolKey), "workBuddy",
+                       "a selection with no tab is ignored at launch, not erased")
     }
 
     func testCodexKeepsItsOwnNoticesWhileEveryOtherSourceUsesTheStatusCard() {
@@ -166,6 +175,25 @@ final class AgentToolSelectionTests: XCTestCase {
         let report = await store.sourceDiagnostics()
         XCTAssertEqual(report.map(\.tool), [.codex])
         XCTAssertEqual(report.first?.taskCount, 0)
+    }
+
+    func testSourceDiagnosticsReportsTheCodexCountItIsGiven() async {
+        // `review-01` R1. `--diagnose` reads the Codex records itself and never
+        // starts the store, so the row must take that count instead of reading
+        // `tasks`, which is structurally empty in that launch context. Without a
+        // way to pass it, the field cannot be told apart from "no tasks".
+        let store = makeStore(scopedDefaults())
+        let report = await store.sourceDiagnostics(codexTaskCount: 3)
+        XCTAssertEqual(report.first(where: { $0.tool == .codex })?.taskCount, 3)
+    }
+
+    func testSourceDiagnosticsFallsBackToTheLiveCodexTasksWhenNoCountIsPassed() async {
+        // A started store's `tasks` is the Codex tab's real source, so omitting
+        // the count must keep reporting it.
+        let store = makeStore(scopedDefaults())
+        store.tasks = [Self.snapshot(id: "a", activity: .running)]
+        let report = await store.sourceDiagnostics()
+        XCTAssertEqual(report.first(where: { $0.tool == .codex })?.taskCount, 1)
     }
 
     private static func snapshot(id: String, activity: TaskActivity) -> TaskSnapshot {
