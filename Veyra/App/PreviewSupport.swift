@@ -19,34 +19,6 @@ enum PreviewSupport {
         case resetCreditsOnly = "reset-credits-only"
         case planProLite = "plan-prolite", planBusiness = "plan-business", planEnterprise = "plan-enterprise"
         case planUnknown = "plan-unknown"
-        case workBuddyTasks = "workbuddy-tasks", workBuddyMissing = "workbuddy-missing"
-        case workBuddyUnreadable = "workbuddy-unreadable"
-
-        /// Tool this scenario selects. Nil keeps the Codex tab, which is what
-        /// every pre-existing scenario does.
-        var previewTool: AgentTool? {
-            switch self {
-            case .workBuddyTasks, .workBuddyMissing, .workBuddyUnreadable: .workBuddy
-            default: nil
-            }
-        }
-
-        /// Availability the seeded section reports. `ready` covers the fixture
-        /// that does have tasks.
-        var previewAvailability: AgentToolAvailability {
-            switch self {
-            case .workBuddyMissing: .notInstalled
-            case .workBuddyUnreadable: .unreadable(.openFailed)
-            default: .ready
-            }
-        }
-
-        var previewTasks: [AdapterTask] {
-            switch self {
-            case .workBuddyTasks: PreviewSupport.workBuddyFixture()
-            default: []
-            }
-        }
     }
 
     enum SettingsScenario: String, CaseIterable {
@@ -83,7 +55,7 @@ enum PreviewSupport {
         (view as? NSTextField).map { $0.isEditable ? [$0] : [] } ?? view.subviews.flatMap { settingsFields(in: $0) }
     }
 
-    nonisolated static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
+    static let referenceDate = Date(timeIntervalSince1970: 1_788_410_400)
     private static var retainedWindow: NSWindow?
 
     static var menuScenario: Scenario? {
@@ -250,35 +222,8 @@ enum PreviewSupport {
                                         tokens: TokenUsage(input: 5_230_000, output: 57_500, total: 5_290_000), activity: .running)]
         case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
              .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
-             .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly,
-             .workBuddyTasks, .workBuddyMissing, .workBuddyUnreadable:
+             .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly:
             break
-        }
-        // Select the scenario's tab. Scenarios without one reset the selection
-        // explicitly: `configure` runs repeatedly over a single store, so an
-        // earlier non-Codex scenario would otherwise leak into later frames.
-        store.selectedTool = scenario.previewTool ?? .codex
-        if let tool = scenario.previewTool {
-            store.applyPreviewTasks(scenario.previewTasks, for: tool, availability: scenario.previewAvailability)
-        }
-    }
-
-    /// WorkBuddy fixture, mirroring what its adapter maps: a title, a model name,
-    /// an updated stamp, and deliberately empty tokens. Only `status == 'working'`
-    /// maps to running, and no start time exists in that database, so the running
-    /// row shows an unavailable elapsed time exactly as the adapter produces it.
-    nonisolated private static func workBuddyFixture() -> [AdapterTask] {
-        let rows: [(String, String, String, TaskActivity, TimeInterval)] = [
-            ("demo-wb-1", "重构额度读取缓存并为并行会话补充回归测试", "deepseek-v4.1-flash", .running, -90),
-            ("demo-wb-2", "整理协同底座选型的对比材料", "glm-5.3", .unknown, -3_600),
-            ("demo-wb-3", "检查导出脚本的时间戳单位", "hy4-preview-f", .unknown, -172_800)
-        ]
-        return rows.map { row in
-            let updated = referenceDate.addingTimeInterval(row.4)
-            return AdapterTask(snapshot: TaskSnapshot(id: row.0, title: row.1, model: row.2, source: .desktop,
-                                                      parentID: nil, startedAt: nil, updatedAt: updated,
-                                                      tokens: TokenUsage(), activity: row.3),
-                               caption: L10n.text("Updated \(AgentToolFormat.timestamp(updated))"))
         }
     }
 
@@ -323,12 +268,7 @@ enum PreviewSupport {
                     NSApp.terminate(nil)
                     return
                 }
-                // Fixture adapters, not the live ones: previews must never read a
-                // real user database, but the tab bar still needs every tool so
-                // the new tabs can be checked under all four appearances. The
-                // suite-scoped defaults keep the saved tab out of the fixtures.
-                let store = MonitorStore(defaults: UserDefaults(suiteName: "veyra-preview")!,
-                                        registry: AgentToolRegistry.preview())
+                let store = MonitorStore()
                 var results: [[String: Any]] = []
                 let scenarios = CommandLine.arguments.contains("--preview-settings-only") ? [] : Scenario.allCases
                 for scenario in scenarios {
@@ -363,11 +303,7 @@ enum PreviewSupport {
                         // Layout regression budgets for these fixed fixtures only;
                         // Include the reset-credit card, source timestamp and calibration controls;
                         // production height always comes from the actual content.
-                        // `single` measured 540 before the tab bar; the segmented picker row
-                        // adds a fixed 30pt to the header, so its budget keeps the same 20pt
-                        // slack. Taller fixtures are capped by PanelSizing instead, which is
-                        // why they do not need re-baselining.
-                        let heightBudget: CGFloat = scenario == .single ? 590 : 776
+                        let heightBudget: CGFloat = scenario == .single ? 560 : 776
                         guard measured.panelHeight <= heightBudget else {
                             throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name): \(measured.panelHeight) exceeds \(heightBudget)")
                         }

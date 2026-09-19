@@ -31,22 +31,16 @@ struct MonitorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // The tab bar is measured with the header, so `PanelSizing` needs no
-            // extra field and its existing tests keep their assumptions.
-            VStack(spacing: 0) {
-                header
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("monitor.header")
-                toolTabBar
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self, of: { ceil($0.size.height) }) { headerHeight = $0 }
+            header
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self, of: { ceil($0.size.height) }) { headerHeight = $0 }
+                .accessibilityIdentifier("monitor.header")
             ScrollView {
                 // Eager layout is intentional: measure the one real content tree,
                 // including offscreen rows and disclosures, not a lazy estimate.
                 VStack(alignment: .leading, spacing: 16) {
-                    tasksSection(presentation)
-                    quotaSection(presentation)
+                    tasksSection
+                    quotaSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -81,31 +75,9 @@ struct MonitorPanel: View {
         .environment(\.monitorPanelActive, store.panelVisible || store.isPreview)
         .foregroundStyle(.primary)
         .onChange(of: sizing, initial: true) { _, value in onSizingChange?(value) }
-        .onChange(of: presentation.tasks.map(\.id)) { _, ids in
+        .onChange(of: store.tasks.map(\.id)) { _, ids in
             expandedTaskIDs.formIntersection(ids)
         }
-    }
-
-    private var presentation: ToolPresentation { store.presentation(for: store.selectedTool) }
-
-    /// Source tabs. A segmented control is used unchanged from the system, so
-    /// four-state appearance and keyboard/VoiceOver semantics come for free, and
-    /// it is deliberately not wrapped in `monitorCard()`: the control draws its
-    /// own selection background and stacking glass on top would mix the two.
-    private var toolTabBar: some View {
-        Picker("", selection: $store.selectedTool) {
-            ForEach(store.availableTools, id: \.self) { tool in
-                Text(tool.displayName)
-                    .tag(tool)
-                    .accessibilityIdentifier("monitor.toolTab.\(tool.rawValue)")
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .accessibilityLabel(L10n.text("Agent tool tabs"))
-        .accessibilityIdentifier("monitor.toolTabs")
-        .padding(.horizontal, 16)
-        .padding(.bottom, 6)
     }
 
     private var sizing: PanelSizing {
@@ -132,45 +104,30 @@ struct MonitorPanel: View {
         .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
-    @ViewBuilder
-    private func quotaSection(_ p: ToolPresentation) -> some View {
-        if p.quotaCapability == .unsupported {
-            // AC-7: a source without a readable quota shows a state, never a
-            // zero, a placeholder figure, or a local token count dressed up as a
-            // subscription quota.
-            VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("Quota")
-                Label(L10n.text("No readable quota source for this tool."), systemImage: "info.circle")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .padding(.horizontal, 14).monitorCard()
-                    .accessibilityIdentifier("monitor.quotaUnavailable")
-            }
-        } else {
+    private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let config = p.modelConfig, let provider = config.customProvider {
+            if let config = store.modelConfig, let provider = config.customProvider {
                 sectionTitle("Quota")
                 customModelCard(name: config.model ?? provider)
             } else {
                 HStack(spacing: 7) {
                     sectionTitle("Quota")
-                    if p.quotaBusy {
+                    if store.quotaBusy {
                         ProgressView().controlSize(.small).scaleEffect(0.8)
                             .frame(width: 14, height: 14)
                             .accessibilityLabel("Syncing quota online")
                             .accessibilityIdentifier("monitor.quotaProgress")
                     }
                     Spacer()
-                    if let plan = p.quota.account?.planDisplayName {
+                    if let plan = store.quota.account?.planDisplayName {
                         Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
                             .tracking(0.5).lineLimit(1).help(plan)
                             .padding(.horizontal, 7).padding(.vertical, 4)
                             .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
                     }
-                    MonitorTimeline(interval: 1, enabled: p.nextCalibrationAt != nil, deadline: p.nextCalibrationAt) { now in
+                    MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
                         HStack(spacing: 7) {
-                            if let next = p.nextCalibrationAt, next > now {
+                            if let next = store.nextCalibrationAt, next > now {
                                 Text(L10n.text("Sync after \(next.formatted(date: .omitted, time: .standard))"))
                                     .font(.system(size: 10)).foregroundStyle(.secondary)
                             }
@@ -182,12 +139,12 @@ struct MonitorPanel: View {
                             .help("Sync quota online")
                             .accessibilityLabel("Sync quota")
                             .accessibilityIdentifier("monitor.calibrate")
-                            .disabled(p.quotaBusy || p.nextCalibrationAt.map { now < $0 } == true)
+                            .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
                         }
                     }
                 }
-                ResetCreditsCard(snapshot: p.quota.resetCredits, isLoading: p.quotaBusy)
-                if let snapshot = p.quota.snapshot, !snapshot.windows.isEmpty {
+                ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
+                if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
                     let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
                         if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
                     }
@@ -209,7 +166,7 @@ struct MonitorPanel: View {
                         }
                         .padding(14).monitorCard()
                     }
-                } else if p.quotaBusy {
+                } else if store.quotaBusy {
                     HStack(spacing: 9) {
                         ProgressView().controlSize(.small)
                         Text("Syncing quota online…").font(.system(size: 12)).foregroundStyle(.secondary)
@@ -218,10 +175,9 @@ struct MonitorPanel: View {
                     Text("No local quota records").font(.system(size: 12)).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
                 }
-                if let warning = p.localQuotaWarning { notice(warning) }
-                if let error = p.quota.error { notice(error) }
+                if let warning = store.localQuotaWarning { notice(warning) }
+                if let error = store.quota.error { notice(error) }
             }
-        }
         }
     }
 
@@ -233,31 +189,25 @@ struct MonitorPanel: View {
             .padding(.horizontal, 14).monitorCard()
     }
 
-    private func tasksSection(_ p: ToolPresentation) -> some View {
-        let groups = TaskGroup.make(tasks: p.tasks, ancestors: p.taskAncestors)
+    private var tasksSection: some View {
+        let groups = TaskGroup.make(tasks: store.tasks, ancestors: store.taskAncestors)
         let runningGroups = groups.filter(\.isRunning)
         let unknownGroups = groups.filter { !$0.isRunning }
-        // Auxiliary sources list confirmed running tasks only, so they group the
-        // running set on its own. Filtering whole groups instead would keep a
-        // running parent's unconfirmed rows alongside it.
-        let listedGroups = TaskGroup.make(tasks: p.runningTasks, ancestors: p.taskAncestors)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 sectionTitle("Running tasks")
-                // Every tab lists confirmed running tasks only, so the badge
-                // always counts the rows that are actually rendered.
-                Text("\(p.headlineCount)")
+                Text("\(store.runningTasks.count)")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
                     .background(.primary.opacity(0.08), in: Capsule())
-                if p.tasksBusy {
+                if store.tasksBusy {
                     ProgressView().controlSize(.small).scaleEffect(0.8)
                         .frame(width: 14, height: 14)
                         .accessibilityLabel("Refreshing running tasks")
                         .accessibilityIdentifier("monitor.tasksProgress")
                 }
                 Spacer()
-                PollingInfoView(seconds: p.pollingSeconds)
+                PollingInfoView(seconds: store.pollingSeconds)
                 Button { Task { await store.refreshAll() } } label: {
                     Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary).frame(width: 18, height: 18)
@@ -266,33 +216,14 @@ struct MonitorPanel: View {
                 .help("Refresh local tasks and quota snapshots")
                 .accessibilityLabel("Refresh")
                 .accessibilityIdentifier("monitor.refresh")
-                .disabled(p.tasksBusy)
+                .disabled(store.tasksBusy)
             }
             .zIndex(1)
-            if let status = p.sourceStatusMessage {
-                // A source that is absent or unreadable says so; it is never
-                // rendered as an empty list.
+            if store.runningTasks.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: p.availability.isReady ? "tray" : "exclamationmark.circle")
+                    Image(systemName: !store.hasTaskSnapshot ? "ellipsis" : "checkmark.circle")
                         .font(.system(size: 20, weight: .light)).foregroundStyle(.tertiary)
-                    Text(status)
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
-                .accessibilityIdentifier("monitor.taskStatus")
-            } else if p.rendersAvailabilityCard {
-                // Running tasks only. A source that cannot report that state
-                // never reaches this branch: `sourceStatusMessage` answers for it
-                // above, which is also what keeps the section off an empty list.
-                ForEach(listedGroups) { group in
-                    TaskGroupCard(group: group, expansion: expandedBinding, captions: p.captions)
-                }
-            } else {
-            if p.runningTasks.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: !p.hasTaskSnapshot ? "ellipsis" : "checkmark.circle")
-                        .font(.system(size: 20, weight: .light)).foregroundStyle(.tertiary)
-                    Text(!p.hasTaskSnapshot && p.taskError == nil ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks"))
+                    Text(!store.hasTaskSnapshot && store.taskError == nil ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks"))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
             } else {
@@ -312,9 +243,8 @@ struct MonitorPanel: View {
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
-            }
-            if let error = p.taskError { notice(error) }
-            if let warning = p.taskWarning { notice(warning.message) }
+            if let error = store.taskError { notice(error) }
+            if let warning = store.taskWarning { notice(warning.message) }
         }
     }
 
@@ -475,9 +405,6 @@ private struct QuotaRingView: View {
 private struct TaskGroupCard: View {
     let group: TaskGroup
     let expansion: (String) -> Binding<Bool>
-    /// Row annotations supplied by the source adapter. Empty for Codex, which
-    /// therefore builds exactly the rows it built before tabs existed.
-    var captions: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -488,8 +415,7 @@ private struct TaskGroupCard: View {
                 }
                 Group {
                     if let task = row.task {
-                        TaskRow(task: task, parentTitle: row.parentTitle, expanded: expansion(task.id),
-                                caption: captions[row.id])
+                        TaskRow(task: task, parentTitle: row.parentTitle, expanded: expansion(task.id))
                     } else {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(row.reference.title).font(.system(size: 13, weight: .semibold))
@@ -516,9 +442,6 @@ private struct TaskRow: View {
     let task: TaskSnapshot
     let parentTitle: String?
     @Binding var expanded: Bool
-    /// Source-specific line: a project name, a last-updated stamp. Nil for Codex,
-    /// so no extra view is built and its rows measure exactly as before.
-    var caption: String? = nil
     @Environment(\.monitorReferenceDate) private var referenceDate
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -535,10 +458,6 @@ private struct TaskRow: View {
                 Spacer(minLength: 0)
                 Circle().fill(task.activity == .running ? monitorAccent : .orange).frame(width: 6, height: 6).padding(.top, 5)
                     .accessibilityLabel(task.activity == .running ? L10n.text("Running") : L10n.text("Unconfirmed status"))
-            }
-            if let caption {
-                Text(caption).font(.system(size: 11)).foregroundStyle(.secondary)
-                    .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(caption)
             }
             if let progress = task.progress {
                 Text(L10n.text("\(progress.label): \(progress.text)"))

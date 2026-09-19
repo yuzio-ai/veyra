@@ -3,17 +3,7 @@ import Observation
 
 @MainActor @Observable
 final class MonitorStore {
-    static let shared = MonitorStore(registry: AgentToolRegistry.live())
-    /// UserDefaults key holding the last selected tab (`AgentTool.rawValue`).
-    static let selectedToolKey = "selectedAgentTool"
-    /// Which source the panel shows. Restored on launch; falls back to
-    /// `AgentTool.defaultTool` when nothing valid is stored.
-    var selectedTool: AgentTool {
-        didSet {
-            guard oldValue != selectedTool else { return }
-            persistSelectedTool()
-        }
-    }
+    static let shared = MonitorStore()
     var quota = QuotaDisplayState() { didSet { updateMenuLabel() } }
     var tasks: [TaskSnapshot] = [] { didSet { updateMenuLabel() } }
     var taskAncestors: [TaskReference] = []
@@ -57,11 +47,6 @@ final class MonitorStore {
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let clock: PollingClock
     @ObservationIgnored private let defaults: UserDefaults
-    /// Auxiliary sources. Empty by default so no unit test or preview reaches a
-    /// real user database; the running app injects `AgentToolRegistry.live()`.
-    @ObservationIgnored private let registry: AgentToolRegistry
-    /// Codex keeps its own fields; every other source stores its tasks here.
-    private var sections: [AgentTool: AgentToolSection] = [:]
     @ObservationIgnored private lazy var scheduler = PollingScheduler(clock: clock) { [weak self] in
         await self?.refreshLocal()
     }
@@ -71,8 +56,7 @@ final class MonitorStore {
          clock: PollingClock = .continuous(), now: @escaping @MainActor () -> Date = Date.init,
          defaults: UserDefaults = .standard,
          inspectConfiguration: @escaping @Sendable (String, String) async -> CodexConfigurationReport = CodexConfiguration.inspect,
-         validatePath: @escaping @Sendable (String, CodexPathField) async -> CodexPathError? = CodexConfiguration.validate,
-         registry: AgentToolRegistry? = nil) {
+         validatePath: @escaping @Sendable (String, CodexPathField) async -> CodexPathError? = CodexConfiguration.validate) {
         self.inspectConfiguration = inspectConfiguration
         self.validatePath = validatePath
         let reader = LocalTaskReader()
@@ -84,181 +68,14 @@ final class MonitorStore {
             return result
         }
         self.clock = clock; self.now = now; self.defaults = defaults
-        let resolvedRegistry = registry ?? AgentToolRegistry(adapters: [])
-        self.registry = resolvedRegistry
-        // Property observers do not fire during initialization, so restoring the
-        // stored selection here never writes it back.
-        selectedTool = Self.restoredSelection(from: defaults.string(forKey: Self.selectedToolKey),
-                                              available: resolvedRegistry.tools)
         homePath = defaults.string(forKey: "codexHome") ?? ""
         executablePath = defaults.string(forKey: "codexExecutable") ?? ""
     }
-
-    /// A stored selection only counts when it has a tab to land on. A retired or
-    /// not-yet-registered source falls back exactly like "no history", so the
-    /// panel can never open on a source the tab bar is unable to select.
-    /// Unreachable today: `live()` registers all three cases and none is retired.
-    private static func restoredSelection(from stored: String?, available: [AgentTool]) -> AgentTool {
-        guard let tool = stored.flatMap(AgentTool.init(rawValue:)), available.contains(tool) else {
-            return AgentTool.defaultTool
-        }
-        return tool
-    }
-
     var location: CodexLocation { .resolve(homePath: homePath, executablePath: executablePath) }
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
     var unknownTasks: [TaskSnapshot] { tasks.filter { $0.activity == .unknown } }
-    /// Interval shown to the user and used by the single scheduler. Both stay
-    /// driven by Codex activity: the cadence is part of the Codex tab's existing
-    /// behaviour, so another source having a running task must not change it.
     var pollingSeconds: Int {
         Int(TaskPollingPolicy.interval(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty).components.seconds)
-    }
-
-    // MARK: - Per-source presentation
-
-    /// Tab order, which is registry order rather than `AgentTool.allCases`.
-    var availableTools: [AgentTool] { registry.tools }
-
-    /// Everything one tab renders. The Codex branch maps the store's own fields
-    /// one to one, so its rendering cannot drift from the pre-tab behaviour;
-    /// other sources map their section.
-    func presentation(for tool: AgentTool) -> ToolPresentation {
-        guard tool != .codex else {
-            return ToolPresentation(tool: .codex,
-                                    availability: codexAvailability,
-                                    quotaCapability: .supported,
-                                    quota: quota,
-                                    tasks: tasks,
-                                    taskAncestors: taskAncestors,
-                                    hasTaskSnapshot: hasTaskSnapshot,
-                                    taskError: taskError,
-                                    taskWarning: taskWarning,
-                                    quotaBusy: quotaBusy,
-                                    tasksBusy: tasksBusy,
-                                    localQuotaWarning: localQuotaWarning,
-                                    nextCalibrationAt: nextCalibrationAt,
-                                    modelConfig: modelConfig,
-                                    pollingSeconds: pollingSeconds,
-                                    captions: [:],
-                                    rendersAvailabilityCard: false)
-        }
-        let section = section(for: tool)
-        return ToolPresentation(tool: tool,
-                                availability: section.availability,
-                                quotaCapability: .unsupported,
-                                quota: QuotaDisplayState(),
-                                tasks: section.tasks,
-                                taskAncestors: [],
-                                hasTaskSnapshot: section.hasSnapshot,
-                                taskError: nil,
-                                taskWarning: nil,
-                                quotaBusy: false,
-                                tasksBusy: section.busy,
-                                localQuotaWarning: nil,
-                                nextCalibrationAt: nil,
-                                modelConfig: nil,
-                                pollingSeconds: pollingSeconds,
-                                captions: section.captions,
-                                rendersAvailabilityCard: true)
-    }
-
-    private var codexAvailability: AgentToolAvailability {
-        switch configurationState {
-        case .notFound: .notInstalled
-        case .invalid(let field): field == .home ? .notInstalled : .unreadable(.openFailed)
-        case .detecting: .ready
-        case .valid: taskError == nil ? .ready : .unreadable(.openFailed)
-        }
-    }
-
-    private func section(for tool: AgentTool) -> AgentToolSection {
-        if let existing = sections[tool] { return existing }
-        let section = AgentToolSection()
-        sections[tool] = section
-        return section
-    }
-
-    private func persistSelectedTool() {
-        guard !isPreview else { return }
-        defaults.set(selectedTool.rawValue, forKey: Self.selectedToolKey)
-    }
-
-    /// Polls every registered auxiliary source on the shared scheduler tick, so a
-    /// tab switch never shows a stale list.
-    private func refreshSources() async {
-        for tool in registry.auxiliaryTools {
-            guard let adapter = registry.adapter(for: tool) else { continue }
-            let section = section(for: tool)
-            if !section.hasSnapshot { section.busy = true }
-            apply(await adapter.readTasks(), to: section)
-        }
-    }
-
-    private func apply(_ result: AdapterTaskResult, to section: AgentToolSection) {
-        switch result {
-        case .tasks(let rows):
-            section.tasks = rows.map(\.snapshot)
-            section.captions = rows.reduce(into: [:]) { captions, row in
-                if let caption = row.caption { captions[row.snapshot.id] = caption }
-            }
-            section.availability = .ready
-        case .empty, .unavailable(.ready):
-            section.tasks = []
-            section.captions = [:]
-            section.availability = .ready
-        case .unavailable(let availability):
-            // An unreadable source shows its status, never a stale or empty list.
-            section.tasks = []
-            section.captions = [:]
-            section.availability = availability
-        }
-        section.hasSnapshot = true
-        section.updatedAt = now()
-        section.busy = false
-    }
-
-    /// Seeding hook for previews and diagnostics, which supply deterministic
-    /// fixtures instead of reading real user data.
-    func applyPreviewTasks(_ rows: [AdapterTask], for tool: AgentTool, availability: AgentToolAvailability = .ready) {
-        apply(availability == .ready ? (rows.isEmpty ? .empty : .tasks(rows)) : .unavailable(availability),
-              to: section(for: tool))
-    }
-
-    /// Machine-readable status of every tab, for the opt-in `--sources`
-    /// diagnostics flag. Returns counts and field names only: never a task
-    /// title, project name, branch or PR URL.
-    ///
-    /// `codexTaskCount` is supplied by the caller because the Codex row has no
-    /// section to read: its tasks live in `tasks`, which only a *started* store
-    /// fills. An isolated entry point such as `--diagnose` never starts the
-    /// store, so it must hand over the count it read itself — otherwise the row
-    /// reports a structural zero that no reader can tell from "no tasks".
-    func sourceDiagnostics(codexTaskCount: Int? = nil) async -> [SourceDiagnostic] {
-        var report: [SourceDiagnostic] = []
-        for tool in availableTools {
-            guard tool != .codex else {
-                report.append(SourceDiagnostic(tool: .codex, availability: codexAvailability,
-                                               quotaCapability: .supported,
-                                               taskCount: codexTaskCount ?? tasks.count))
-                continue
-            }
-            guard let adapter = registry.adapter(for: tool) else { continue }
-            // Probe first, so an absent application is reported as absent rather
-            // than as an open failure, and nothing is opened for nothing.
-            var availability = await adapter.probe()
-            var count = 0
-            if availability.isReady {
-                switch await adapter.readTasks() {
-                case .tasks(let rows): count = rows.count
-                case .empty: break
-                case .unavailable(let reason): availability = reason
-                }
-            }
-            report.append(SourceDiagnostic(tool: tool, availability: availability,
-                                           quotaCapability: adapter.quotaCapability, taskCount: count))
-        }
-        return report
     }
 
     var menuAccessibilityLabel: String {
@@ -354,7 +171,6 @@ final class MonitorStore {
             if tasks != uncertain { tasks = uncertain }
         }
         if tasksBusy { tasksBusy = false }
-        await refreshSources()
         scheduler.update(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty)
     }
     @discardableResult

@@ -113,11 +113,6 @@ enum Diagnostics {
         }
     }
 
-    /// Opt-in: additionally report every registered source's availability. Off by
-    /// default so the established diagnostics JSON shape — and the assertions in
-    /// `scripts/test_diagnostics.py` that read it — stay unchanged.
-    static var reportsSources: Bool { CommandLine.arguments.contains("--sources") }
-
     /// Opt-in, local integration check. Omits credentials, email, titles and transcript content.
     static func run() {
         MonitorStore.shared.isPreview = true
@@ -159,22 +154,7 @@ enum Diagnostics {
                     ]) })
                 ]
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-                // Counts and field names only: a source's task titles, project
-                // names, branches and PR URLs never reach this output.
-                var payload = result
-                if Self.reportsSources {
-                    // This entry point runs before the store is started, so the
-                    // Codex count has to come from the read above; otherwise the
-                    // row would report a zero that means "never loaded".
-                    let sources = await MonitorStore.shared.sourceDiagnostics(codexTaskCount: incremental.tasks.count)
-                    payload["sources"] = .array(sources.map { entry in
-                        .object(["tool": .string(entry.tool.rawValue),
-                                 "availability": .string(entry.availability.diagnosticCode),
-                                 "quotaCapability": .string(entry.quotaCapability.diagnosticCode),
-                                 "taskCount": .number(Double(entry.taskCount))])
-                    })
-                }
-                let data = try encoder.encode(JSONValue.object(payload))
+                let data = try encoder.encode(JSONValue.object(result))
                 FileHandle.standardOutput.write(data)
                 FileHandle.standardOutput.write(Data("\n".utf8))
             } catch { print(L10n.text("Diagnostics failed: unable to complete local diagnostics.")) }
