@@ -21,23 +21,21 @@ enum PreviewSupport {
         case planUnknown = "plan-unknown"
         case workBuddyTasks = "workbuddy-tasks", workBuddyMissing = "workbuddy-missing"
         case workBuddyUnreadable = "workbuddy-unreadable"
-        case qwenTasks = "qwen-tasks", qwenMissing = "qwen-missing"
 
         /// Tool this scenario selects. Nil keeps the Codex tab, which is what
         /// every pre-existing scenario does.
         var previewTool: AgentTool? {
             switch self {
             case .workBuddyTasks, .workBuddyMissing, .workBuddyUnreadable: .workBuddy
-            case .qwenTasks, .qwenMissing: .qwenWork
             default: nil
             }
         }
 
-        /// Availability the seeded section reports. `ready` covers the fixtures
-        /// that do have tasks.
+        /// Availability the seeded section reports. `ready` covers the fixture
+        /// that does have tasks.
         var previewAvailability: AgentToolAvailability {
             switch self {
-            case .workBuddyMissing, .qwenMissing: .notInstalled
+            case .workBuddyMissing: .notInstalled
             case .workBuddyUnreadable: .unreadable(.openFailed)
             default: .ready
             }
@@ -46,7 +44,6 @@ enum PreviewSupport {
         var previewTasks: [AdapterTask] {
             switch self {
             case .workBuddyTasks: PreviewSupport.workBuddyFixture()
-            case .qwenTasks: PreviewSupport.qwenFixture()
             default: []
             }
         }
@@ -254,7 +251,7 @@ enum PreviewSupport {
         case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
              .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
              .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly,
-             .workBuddyTasks, .workBuddyMissing, .workBuddyUnreadable, .qwenTasks, .qwenMissing:
+             .workBuddyTasks, .workBuddyMissing, .workBuddyUnreadable:
             break
         }
         // Select the scenario's tab. Scenarios without one reset the selection
@@ -282,28 +279,6 @@ enum PreviewSupport {
                                                       parentID: nil, startedAt: nil, updatedAt: updated,
                                                       tokens: TokenUsage(), activity: row.3),
                                caption: L10n.text("Updated \(AgentToolFormat.timestamp(updated))"))
-        }
-    }
-
-    /// Qwen Work fixture. Its database has neither a status nor a model column,
-    /// so every row is unconfirmed and the caption carries the project, branch
-    /// and PR URL that AC-6 asks to show when available.
-    nonisolated private static func qwenFixture() -> [AdapterTask] {
-        let rows: [(String, String, TimeInterval, String?, String?, String?)] = [
-            ("demo-qw-1", "给结算服务补上幂等校验", -1_200, "结算中台", "feat/idempotency", nil),
-            ("demo-qw-2", "修复导出报表的空指针", -7_200, "数据平台", "fix/export-npe",
-             "https://example.invalid/pull/42"),
-            ("demo-qw-3", "梳理网关限流配置", -259_200, "基础架构", nil, nil)
-        ]
-        return rows.map { row in
-            let updated = referenceDate.addingTimeInterval(row.2)
-            return AdapterTask(snapshot: TaskSnapshot(id: row.0, title: row.1, model: nil, source: .desktop,
-                                                      parentID: nil, startedAt: nil, updatedAt: updated,
-                                                      tokens: TokenUsage(), activity: .unknown),
-                               caption: AgentToolFormat.joined([
-                                   L10n.text("Updated \(AgentToolFormat.timestamp(updated))"),
-                                   row.3, row.4, row.5
-                               ]))
         }
     }
 

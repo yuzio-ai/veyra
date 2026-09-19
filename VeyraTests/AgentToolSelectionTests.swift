@@ -23,7 +23,7 @@ final class AgentToolSelectionTests: XCTestCase {
 
     func testDefaultToolIsCodex() {
         XCTAssertEqual(AgentTool.defaultTool, .codex)
-        XCTAssertEqual(AgentTool.allCases.count, 3, "a new tool must be added to the registry, not to allCases only")
+        XCTAssertEqual(AgentTool.allCases.count, 2, "a new tool must be added to the registry, not to allCases only")
     }
 
     func testFirstLaunchWithoutStoredChoiceSelectsCodex() {
@@ -38,8 +38,8 @@ final class AgentToolSelectionTests: XCTestCase {
 
     func testStoredChoiceIsRestoredOnRelaunch() {
         let defaults = scopedDefaults()
-        defaults.set(AgentTool.qwenWork.rawValue, forKey: MonitorStore.selectedToolKey)
-        XCTAssertEqual(makeStore(defaults, registry: Self.registry(.qwenWork)).selectedTool, .qwenWork)
+        defaults.set(AgentTool.workBuddy.rawValue, forKey: MonitorStore.selectedToolKey)
+        XCTAssertEqual(makeStore(defaults, registry: Self.registry(.workBuddy)).selectedTool, .workBuddy)
     }
 
     func testChangingTheSelectionPersistsIt() {
@@ -87,10 +87,13 @@ final class AgentToolSelectionTests: XCTestCase {
     func testStoredSelectionWithoutATabFallsBackToTheDefaultTool() {
         // `review-01` R2. A stored tool with no tab must not stay selected, or
         // the panel would render a source the segmented control cannot
-        // highlight. Unreachable today — all three cases ship in `live()` and no
-        // case is retired — so this guards a future source removal. The stored
-        // value is left in place rather than erased, matching how an unmappable
-        // value is treated: if the source comes back, so does the choice.
+        // highlight. A stored *case* with no tab is still unreachable in the
+        // shipped app (both cases ship in `live()`); the removal this guards
+        // became concrete in `fix/03`, which retired a case outright — that path
+        // is a different one and is covered by
+        // `testStoredChoiceForARetiredToolFallsBackToCodex`. The stored value is
+        // left in place rather than erased, matching how an unmappable value is
+        // treated: if the source comes back, so does the choice.
         let defaults = scopedDefaults()
         defaults.set(AgentTool.workBuddy.rawValue, forKey: MonitorStore.selectedToolKey)
         let store = makeStore(defaults)
@@ -98,6 +101,20 @@ final class AgentToolSelectionTests: XCTestCase {
         XCTAssertEqual(store.availableTools, [.codex])
         XCTAssertEqual(defaults.string(forKey: MonitorStore.selectedToolKey), "workBuddy",
                        "a selection with no tab is ignored at launch, not erased")
+    }
+
+    func testStoredChoiceForARetiredToolFallsBackToCodex() {
+        // `fix/03` retired Qwen Work, so `"qwenWork"` is now a stored value that
+        // maps to no case at all. This is not hypothetical: it is the upgrade
+        // path for anyone who had that tab selected. It must land on the default
+        // tool and, like every other unmappable value, must not rewrite the key.
+        let defaults = scopedDefaults()
+        defaults.set("qwenWork", forKey: MonitorStore.selectedToolKey)
+        let store = makeStore(defaults)
+        XCTAssertEqual(store.selectedTool, .codex)
+        XCTAssertEqual(store.availableTools, [.codex])
+        XCTAssertEqual(defaults.string(forKey: MonitorStore.selectedToolKey), "qwenWork",
+                       "a retired tool's raw value is ignored at launch, not erased")
     }
 
     func testCodexKeepsItsOwnNoticesWhileEveryOtherSourceUsesTheStatusCard() {
@@ -108,7 +125,6 @@ final class AgentToolSelectionTests: XCTestCase {
         let codex = store.presentation(for: .codex)
         XCTAssertFalse(codex.rendersAvailabilityCard)
         XCTAssertEqual(codex.quotaCapability, .supported)
-        XCTAssertTrue(codex.reportsRunningState, "Codex confirms running state from process evidence")
 
         let workBuddy = store.presentation(for: .workBuddy)
         XCTAssertTrue(workBuddy.rendersAvailabilityCard)
@@ -116,18 +132,6 @@ final class AgentToolSelectionTests: XCTestCase {
         XCTAssertNil(workBuddy.quota.snapshot, "a source with no quota source must carry no reading")
         XCTAssertNil(workBuddy.quota.account)
         XCTAssertNil(workBuddy.quota.error)
-        XCTAssertTrue(workBuddy.reportsRunningState, "WorkBuddy reads a status column")
-    }
-
-    func testRunningStateCapabilityIsDeclaredPerSource() {
-        // `fix/02`. Every tab lists running tasks only, so a source that cannot
-        // report that state has nothing to list. Pinning the asymmetry here keeps
-        // it a decision: Qwen Work's `chats` table has no status column and
-        // `task_run_logs` held no rows, so its tab must never read as "nothing is
-        // running".
-        XCTAssertTrue(AgentTool.codex.reportsRunningState)
-        XCTAssertTrue(AgentTool.workBuddy.reportsRunningState)
-        XCTAssertFalse(AgentTool.qwenWork.reportsRunningState)
     }
 
     func testAnUnreadableSourceShowsItsStatusInsteadOfAnEmptyList() {
@@ -174,24 +178,6 @@ final class AgentToolSelectionTests: XCTestCase {
         let presentation = store.presentation(for: .workBuddy)
         XCTAssertEqual(presentation.headlineCount, 0)
         XCTAssertEqual(presentation.sourceStatusMessage, L10n.text("No running tasks for this tool."))
-        XCTAssertNotEqual(presentation.sourceStatusMessage, L10n.text("No tasks found for this tool."))
-    }
-
-    func testASourceWithoutARunningStateNamesTheGapInsteadOfShowingZero() {
-        // AC-5/AC-6 forbid rendering a source as an empty list, and with a
-        // running-only list that is exactly what Qwen Work would become: its
-        // database cannot answer "which task is running". The tab names the gap
-        // instead, and shows no badge, because 0 would assert a count it never
-        // took.
-        let store = makeStore(scopedDefaults())
-        store.applyPreviewTasks([AdapterTask(snapshot: Self.snapshot(id: "a", activity: .unknown), caption: "结算中台")],
-                                for: .qwenWork)
-        let presentation = store.presentation(for: .qwenWork)
-        XCTAssertFalse(presentation.reportsRunningState)
-        XCTAssertEqual(presentation.headlineCount, 0)
-        XCTAssertEqual(presentation.sourceStatusMessage,
-                       L10n.text("\(AgentTool.qwenWork.displayName) does not report which tasks are running, so none can be listed."))
-        XCTAssertNotEqual(presentation.sourceStatusMessage, L10n.text("No running tasks for this tool."))
         XCTAssertNotEqual(presentation.sourceStatusMessage, L10n.text("No tasks found for this tool."))
     }
 

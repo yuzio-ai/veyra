@@ -27,7 +27,7 @@ final class AgentToolRegistry {
     /// The adapters the running application uses. Tests construct the store
     /// without this, so no unit test reads a real user database.
     static func live() -> AgentToolRegistry {
-        AgentToolRegistry(adapters: [WorkBuddyToolAdapter(), QwenWorkToolAdapter()])
+        AgentToolRegistry(adapters: [WorkBuddyToolAdapter()])
     }
 
     /// Fixture registry for layout previews. Every adapter points at a path that
@@ -36,8 +36,7 @@ final class AgentToolRegistry {
     /// from fixtures instead of reading anything.
     static func preview() -> AgentToolRegistry {
         let unavailable = URL(fileURLWithPath: "/nonexistent/veyra-preview/unavailable.db")
-        return AgentToolRegistry(adapters: [WorkBuddyToolAdapter(databaseURL: unavailable),
-                                            QwenWorkToolAdapter(databaseURL: unavailable)])
+        return AgentToolRegistry(adapters: [WorkBuddyToolAdapter(databaseURL: unavailable)])
     }
 
     func adapter(for tool: AgentTool) -> (any AgentToolAdapter)? { adapters[tool] }

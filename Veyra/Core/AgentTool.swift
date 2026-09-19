@@ -9,7 +9,7 @@ import Observation
 /// therefore `AgentTool.workBuddy` *and* `TaskSource.desktop`; the two answer
 /// different questions. Never reuse those enums to carry tool identity.
 enum AgentTool: String, CaseIterable, Sendable, Identifiable, Hashable {
-    case codex, workBuddy, qwenWork
+    case codex, workBuddy
 
     var id: String { rawValue }
 
@@ -23,24 +23,6 @@ enum AgentTool: String, CaseIterable, Sendable, Identifiable, Hashable {
         switch self {
         case .codex: L10n.text("Codex")
         case .workBuddy: L10n.text("WorkBuddy")
-        case .qwenWork: L10n.text("Qwen Work")
-        }
-    }
-
-    /// Whether this source's data can say *which* of its tasks are running.
-    ///
-    /// Declared here rather than on `AgentToolAdapter` because it describes the
-    /// data source rather than a particular reader: the layout previews and the
-    /// `--sources` report both build a `ToolPresentation` without ever going
-    /// through an adapter, and a tab must render the same either way. Codex
-    /// reaches a verdict from process evidence; WorkBuddy from `sessions.status`.
-    /// Qwen Work's `chats` table has no status column at all — `task_run_logs`
-    /// carries one but holds no rows — so it cannot report a running task and
-    /// must never be presented as "nothing is running".
-    var reportsRunningState: Bool {
-        switch self {
-        case .codex, .workBuddy: true
-        case .qwenWork: false
         }
     }
 }
@@ -171,10 +153,6 @@ struct ToolPresentation: Sendable {
     /// are already part of its rendering. Freezing that path is what keeps the
     /// Codex tab unchanged; every other source uses the three-state status card.
     let rendersAvailabilityCard: Bool
-    /// Mirrors `AgentTool.reportsRunningState`. Every tab lists confirmed running
-    /// tasks only, so a source unable to report that state has nothing to list
-    /// and says so rather than showing a zero beside an empty section.
-    let reportsRunningState: Bool
 
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
 
@@ -187,12 +165,6 @@ struct ToolPresentation: Sendable {
     var sourceStatusMessage: String? {
         guard rendersAvailabilityCard else { return nil }
         if let message = availability.statusMessage(for: tool, hasSnapshot: hasTaskSnapshot) { return message }
-        // A source with no running-state signal cannot be listed at all, and an
-        // empty list would read as "nothing is running" — a claim its data
-        // cannot support.
-        guard reportsRunningState else {
-            return L10n.text("\(tool.displayName) does not report which tasks are running, so none can be listed.")
-        }
         guard runningTasks.isEmpty else { return nil }
         // Having records but no running one is not the same as having none, and
         // the status card is where that distinction is allowed to show.

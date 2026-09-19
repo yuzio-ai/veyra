@@ -243,13 +243,13 @@ struct MonitorPanel: View {
         let listedGroups = TaskGroup.make(tasks: p.runningTasks, ancestors: p.taskAncestors)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                sectionTitle(p.reportsRunningState ? "Running tasks" : "Tasks")
-                if p.reportsRunningState {
-                    Text("\(p.headlineCount)")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(.primary.opacity(0.08), in: Capsule())
-                }
+                sectionTitle("Running tasks")
+                // Every tab lists confirmed running tasks only, so the badge
+                // always counts the rows that are actually rendered.
+                Text("\(p.headlineCount)")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(.primary.opacity(0.08), in: Capsule())
                 if p.tasksBusy {
                     ProgressView().controlSize(.small).scaleEffect(0.8)
                         .frame(width: 14, height: 14)

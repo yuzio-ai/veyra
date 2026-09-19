@@ -17,23 +17,28 @@ final class AgentToolRegistryTests: XCTestCase {
     }
 
     func testBuiltInToolLeadsTheTabsAndHasNoAdapterEntry() {
-        let registry = makeRegistry([StubAgentToolAdapter(.workBuddy), StubAgentToolAdapter(.qwenWork)])
+        let registry = makeRegistry([StubAgentToolAdapter(.workBuddy)])
         XCTAssertEqual(registry.tools.first, .codex, "the built-in source always leads")
         XCTAssertNil(registry.adapter(for: .codex), "Codex is served by the store, not by an adapter")
-        XCTAssertEqual(registry.auxiliaryTools, [.workBuddy, .qwenWork])
+        XCTAssertEqual(registry.auxiliaryTools, [.workBuddy])
         XCTAssertFalse(registry.auxiliaryTools.contains(.codex))
     }
 
-    func testTabOrderFollowsRegistrationRatherThanAllCases() {
-        let registry = makeRegistry([StubAgentToolAdapter(.qwenWork), StubAgentToolAdapter(.workBuddy)])
-        XCTAssertEqual(registry.tools, [.codex, .qwenWork, .workBuddy])
+    func testTabOrderFollowsTheRegistryRatherThanAllCases() {
+        // `fix/03` retired the third source. With two cases `live()` now happens
+        // to equal `allCases`, so a default registry can no longer tell the two
+        // apart; naming the built-in tool is the remaining construction that
+        // can, and the assertion still bites if `tools` is ever replaced by
+        // `AgentTool.allCases`.
+        let registry = AgentToolRegistry(adapters: [StubAgentToolAdapter(.codex)], builtIn: .workBuddy)
+        XCTAssertEqual(registry.tools, [.workBuddy, .codex])
         XCTAssertNotEqual(registry.tools, AgentTool.allCases, "tab order must come from the registry")
     }
 
-    func testLiveRegistryExposesCodexThenWorkBuddyThenQwenWork() {
+    func testLiveRegistryExposesCodexThenWorkBuddy() {
         let registry = AgentToolRegistry.live()
-        XCTAssertEqual(registry.tools, [.codex, .workBuddy, .qwenWork])
-        XCTAssertEqual(registry.auxiliaryTools, [.workBuddy, .qwenWork])
+        XCTAssertEqual(registry.tools, [.codex, .workBuddy])
+        XCTAssertEqual(registry.auxiliaryTools, [.workBuddy])
         XCTAssertNil(registry.adapter(for: .codex))
     }
 
@@ -44,7 +49,6 @@ final class AgentToolRegistryTests: XCTestCase {
         XCTAssertEqual(registry.tools, [.codex])
         XCTAssertTrue(registry.auxiliaryTools.isEmpty)
         XCTAssertNil(registry.adapter(for: .workBuddy))
-        XCTAssertNil(registry.adapter(for: .qwenWork))
     }
 
     func testRegisteringAnAdapterForTheBuiltInToolIsIgnoredRatherThanHalfApplied() {
@@ -70,7 +74,7 @@ final class AgentToolRegistryTests: XCTestCase {
 
     func testPreviewRegistryPointsEveryAuxiliarySourceAtAnAbsentDatabase() async {
         let registry = AgentToolRegistry.preview()
-        XCTAssertEqual(registry.tools, [.codex, .workBuddy, .qwenWork])
+        XCTAssertEqual(registry.tools, [.codex, .workBuddy])
         XCTAssertNil(registry.adapter(for: .codex))
         for tool in registry.auxiliaryTools {
             guard let adapter = registry.adapter(for: tool) else {

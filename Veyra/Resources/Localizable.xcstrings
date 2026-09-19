@@ -3227,23 +3227,6 @@
         }
       }
     },
-    "Qwen Work" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Qwen Work"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "千问办公"
-          }
-        }
-      }
-    },
     "Agent tool tabs" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3257,23 +3240,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Agent 工具标签"
-          }
-        }
-      }
-    },
-    "Tasks" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tasks"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任务"
           }
         }
       }
@@ -3427,23 +3393,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该工具当前没有运行中的任务。"
-          }
-        }
-      }
-    },
-    "%@ does not report which tasks are running, so none can be listed." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ does not report which tasks are running, so none can be listed."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 不提供任务运行状态，无法列出运行中的任务。"
           }
         }
       }
