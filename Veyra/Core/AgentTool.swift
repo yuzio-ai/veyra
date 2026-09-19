@@ -26,6 +26,23 @@ enum AgentTool: String, CaseIterable, Sendable, Identifiable, Hashable {
         case .qwenWork: L10n.text("Qwen Work")
         }
     }
+
+    /// Whether this source's data can say *which* of its tasks are running.
+    ///
+    /// Declared here rather than on `AgentToolAdapter` because it describes the
+    /// data source rather than a particular reader: the layout previews and the
+    /// `--sources` report both build a `ToolPresentation` without ever going
+    /// through an adapter, and a tab must render the same either way. Codex
+    /// reaches a verdict from process evidence; WorkBuddy from `sessions.status`.
+    /// Qwen Work's `chats` table has no status column at all — `task_run_logs`
+    /// carries one but holds no rows — so it cannot report a running task and
+    /// must never be presented as "nothing is running".
+    var reportsRunningState: Bool {
+        switch self {
+        case .codex, .workBuddy: true
+        case .qwenWork: false
+        }
+    }
 }
 
 /// Why a source could not be read. Kept separate from the availability case so
@@ -154,19 +171,32 @@ struct ToolPresentation: Sendable {
     /// are already part of its rendering. Freezing that path is what keeps the
     /// Codex tab unchanged; every other source uses the three-state status card.
     let rendersAvailabilityCard: Bool
+    /// Mirrors `AgentTool.reportsRunningState`. Every tab lists confirmed running
+    /// tasks only, so a source unable to report that state has nothing to list
+    /// and says so rather than showing a zero beside an empty section.
+    let reportsRunningState: Bool
 
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
 
-    /// Count beside the section title. Codex has always counted confirmed
-    /// running tasks; a source that lists every task counts every task, so the
-    /// badge never reads zero next to a full list.
-    var headlineCount: Int { rendersAvailabilityCard ? tasks.count : runningTasks.count }
+    /// Count beside the section title. Every tab counts confirmed running tasks:
+    /// the list itself is running-only, so counting anything else would print a
+    /// number beside rows that are not rendered.
+    var headlineCount: Int { runningTasks.count }
 
     /// Non-nil when the section must show a status instead of the task list.
     var sourceStatusMessage: String? {
         guard rendersAvailabilityCard else { return nil }
         if let message = availability.statusMessage(for: tool, hasSnapshot: hasTaskSnapshot) { return message }
-        return tasks.isEmpty ? L10n.text("No tasks found for this tool.") : nil
+        // A source with no running-state signal cannot be listed at all, and an
+        // empty list would read as "nothing is running" — a claim its data
+        // cannot support.
+        guard reportsRunningState else {
+            return L10n.text("\(tool.displayName) does not report which tasks are running, so none can be listed.")
+        }
+        guard runningTasks.isEmpty else { return nil }
+        // Having records but no running one is not the same as having none, and
+        // the status card is where that distinction is allowed to show.
+        return tasks.isEmpty ? L10n.text("No tasks found for this tool.") : L10n.text("No running tasks for this tool.")
     }
 }
 

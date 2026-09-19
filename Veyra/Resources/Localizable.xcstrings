@@ -3414,6 +3414,40 @@
         }
       }
     },
+    "No running tasks for this tool." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No running tasks for this tool."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该工具当前没有运行中的任务。"
+          }
+        }
+      }
+    },
+    "%@ does not report which tasks are running, so none can be listed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ does not report which tasks are running, so none can be listed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不提供任务运行状态，无法列出运行中的任务。"
+          }
+        }
+      }
+    },
     "Updated %@" : {
       "extractionState" : "manual",
       "localizations" : {

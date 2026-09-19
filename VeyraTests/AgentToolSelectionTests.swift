@@ -108,6 +108,7 @@ final class AgentToolSelectionTests: XCTestCase {
         let codex = store.presentation(for: .codex)
         XCTAssertFalse(codex.rendersAvailabilityCard)
         XCTAssertEqual(codex.quotaCapability, .supported)
+        XCTAssertTrue(codex.reportsRunningState, "Codex confirms running state from process evidence")
 
         let workBuddy = store.presentation(for: .workBuddy)
         XCTAssertTrue(workBuddy.rendersAvailabilityCard)
@@ -115,6 +116,18 @@ final class AgentToolSelectionTests: XCTestCase {
         XCTAssertNil(workBuddy.quota.snapshot, "a source with no quota source must carry no reading")
         XCTAssertNil(workBuddy.quota.account)
         XCTAssertNil(workBuddy.quota.error)
+        XCTAssertTrue(workBuddy.reportsRunningState, "WorkBuddy reads a status column")
+    }
+
+    func testRunningStateCapabilityIsDeclaredPerSource() {
+        // `fix/02`. Every tab lists running tasks only, so a source that cannot
+        // report that state has nothing to list. Pinning the asymmetry here keeps
+        // it a decision: Qwen Work's `chats` table has no status column and
+        // `task_run_logs` held no rows, so its tab must never read as "nothing is
+        // running".
+        XCTAssertTrue(AgentTool.codex.reportsRunningState)
+        XCTAssertTrue(AgentTool.workBuddy.reportsRunningState)
+        XCTAssertFalse(AgentTool.qwenWork.reportsRunningState)
     }
 
     func testAnUnreadableSourceShowsItsStatusInsteadOfAnEmptyList() {
@@ -137,16 +150,49 @@ final class AgentToolSelectionTests: XCTestCase {
         XCTAssertNotNil(presentation.sourceStatusMessage, "empty and unreadable must not read the same")
     }
 
-    func testListingSourceCountsEveryTaskAndCarriesItsCaptions() {
+    func testAnAuxiliarySourceListsRunningTasksOnlyWhileKeepingEveryCaption() {
+        // `fix/02` withdrew "list every task": the read is not narrowed — `tasks`
+        // still holds what the adapter returned — but the list and the badge are.
         let store = makeStore(scopedDefaults())
-        let rows = [AdapterTask(snapshot: Self.snapshot(id: "a", activity: .unknown), caption: "Updated 2026"),
-                    AdapterTask(snapshot: Self.snapshot(id: "b", activity: .running), caption: nil)]
+        let rows = [AdapterTask(snapshot: Self.snapshot(id: "done", activity: .unknown), caption: "Updated 09:00"),
+                    AdapterTask(snapshot: Self.snapshot(id: "live", activity: .running), caption: "Updated 09:01")]
         store.applyPreviewTasks(rows, for: .workBuddy)
         let presentation = store.presentation(for: .workBuddy)
-        XCTAssertEqual(presentation.tasks.count, 2)
-        XCTAssertEqual(presentation.headlineCount, 2, "a listing source counts every task, not only running ones")
-        XCTAssertEqual(presentation.captions, ["a": "Updated 2026"])
-        XCTAssertNil(presentation.sourceStatusMessage, "a source with rows shows the rows")
+        XCTAssertEqual(presentation.tasks.count, 2, "the read stays complete; the list is what narrows")
+        XCTAssertEqual(presentation.runningTasks.map(\.id), ["live"])
+        XCTAssertEqual(presentation.headlineCount, 1, "the badge counts the rows that are rendered")
+        XCTAssertEqual(presentation.captions, ["done": "Updated 09:00", "live": "Updated 09:01"])
+        XCTAssertNil(presentation.sourceStatusMessage, "a source with a running row shows the row")
+    }
+
+    func testASourceWithRecordsButNothingRunningSaysSoRatherThanLookingEmpty() {
+        // "has history, none of it running" and "has no records" are different
+        // claims, and only one of them is true here.
+        let store = makeStore(scopedDefaults())
+        store.applyPreviewTasks([AdapterTask(snapshot: Self.snapshot(id: "done", activity: .unknown), caption: nil)],
+                                for: .workBuddy)
+        let presentation = store.presentation(for: .workBuddy)
+        XCTAssertEqual(presentation.headlineCount, 0)
+        XCTAssertEqual(presentation.sourceStatusMessage, L10n.text("No running tasks for this tool."))
+        XCTAssertNotEqual(presentation.sourceStatusMessage, L10n.text("No tasks found for this tool."))
+    }
+
+    func testASourceWithoutARunningStateNamesTheGapInsteadOfShowingZero() {
+        // AC-5/AC-6 forbid rendering a source as an empty list, and with a
+        // running-only list that is exactly what Qwen Work would become: its
+        // database cannot answer "which task is running". The tab names the gap
+        // instead, and shows no badge, because 0 would assert a count it never
+        // took.
+        let store = makeStore(scopedDefaults())
+        store.applyPreviewTasks([AdapterTask(snapshot: Self.snapshot(id: "a", activity: .unknown), caption: "结算中台")],
+                                for: .qwenWork)
+        let presentation = store.presentation(for: .qwenWork)
+        XCTAssertFalse(presentation.reportsRunningState)
+        XCTAssertEqual(presentation.headlineCount, 0)
+        XCTAssertEqual(presentation.sourceStatusMessage,
+                       L10n.text("\(AgentTool.qwenWork.displayName) does not report which tasks are running, so none can be listed."))
+        XCTAssertNotEqual(presentation.sourceStatusMessage, L10n.text("No running tasks for this tool."))
+        XCTAssertNotEqual(presentation.sourceStatusMessage, L10n.text("No tasks found for this tool."))
     }
 
     func testSourceDiagnosticsCoversEveryRegisteredTabUsingCountsOnly() async {

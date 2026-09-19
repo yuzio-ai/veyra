@@ -237,13 +237,19 @@ struct MonitorPanel: View {
         let groups = TaskGroup.make(tasks: p.tasks, ancestors: p.taskAncestors)
         let runningGroups = groups.filter(\.isRunning)
         let unknownGroups = groups.filter { !$0.isRunning }
+        // Auxiliary sources list confirmed running tasks only, so they group the
+        // running set on its own. Filtering whole groups instead would keep a
+        // running parent's unconfirmed rows alongside it.
+        let listedGroups = TaskGroup.make(tasks: p.runningTasks, ancestors: p.taskAncestors)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                sectionTitle(p.rendersAvailabilityCard ? "Tasks" : "Running tasks")
-                Text("\(p.headlineCount)")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(.primary.opacity(0.08), in: Capsule())
+                sectionTitle(p.reportsRunningState ? "Running tasks" : "Tasks")
+                if p.reportsRunningState {
+                    Text("\(p.headlineCount)")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(.primary.opacity(0.08), in: Capsule())
+                }
                 if p.tasksBusy {
                     ProgressView().controlSize(.small).scaleEffect(0.8)
                         .frame(width: 14, height: 14)
@@ -275,9 +281,10 @@ struct MonitorPanel: View {
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
                 .accessibilityIdentifier("monitor.taskStatus")
             } else if p.rendersAvailabilityCard {
-                // Sources that list every task need no running/unconfirmed
-                // split; each row still carries its own activity dot.
-                ForEach(groups) { group in
+                // Running tasks only. A source that cannot report that state
+                // never reaches this branch: `sourceStatusMessage` answers for it
+                // above, which is also what keeps the section off an empty list.
+                ForEach(listedGroups) { group in
                     TaskGroupCard(group: group, expansion: expandedBinding, captions: p.captions)
                 }
             } else {

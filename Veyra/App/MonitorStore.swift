@@ -141,7 +141,8 @@ final class MonitorStore {
                                     modelConfig: modelConfig,
                                     pollingSeconds: pollingSeconds,
                                     captions: [:],
-                                    rendersAvailabilityCard: false)
+                                    rendersAvailabilityCard: false,
+                                    reportsRunningState: tool.reportsRunningState)
         }
         let section = section(for: tool)
         return ToolPresentation(tool: tool,
@@ -160,7 +161,8 @@ final class MonitorStore {
                                 modelConfig: nil,
                                 pollingSeconds: pollingSeconds,
                                 captions: section.captions,
-                                rendersAvailabilityCard: true)
+                                rendersAvailabilityCard: true,
+                                reportsRunningState: tool.reportsRunningState)
     }
 
     private var codexAvailability: AgentToolAvailability {
