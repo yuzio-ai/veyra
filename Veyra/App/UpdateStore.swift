@@ -9,7 +9,7 @@ final class UpdateStore {
         case failed(UpdateFailure)
     }
 
-    private static let logger = Logger(subsystem: "local.codexmonitor.app", category: "updates")
+    private static let logger = Logger(subsystem: "ai.yuzio.veyra", category: "updates")
 
     var settingsStatus: String {
         if isChecking { return L10n.text("Checking for updates…") }
