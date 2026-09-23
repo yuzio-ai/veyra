@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Verify generated project configuration and packaging invariants.
+"""Verify project configuration and packaging invariants.
 
-Read-only: this script never writes project files. It checks settings that live
-only in `scripts/generate_project.py`, `Signing.xcconfig`, or `Veyra/Info.plist`
-and therefore had no regression coverage: App Sandbox stays off, the app keeps
-Hardened Runtime, the app stays menu-bar only, DEVELOPMENT_TEAM stays out of
-buildSettings so the gitignored Local.xcconfig override keeps working, the
-manual Info.plist only keeps keys Xcode cannot generate for it, both x86_64 and
-arm64 ship in a release, and the test bundle can still see the shared Core
-sources and localization resources.
+Read-only: this script never writes project files. `Veyra.xcodeproj` is
+maintained by hand, so this script guards the settings in
+`Veyra.xcodeproj/project.pbxproj`, `Signing.xcconfig`, and `Veyra/Info.plist`
+that have no regression coverage elsewhere: App Sandbox stays off, the app
+keeps Hardened Runtime, the app stays menu-bar only, DEVELOPMENT_TEAM stays out
+of buildSettings so the gitignored Local.xcconfig override keeps working, the
+manual Info.plist only keeps keys Xcode cannot generate for it, the test target
+keeps seeing every shared Core source and the localization resources, and both
+x86_64 and arm64 ship in a release.
 
 Release claims that depend on a built artifact (the universal binary and the
 merged Info.plist) are only checked when a Release build exists in the derived
@@ -28,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT_TARGET = "14.0"
 APP_TARGET = "Veyra"
 TEST_TARGET = "VeyraTests"
-APP_BUNDLE_IDENTIFIER = "local.codexmonitor.app"
+APP_BUNDLE_IDENTIFIER = "ai.yuzio.veyra"
 TEST_BUNDLE_IDENTIFIER = "local.codexmonitor.tests"
 ICON_FILE = "AppIcon"
 DISPLAY_NAME = "Veyra"
@@ -61,17 +62,18 @@ TEST_MEMBERSHIP_EXCEPTIONS = {
 }
 LINKER_FLAGS = ["-lsqlite3"]
 
-OBJECT_KEY_RE = re.compile(r"^([0-9A-F]{24}) = \{")
+OBJECT_KEY_RE = re.compile(r'^\s*([0-9A-F]{24})(?:\s+/\*.*?\*/)?\s*=\s*\{')
+COMMENT_RE = re.compile(r"/\*.*?\*/")
 PBX_TARGET_RE = re.compile(
-    r"isa = PBXNativeTarget;.*?buildConfigurationList = ([0-9A-F]{24});.*?"
-    r"fileSystemSynchronizedGroups = \(([^)]*)\);.*?name = ([^;]+?);",
+    r"isa = PBXNativeTarget;.*?buildConfigurationList = ([0-9A-F]{24})\s*;.*?"
+    r"fileSystemSynchronizedGroups = \(([^)]*)\)\s*;.*?name = ([^;]+?)\s*;",
     re.DOTALL,
 )
-CONFIG_LIST_RE = re.compile(r"isa = XCConfigurationList;.*?buildConfigurations = \(([^)]*)\);", re.DOTALL)
-CONFIG_NAME_RE = re.compile(r"isa = XCBuildConfiguration;.*?name = ([^;]+);", re.DOTALL)
+CONFIG_LIST_RE = re.compile(r"isa = XCConfigurationList;.*?buildConfigurations = \(([^)]*)\)\s*;", re.DOTALL)
+CONFIG_NAME_RE = re.compile(r"isa = XCBuildConfiguration;.*?name = ([^;]+?)\s*;", re.DOTALL)
 EXCEPTION_SET_RE = re.compile(
-    r"isa = PBXFileSystemSynchronizedBuildFileExceptionSet;.*?membershipExceptions = \(([^)]*)\);.*?"
-    r"target = ([0-9A-F]{24});",
+    r"isa = PBXFileSystemSynchronizedBuildFileExceptionSet;.*?membershipExceptions = \(([^)]*)\)\s*;.*?"
+    r"target = ([0-9A-F]{24})\s*;",
     re.DOTALL,
 )
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
@@ -131,6 +133,9 @@ def normalized(value):
 
 def parse_settings(body):
     settings = {}
+    # Break before the settings dict so the alphabetically first key is not
+    # swallowed into the `buildSettings = {` token.
+    body = body.replace("buildSettings = {", ";")
     for token in body.split(";"):
         if "=" not in token:
             continue
@@ -173,10 +178,10 @@ def parse_targets(objects):
 
 def load_objects(project):
     """Parse top-level pbxproj objects, tolerant of both single-line and
-    multi-line bodies because Xcode re-saves the generated project."""
+    multi-line bodies because Xcode re-saves the project file."""
     path = project / "project.pbxproj"
     if not path.is_file():
-        raise SystemExit(f"error: {path} not found; run python3 scripts/generate_project.py first")
+        raise SystemExit(f"error: {path} not found")
     objects = {}
     lines = path.read_text().splitlines()
     index = 0
@@ -189,7 +194,7 @@ def load_objects(project):
         body = []
         depth = 0
         while index < len(lines):
-            line = lines[index]
+            line = COMMENT_RE.sub("", lines[index])
             body.append(line)
             depth += line.count("{") - line.count("}")
             index += 1
@@ -209,7 +214,7 @@ def load_plist(path):
 
 def check_target(report, label, configurations, required):
     if not configurations:
-        report.fail(f"{label}: build configurations found in the generated project")
+        report.fail(f"{label}: build configurations found in the project")
         return
     for name, expected in required.items():
         for configuration in sorted(configurations):
@@ -412,9 +417,17 @@ def verify(project, app, derived_data):
     app_groups = targets.get(APP_TARGET, {}).get("synchronizedGroups", [])
     if app_groups:
         paths = exception_paths(objects, app_groups[0])
-        report.expect(TEST_MEMBERSHIP_EXCEPTIONS <= paths,
-                      "test target opts into shared Core sources and localization resources",
-                      f"missing {sorted(TEST_MEMBERSHIP_EXCEPTIONS - paths)}")
+        # The project is maintained by hand: every shared Core source must be
+        # opted into the test target, and removed files must not linger.
+        shared_core = {str(path.relative_to(ROOT / "Veyra"))
+                       for path in ROOT.glob("Veyra/Core/**/*.swift")}
+        expected = TEST_MEMBERSHIP_EXCEPTIONS | shared_core
+        report.expect(expected <= paths,
+                      "test target opts into every shared Core source and localization resource",
+                      f"missing {sorted(expected - paths)}")
+        stale = {path for path in paths if path.startswith("Core/")} - shared_core
+        report.expect(not stale, "test target membership has no stale Core entries",
+                      f"stale {sorted(stale)}")
 
     check_signing_isolation(report, objects, project_path.read_text(), app_configurations)
 

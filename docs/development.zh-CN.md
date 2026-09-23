@@ -19,13 +19,13 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 
 受限环境还会让 Swift 宏插件失效：`ObservationMacros` 与 `SwiftMacros` 的宏实现需要 `swift-plugin-server`，该辅助进程在文件沙箱下无法正常工作，编译会报 `External macro implementation type ... could not be found` / `produced malformed response`。这与派生数据路径无关，`VEYRA_DERIVED_DATA_PATH` 不能解决；需要为构建进程放行，或改用不受限的构建环境。放行后验证结论与普通开发机一致。
 
-测试脚本最后运行 `scripts/verify_configuration.py`，只读校验那些只存在于工程生成脚本和 `Info.plist` 中、XCTest 无法覆盖的打包不变量：App Sandbox 关闭、应用 target 开启 Hardened Runtime 且测试 target 关闭、ad-hoc 手动签名、`LSUIElement` 菜单栏模式、macOS 14 部署目标、Swift 6 严格并发、应用仍链接系统 `libsqlite3`，以及测试 target 仍通过成员例外看到共享 Core 源码和本地化资源。传入 `--app` 时同时检查测试宿主二进制的架构。带 `--derived-data` 且存在 Release 构建时，额外检查发行二进制同时包含 arm64 与 x86_64；没有 Release 构建时该检查显示为跳过。单独运行：
+测试脚本最后运行 `scripts/verify_configuration.py`，只读校验工程配置与打包中 XCTest 无法覆盖的不变量：App Sandbox 关闭、应用 target 开启 Hardened Runtime 且测试 target 关闭、ad-hoc 手动签名、签名覆盖只经未入库的 `Local.xcconfig`（工程文件不含 `DEVELOPMENT_TEAM`）、混合 Info.plist 卫生（手工 plist 只保留 Xcode 无法生成的 key）、`LSUIElement` 菜单栏模式、macOS 14 部署目标、Swift 6 严格并发、应用仍链接系统 `libsqlite3`，以及测试 target 的成员例外覆盖全部共享 Core 源码和本地化资源且无失效条目。传入 `--app` 时同时检查测试宿主二进制的架构。带 `--derived-data` 且存在 Release 构建时，额外检查发行二进制同时包含 arm64 与 x86_64，以及合并后 Info.plist 的完整键集；没有 Release 构建时这些检查显示为跳过。单独运行：
 
 ```sh
 python3 scripts/verify_configuration.py --app "$PWD/build/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra"
 ```
 
-脚本按普通文本读取生成后的 `project.pbxproj` 与 `Veyra/Info.plist`，不写入任何文件；版本号与 tag 一致性只在 HEAD 存在 `vX.Y.Z` 标签时比较。构建配置的权威来源是 `scripts/generate_project.py`，修改不变量时先改生成脚本并重新生成，再更新本脚本的期望值。
+脚本按普通文本读取 `project.pbxproj` 与 `Veyra/Info.plist`，不写入任何文件；版本号与 tag 一致性只在 HEAD 存在 `vX.Y.Z` 标签时比较。构建配置直接维护在 `project.pbxproj`，修改不变量时同步更新本脚本的期望值。
 
 构建完成后可直接打开开发产物：
 
@@ -35,15 +35,11 @@ open 'build/Build/Products/Release/Veyra.app'
 
 也可以打开 `Veyra.xcodeproj`，选择 `Veyra` scheme 后运行。默认构建使用本地 ad-hoc 签名，无需配置开发者团队；Release 同时包含 Apple Silicon 和 Intel 架构。App target 开启 Hardened Runtime，App Sandbox 保持关闭。
 
-工程使用 Xcode 同步文件夹（蓝色目录），`Veyra` 和 `VeyraTests` 中新增或删除的文件会自动反映到工程。`Veyra` 默认属于应用 target，`VeyraTests` 默认属于测试 target。测试额外使用 Core 源码、`MonitorStore.swift` 和本地化资源，这些跨 target 引用由生成脚本维护；新增、删除或重命名 Core 源码后需要重新生成，更新测试成员规则。`Info.plist` 仅作为应用构建配置输入，不会重复复制到资源中。
+工程使用 Xcode 同步文件夹（蓝色目录），`Veyra` 和 `VeyraTests` 中新增或删除的文件会自动反映到工程。`Veyra` 默认属于应用 target，`VeyraTests` 默认属于测试 target。测试额外使用 Core 源码、`MonitorStore.swift` 和本地化资源，这些跨 target 引用维护在 `project.pbxproj` 的 `membershipExceptions` 中；新增、删除或重命名 Core 源码后需手工更新该列表，`verify_configuration.py` 会报出遗漏或失效条目。`Info.plist` 采用混合管理：标准 key 和 `INFOPLIST_KEY_*` 可表达的 key 由 target build settings 生成，手工文件只保留 `CFBundleIconFile`、`NSHighResolutionCapable` 等无法生成的 key；它仅作为构建配置输入，不会复制到资源中。
 
-修改工程配置或上述 target 成员规则时，更新 `scripts/generate_project.py` 并重新生成：
+工程配置与上述 target 成员规则直接维护在 `Veyra.xcodeproj/project.pbxproj`，手工编辑或通过 Xcode GUI 修改均可（版本号、显示名、分类在 General 标签页）。
 
-```sh
-python3 scripts/generate_project.py
-```
-
-`Veyra.xcodeproj` 由该脚本完整生成。重新生成会覆盖直接在工程文件中保存的签名设置，因此应先生成工程，再在 Xcode 中完成当次发布所需的本机签名选择。不要把 `DEVELOPMENT_TEAM`、证书信息或公证凭据提交到仓库。
+本机签名身份只写入未入库的 `Local.xcconfig`（由 `Signing.xcconfig` 以 `#include?` 可选包含，缺失不影响构建）。不要在 Xcode Signing 面板选择 Team：它会把 `DEVELOPMENT_TEAM` 写回 `project.pbxproj` 并覆盖 xcconfig 层。不要把 `DEVELOPMENT_TEAM`、证书信息或公证凭据提交到仓库。
 
 ## 使用 Xcode 手动发布
 
@@ -61,10 +57,9 @@ python3 scripts/generate_project.py
 swift scripts/prepare_brand.swift
 swift scripts/make_icon.swift Veyra/Resources/VeyraMark.png build/Veyra.iconset
 iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
-python3 scripts/generate_project.py
 ```
 
-应用、工程和 scheme 均名为 Veyra。开发默认 Bundle ID 为 `local.codexmonitor.app`；正式分发应沿用上一版正式 App 的标识，详见[发布前的 Bundle ID 核对](release.zh-CN.md#33-核对-bundle-id)。不同标识可能使用不同的偏好设置。
+应用、工程和 scheme 均名为 Veyra。默认 Bundle ID 为 `ai.yuzio.veyra`，与正式分发标识一致，详见[发布前的 Bundle ID 核对](release.zh-CN.md#33-核对-bundle-id)。不同标识使用不同的偏好设置。
 
 ## 开发检查
 
@@ -150,4 +145,4 @@ python3 scripts/measure_energy.py \
 
 `update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 和 `--exercise-menu-to` 检查实际菜单与滚动。设置页渲染包含未检查、检查中、有新版、已是最新、失败、限流及检查失败但仍有缓存新版七种更新状态，以及自动/手动路径、检测中、未找到、无效路径、无效草稿和长路径场景；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
 
-新增的更新状态文件与 Core 源码一同加入独立 XCTest target；调整成员关系后运行工程生成脚本。
+新增的更新状态文件与 Core 源码一同加入独立 XCTest target；调整成员关系后更新 `project.pbxproj` 的成员例外，并运行 `scripts/verify_configuration.py` 核对。

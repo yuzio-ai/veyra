@@ -8,7 +8,7 @@ Veyra is a Swift 6/SwiftUI macOS menu bar app monitoring Codex quotas and local 
 - `Veyra/Core/`: models, quota RPC client, read-only SQLite/JSONL readers, process evidence, and panel sizing.
 - `VeyraTests/`: XCTest suites for core behavior and sizing.
 - `assets/brand/`: source SVG artwork; `Veyra/Resources/` and `Veyra/AppIcon.icns`: generated app assets.
-- `scripts/`: build, test, project generation, and asset utilities. `Veyra.xcodeproj/` is generated; `build/` contains ignored outputs.
+- `scripts/`: build, test, and asset utilities. `Veyra.xcodeproj/` is maintained by hand; `build/` contains ignored outputs.
 
 ## Build, Test, and Development Commands
 
@@ -18,8 +18,8 @@ Use Xcode 26/Swift 6 targeting macOS 14. Run from the repository root:
 - `./scripts/test.sh`: run the XCTest suite in Debug on macOS, then the isolated app diagnostics, then `scripts/verify_configuration.py`. When the repository sits inside ~/Documents, ~/Desktop, or ~/Downloads, derived data moves to `~/Library/Developer/Xcode/DerivedData/Veyra` because the TCC-protected folders block the test runner from reading the bundle; override with `VEYRA_DERIVED_DATA_PATH`.
 - `open build/Build/Products/Release/Veyra.app`: launch the menu bar app.
 - `open Veyra.xcodeproj`: develop using the `Veyra` scheme.
-- `python3 scripts/generate_project.py`: regenerate project configuration. Xcode synchronized folders automatically pick up file additions/removals for their default targets; regenerate after adding/removing/renaming shared Core sources to update test membership exceptions. Make persistent project configuration and target membership changes in this generator.
-- `python3 scripts/verify_configuration.py`: read-only check of packaging invariants that only live in the generator and `Info.plist` (App Sandbox off, app Hardened Runtime on, `LSUIElement` menu-bar mode, macOS 14 target, Swift 6 strict concurrency, sqlite3 linkage, test membership exceptions, and the universal Release binary when `--derived-data` is supplied). Update its expectations whenever an invariant in the generator changes.
+- Project configuration lives in `Veyra.xcodeproj/project.pbxproj`; change it directly or through the Xcode GUI (General tab for version, display name, and category). Xcode synchronized folders automatically pick up file additions/removals for their default targets, but after adding/removing/renaming shared Core sources you must update the test target's `membershipExceptions` in `project.pbxproj` yourself; `scripts/verify_configuration.py` fails on missing or stale entries.
+- `python3 scripts/verify_configuration.py`: read-only check of configuration and packaging invariants (App Sandbox off, app Hardened Runtime on, `LSUIElement` menu-bar mode, no `DEVELOPMENT_TEAM` in `project.pbxproj` so the gitignored `Local.xcconfig` override stays authoritative, hybrid `Info.plist` hygiene, macOS 14 target, Swift 6 strict concurrency, sqlite3 linkage, complete test membership, and the universal Release binary plus merged Info.plist when `--derived-data` is supplied). Update its expectations whenever an invariant changes.
 
 See `README.md` for brand regeneration and preview commands.
 
@@ -35,11 +35,13 @@ For UI changes, check the real menu in light/dark modes, reduced transparency, i
 
 ## Commit & Pull Request Guidelines
 
-History uses concise imperative subjects with `feat:` or `fix:` prefixes. Keep commits focused. PRs should describe the problem and resulting behavior, link relevant issues, report validation, and include screenshots for UI changes. Commit regenerated project/assets when their inputs change.
+History uses concise imperative subjects with `feat:` or `fix:` prefixes. Keep commits focused. PRs should describe the problem and resulting behavior, link relevant issues, report validation, and include screenshots for UI changes. Commit regenerated assets when their inputs change.
 
 ## Security & Configuration
 
 Preserve read-only monitoring: never modify Codex databases, control tasks, or persist credentials. Respect configurable paths and `CODEX_HOME`; keep diagnostics free of private account or session content.
+
+Keep signing overrides local: `DEVELOPMENT_TEAM` belongs only in the gitignored `Local.xcconfig` (optionally included by `Signing.xcconfig`). Never pick a Team in Xcode's Signing panel — it writes `DEVELOPMENT_TEAM` back into `project.pbxproj` and overrides the xcconfig layer. `Veyra/Info.plist` only holds keys Xcode cannot generate (`CFBundleIconFile`, `NSHighResolutionCapable`); standard and `INFOPLIST_KEY_*` keys come from target build settings.
 
 ## Automated Sessions
 

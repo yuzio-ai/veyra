@@ -11,7 +11,7 @@
 | 工作 | 默认执行者 | 如何交接或授权 |
 | --- | --- | --- |
 | 确定版本号、构建号、发布范围 | 我 | 告诉 Codex 确切值以及要发布的功能 |
-| 检查源码、修改版本、生成工程、构建测试、整理说明 | Codex | 提出准备发布的任务即可；已授权范围内不必逐条确认 |
+| 检查源码、修改版本、构建测试、整理说明 | Codex | 提出准备发布的任务即可；已授权范围内不必逐条确认 |
 | Apple 账号登录、双重认证、选择团队与证书、钥匙串授权 | 我 | 在本机 Xcode 或系统弹窗完成，不把密码或私钥发给 Codex |
 | Archive、Direct Distribution、提交公证、导出 App | 我 | 按第 4 节操作，完成后提供导出 App 的路径 |
 | 检查导出 App、生成 ZIP 与校验值 | Codex，也可由我执行 | 明确导出路径和目标版本即可 |
@@ -25,7 +25,7 @@
 
 ## 2. 日常开发保留哪些配置
 
-持久工程配置维护在 [generate_project.py](../scripts/generate_project.py)，生成的 [project.pbxproj](../Veyra.xcodeproj/project.pbxproj) 一同提交。
+持久工程配置直接维护在 [project.pbxproj](../Veyra.xcodeproj/project.pbxproj) 并随源码提交；本机签名身份只写入未入库的 `Local.xcconfig`。
 
 | 配置 | 仓库默认值或约定 |
 | --- | --- |
@@ -54,12 +54,11 @@
 
 先检查 `git status`、当前分支及差异，区分有效功能改动与上次遗留的本机签名设置。不能为了得到干净工作区直接丢弃全部未提交内容。
 
-更新 [Info.plist](../Veyra/Info.plist) 中的 `CFBundleShortVersionString` 和 `CFBundleVersion`。版本必须在 Archive 前确定；Xcode 界面填写后也要核对实际保存位置。
+更新 target build settings 中的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`（General 标签页或直接编辑 `project.pbxproj`）；标准 Info.plist key 由 Xcode 生成，`Info.plist` 只保留特殊 key，不再写入版本号。版本必须在 Archive 前确定。
 
-在尚未选择本次本机签名身份时生成工程，并运行检查：
+在尚未配置本次本机签名身份时运行检查：
 
 ```sh
-python3 scripts/generate_project.py
 VEYRA_DERIVED_DATA_PATH=/tmp/veyra-release-tests ./scripts/test.sh
 ./scripts/build.sh
 ```
@@ -70,9 +69,9 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-release-tests ./scripts/test.sh
 
 ### 3.3 核对 Bundle ID
 
-生成脚本的开发默认 Bundle ID 是 `local.codexmonitor.app`。正式分发时必须核对并沿用上一版正式 App 的 Bundle ID；如果上一版为 `com.yuzio.veyra`，本次也使用该值。可以用第 5 节的命令读取上一版 App 确认。
+仓库默认 Bundle ID 是 `ai.yuzio.veyra`，与正式分发一致。仍须核对并沿用上一版正式 App 的 Bundle ID，可以用第 5 节的命令读取上一版 App 确认。
 
-Bundle ID 是公开的应用标识，不是密码。更换它可能影响偏好设置和应用身份。重新生成工程会恢复开发默认值，因此每次进入发布签名步骤都要复核。若希望正式标识成为仓库的持久默认值，应单独修改生成脚本并验证，不在签名清理时顺带改动。
+Bundle ID 是公开的应用标识，不是密码。更换它可能影响偏好设置和应用身份；如需变更，单独提交并验证，不在签名清理时顺带改动。
 
 ## 4. 我在 Xcode 中执行 Archive、公证与导出
 
@@ -80,7 +79,7 @@ Bundle ID 是公开的应用标识，不是密码。更换它可能影响偏好�
 
 1. 打开 `Veyra.xcodeproj`，选择 `Veyra` scheme。
 2. 在 **Xcode → Settings → Accounts** 登录 Apple 开发者账号；已有有效登录时无需重复。
-3. 打开 **Veyra target → Signing & Capabilities**，为本次归档选择正确 Team，并核对正式 Bundle ID。可以让 Xcode 自动管理签名，按提示完成证书与钥匙串授权。
+3. 打开 **Veyra target → Signing & Capabilities**，为本次归档选择正确 Team，并核对正式 Bundle ID。可以让 Xcode 自动管理签名，按提示完成证书与钥匙串授权。这会把 `DEVELOPMENT_TEAM` 等签名设置写回 `project.pbxproj`，发布完成后按第 6 节清理。
 4. 核对 App 的 Hardened Runtime 已开启、App Sandbox 关闭；不把发布签名要求套到 VeyraTests。
 5. 在 scheme 的 **Archive** 设置中确认使用 **Release** 配置，选择可用于 Mac 归档的运行目标。若提供 **Any Mac**，可选择它；最终是否为通用二进制仍以导出后架构检查为准。
 
@@ -158,11 +157,11 @@ shasum -a 256 "$release_zip"
 Codex 应按以下顺序处理：
 
 1. 检查所有未提交差异，记录需要保留的配置；必要的备份放在仓库外或忽略目录中。
-2. 将有意保留的通用工程改动落实到生成脚本，确保脚本中仍无个人签名身份。
-3. 运行 `python3 scripts/generate_project.py` 恢复默认签名配置，再检查生成结果。生成脚本会完整重写工程和共享 scheme，不能代替清理前的差异审阅。
+2. 确认有意保留的通用工程改动已落入 `project.pbxproj`，其中不含个人签名身份。
+3. 手工删除 Xcode 写回 `project.pbxproj` 的签名设置（`DEVELOPMENT_TEAM`、`CODE_SIGN_STYLE = Automatic`、`CODE_SIGN_IDENTITY = "Apple Development"`、`PROVISIONING_PROFILE_SPECIFIER`），恢复 Manual/ad-hoc 默认；`scripts/verify_configuration.py` 会对残留 `DEVELOPMENT_TEAM` 报错。未入库 `Local.xcconfig` 中的本机 Team 可保留，不影响仓库。
 4. 逐项检查 `Info.plist`、工程、scheme 以及当次其他改动，清除实际 Team 值、个人证书名称和本机描述文件选择；保留版本、类别、本地化等有效修改。涉及的文件数量不固定。
 5. 检查暂存区、未跟踪文件和本次将推送的提交，防止签名配置或凭据已进入待推送历史。仅在最新提交删掉秘密，不能消除旧提交中的泄露。
-6. 核对 App Hardened Runtime 开启、Tests 关闭、Sandbox 和部署目标保持约定，生成结果稳定。
+6. 核对 App Hardened Runtime 开启、Tests 关闭、Sandbox 和部署目标保持约定；`scripts/verify_configuration.py` 应全绿。
 
 此处“清理证书信息”指清理源码中的本机签名配置，**不删除钥匙串中的证书或私钥，也不清理归档、导出 App 或公证票据**。Xcode 若提示磁盘文件已变更，应重新载入磁盘版本，避免把内存中的旧签名配置再次保存回来。
 
@@ -263,7 +262,7 @@ SHA-256: 填写最终上传的 ZIP 校验值
 
 | 现象 | 处理方式 |
 | --- | --- |
-| Xcode 提示 `Update to recommended settings` | 对比具体建议，把需要长期保留的配置落实到生成脚本并生成工程。直接点 Perform Changes 只修改工程，之后可能被脚本覆盖 |
+| Xcode 提示 `Update to recommended settings` | 对比具体建议，把需要长期保留的配置直接落实到 `project.pbxproj`。工程为手工维护，Perform Changes 的改动不会被覆盖，但仍应核对差异是否符合本文约定 |
 | 提示 `No App Category is set` | 检查 `LSApplicationCategoryType` 与 target 的对应 Info.plist 设置；本项目使用 Developer Tools。检查新构建产物，必要时重新载入工程并清理构建；旧归档不会自动更新 |
 | 公证一直在处理 | 查看 Organizer 状态；失败时查该次日志。不要把“上传成功”当作“公证通过” |
 | 清理后 Xcode 又出现 Team | 检查是否把旧内存状态写回工程，重新载入磁盘版本再检查差异 |
