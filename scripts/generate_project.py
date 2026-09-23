@@ -5,6 +5,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+MARKETING_VERSION = '1.2.1'
+CURRENT_PROJECT_VERSION = '4'
+
 
 def ident(name):
     return hashlib.sha1(name.encode()).hexdigest()[:24].upper()
@@ -24,6 +27,9 @@ def add(name, body):
 
 add('product-app', 'isa = PBXFileReference; explicitFileType = wrapper.application; path = "Veyra.app"; sourceTree = BUILT_PRODUCTS_DIR;')
 add('product-test', 'isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = VeyraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;')
+# Team IDs stay out of buildSettings: Signing.xcconfig optionally includes the
+# gitignored Local.xcconfig, which is the only place DEVELOPMENT_TEAM is set.
+add('config-signing', 'isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>";')
 add('products', f'isa = PBXGroup; name = Products; children = ({ident("product-app")}, {ident("product-test")},); sourceTree = "<group>";')
 
 
@@ -42,7 +48,7 @@ test_exceptions = add_membership_exceptions('exceptions-Veyra-test', 'test', [
 ])
 veyra_group = add('group-Veyra', f'isa = PBXFileSystemSynchronizedRootGroup; exceptions = ({app_exceptions}, {test_exceptions},); explicitFileTypes = {{}}; explicitFolders = (); path = Veyra; sourceTree = "<group>";')
 tests_group = add('group-VeyraTests', 'isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VeyraTests; sourceTree = "<group>";')
-add('main-group', f'isa = PBXGroup; children = ({veyra_group}, {tests_group}, {ident("products")},); sourceTree = "<group>";')
+add('main-group', f'isa = PBXGroup; children = ({ident("config-signing")}, {veyra_group}, {tests_group}, {ident("products")},); sourceTree = "<group>";')
 
 common = '''SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 6.0;
 SWIFT_STRICT_CONCURRENCY = complete; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_WEAK = YES;
@@ -75,8 +81,12 @@ for target in ['app', 'test']:
     for config in ['Debug', 'Release']:
         # Keep the existing bundle IDs so a rename preserves saved user preferences.
         flags = 'SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;' if config == 'Debug' else 'SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";'
-        settings = 'PRODUCT_NAME = "Veyra"; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.app; INFOPLIST_FILE = Veyra/Info.plist; INFOPLIST_KEY_LSUIElement = YES; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools"; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";' if target == 'app' else 'PRODUCT_NAME = VeyraTests; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.tests; GENERATE_INFOPLIST_FILE = YES; TEST_HOST = ""; BUNDLE_LOADER = "";'
-        add(f'{target}-{config}', f'isa = XCBuildConfiguration; buildSettings = {{ {common} {hardened_runtime} {flags} {settings} }}; name = {config};')
+        # Hybrid Info.plist: Xcode generates the standard keys, INFOPLIST_KEY_*
+        # covers the flat custom keys, and Veyra/Info.plist keeps only the keys
+        # the generator cannot express (CFBundleIconFile, NSHighResolutionCapable).
+        settings = f'PRODUCT_NAME = "Veyra"; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.app; GENERATE_INFOPLIST_FILE = YES; MARKETING_VERSION = {MARKETING_VERSION}; CURRENT_PROJECT_VERSION = {CURRENT_PROJECT_VERSION}; INFOPLIST_FILE = Veyra/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = Veyra; INFOPLIST_KEY_LSUIElement = YES; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools"; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";' if target == 'app' else 'PRODUCT_NAME = VeyraTests; PRODUCT_BUNDLE_IDENTIFIER = local.codexmonitor.tests; GENERATE_INFOPLIST_FILE = YES; TEST_HOST = ""; BUNDLE_LOADER = "";'
+        base_config = f'baseConfigurationReference = {ident("config-signing")}; ' if target == 'app' else ''
+        add(f'{target}-{config}', f'isa = XCBuildConfiguration; {base_config}buildSettings = {{ {common} {hardened_runtime} {flags} {settings} }}; name = {config};')
     add(f'{target}-configs', f'isa = XCConfigurationList; buildConfigurations = ({ident(f"{target}-Debug")}, {ident(f"{target}-Release")},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;')
     name = 'Veyra' if target == 'app' else 'VeyraTests'
     product_type = 'com.apple.product-type.application' if target == 'app' else 'com.apple.product-type.bundle.unit-test'

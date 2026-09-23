@@ -2,15 +2,19 @@
 """Verify generated project configuration and packaging invariants.
 
 Read-only: this script never writes project files. It checks settings that live
-only in `scripts/generate_project.py` or `Veyra/Info.plist` and therefore had no
-regression coverage: App Sandbox stays off, the app keeps Hardened Runtime, the
-app stays menu-bar only, both x86_64 and arm64 ship in a release, and the test
-bundle can still see the shared Core sources and localization resources.
+only in `scripts/generate_project.py`, `Signing.xcconfig`, or `Veyra/Info.plist`
+and therefore had no regression coverage: App Sandbox stays off, the app keeps
+Hardened Runtime, the app stays menu-bar only, DEVELOPMENT_TEAM stays out of
+buildSettings so the gitignored Local.xcconfig override keeps working, the
+manual Info.plist only keeps keys Xcode cannot generate for it, both x86_64 and
+arm64 ship in a release, and the test bundle can still see the shared Core
+sources and localization resources.
 
-Release claims that depend on a built artifact (the universal binary) are only
-checked when a Release build exists in the derived data directory; otherwise they
-are reported as skipped instead of silently passing. Code signing, notarization,
-and stapling stay manual release-runbook steps.
+Release claims that depend on a built artifact (the universal binary and the
+merged Info.plist) are only checked when a Release build exists in the derived
+data directory; otherwise they are reported as skipped instead of silently
+passing. Code signing, notarization, and stapling stay manual release-runbook
+steps.
 """
 import argparse
 import plistlib
@@ -27,6 +31,26 @@ TEST_TARGET = "VeyraTests"
 APP_BUNDLE_IDENTIFIER = "local.codexmonitor.app"
 TEST_BUNDLE_IDENTIFIER = "local.codexmonitor.tests"
 ICON_FILE = "AppIcon"
+DISPLAY_NAME = "Veyra"
+APP_CATEGORY = "public.app-category.developer-tools"
+SIGNING_CONFIG = "Signing.xcconfig"
+LOCAL_CONFIG = "Local.xcconfig"
+# Standard and INFOPLIST_KEY_* keys that must stay out of the manual Info.plist
+# so each value has exactly one source.
+GENERATED_INFOPLIST_KEYS = (
+    "CFBundleDevelopmentRegion",
+    "CFBundleDisplayName",
+    "CFBundleExecutable",
+    "CFBundleIdentifier",
+    "CFBundleInfoDictionaryVersion",
+    "CFBundleName",
+    "CFBundlePackageType",
+    "CFBundleShortVersionString",
+    "CFBundleVersion",
+    "LSApplicationCategoryType",
+    "LSMinimumSystemVersion",
+    "LSUIElement",
+)
 BUILD_NUMBER_RE = re.compile(r"^[0-9]+$")
 SWIFT_VERSION = "6.0"
 SWIFT_CONCURRENCY = "complete"
@@ -51,7 +75,6 @@ EXCEPTION_SET_RE = re.compile(
     re.DOTALL,
 )
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
-PLACEHOLDER_RE = re.compile(r"^\$\([A-Z_]+\)$")
 
 
 class Report:
@@ -249,6 +272,98 @@ def check_git_tag(report, version):
                   f"found {tags}")
 
 
+def run_git(*arguments):
+    return subprocess.run(["git", "-C", str(ROOT), *arguments],
+                          capture_output=True, text=True, timeout=30, check=False)
+
+
+def check_signing_isolation(report, objects, raw_project, app_configurations):
+    reference = next((identifier for identifier, body in objects.items()
+                      if "isa = PBXFileReference;" in body and f"path = {SIGNING_CONFIG};" in body), None)
+    report.expect(reference is not None, f"{SIGNING_CONFIG}: file reference in project")
+    project_body = next((body for body in objects.values() if "isa = PBXProject;" in body), "")
+    main_group_match = re.search(r"mainGroup = ([0-9A-F]{24})", project_body)
+    main_group = objects.get(main_group_match.group(1), "") if main_group_match else ""
+    report.expect(reference is not None and reference in main_group,
+                  f"{SIGNING_CONFIG}: listed in the root group")
+    for configuration in sorted(app_configurations):
+        actual = app_configurations[configuration].get("baseConfigurationReference")
+        report.expect(reference is not None and actual == reference,
+                      f"app {configuration}: base configuration is {SIGNING_CONFIG}",
+                      f"found {actual!r}")
+    report.expect("DEVELOPMENT_TEAM" not in raw_project,
+                  "project.pbxproj: no DEVELOPMENT_TEAM in buildSettings "
+                  f"({LOCAL_CONFIG} stays authoritative)")
+    include = f'#include? "{LOCAL_CONFIG}"'
+    signing_path = ROOT / SIGNING_CONFIG
+    signing_text = signing_path.read_text() if signing_path.is_file() else ""
+    report.expect(include in signing_text, f"{SIGNING_CONFIG}: optionally includes {LOCAL_CONFIG}")
+    try:
+        tracked = run_git("ls-files", "--", LOCAL_CONFIG)
+        ignored = run_git("check-ignore", "--", LOCAL_CONFIG)
+    except (OSError, subprocess.SubprocessError) as error:
+        report.warn(f"{LOCAL_CONFIG}: git ignore checks skipped ({error})")
+        return
+    if tracked.returncode != 0 or ignored.returncode not in (0, 1):
+        report.warn(f"{LOCAL_CONFIG}: git ignore checks skipped (git unavailable)")
+        return
+    report.expect(not tracked.stdout.strip(), f"{LOCAL_CONFIG}: not tracked by git")
+    report.expect(ignored.returncode == 0, f"{LOCAL_CONFIG}: covered by .gitignore")
+
+
+def check_versions(report, app_configurations):
+    versions = {}
+    builds = {}
+    for configuration in sorted(app_configurations):
+        version = app_configurations[configuration].get("MARKETING_VERSION")
+        build = app_configurations[configuration].get("CURRENT_PROJECT_VERSION")
+        versions[configuration] = version
+        builds[configuration] = build
+        report.expect(isinstance(version, str) and VERSION_RE.match(version) is not None,
+                      f"app {configuration}: MARKETING_VERSION is X.Y.Z", f"found {version!r}")
+        report.expect(isinstance(build, str) and BUILD_NUMBER_RE.match(build) is not None,
+                      f"app {configuration}: CURRENT_PROJECT_VERSION is a positive integer",
+                      f"found {build!r}")
+    report.expect(len(set(versions.values())) == 1,
+                  "app: MARKETING_VERSION identical across configurations", f"found {versions}")
+    report.expect(len(set(builds.values())) == 1,
+                  "app: CURRENT_PROJECT_VERSION identical across configurations", f"found {builds}")
+    version = next(iter(versions.values()), None)
+    build = next(iter(builds.values()), None)
+    return (version if isinstance(version, str) and VERSION_RE.match(version) is not None else None,
+            build if isinstance(build, str) and BUILD_NUMBER_RE.match(build) is not None else None)
+
+
+def check_release_plist(report, plist_path, version, build):
+    merged = load_plist(plist_path)
+    expected = {
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleDisplayName": DISPLAY_NAME,
+        "CFBundleExecutable": APP_TARGET,
+        "CFBundleIconFile": ICON_FILE,
+        "CFBundleIdentifier": APP_BUNDLE_IDENTIFIER,
+        "CFBundleName": APP_TARGET,
+        "CFBundlePackageType": "APPL",
+        "LSApplicationCategoryType": APP_CATEGORY,
+        "LSMinimumSystemVersion": DEPLOYMENT_TARGET,
+    }
+    for key in sorted(expected):
+        report.expect(merged.get(key) == expected[key],
+                      f"release Info.plist: {key} = {expected[key]}", f"found {merged.get(key)!r}")
+    report.expect(merged.get("LSUIElement") is True,
+                  "release Info.plist: LSUIElement is true (INFOPLIST_KEY_*)")
+    report.expect(merged.get("NSHighResolutionCapable") is True,
+                  "release Info.plist: NSHighResolutionCapable is true (manual plist)")
+    if version is not None:
+        report.expect(merged.get("CFBundleShortVersionString") == version,
+                      f"release Info.plist: CFBundleShortVersionString = {version} (MARKETING_VERSION)",
+                      f"found {merged.get('CFBundleShortVersionString')!r}")
+    if build is not None:
+        report.expect(merged.get("CFBundleVersion") == build,
+                      f"release Info.plist: CFBundleVersion = {build} (CURRENT_PROJECT_VERSION)",
+                      f"found {merged.get('CFBundleVersion')!r}")
+
+
 def verify(project, app, derived_data):
     report = Report()
     project_path, objects = load_objects(project)
@@ -267,8 +382,11 @@ def verify(project, app, derived_data):
         "CODE_SIGN_STYLE": "Manual",
         "CODE_SIGN_IDENTITY": "-",
         "PRODUCT_BUNDLE_IDENTIFIER": APP_BUNDLE_IDENTIFIER,
+        "GENERATE_INFOPLIST_FILE": "YES",
         "INFOPLIST_FILE": "Veyra/Info.plist",
+        "INFOPLIST_KEY_CFBundleDisplayName": DISPLAY_NAME,
         "INFOPLIST_KEY_LSUIElement": "YES",
+        "INFOPLIST_KEY_LSApplicationCategoryType": APP_CATEGORY,
         "MACOSX_DEPLOYMENT_TARGET": DEPLOYMENT_TARGET,
         "SWIFT_VERSION": SWIFT_VERSION,
         "SWIFT_STRICT_CONCURRENCY": SWIFT_CONCURRENCY,
@@ -277,6 +395,7 @@ def verify(project, app, derived_data):
         "ENABLE_APP_SANDBOX": "NO",
         "ENABLE_HARDENED_RUNTIME": "NO",
         "PRODUCT_BUNDLE_IDENTIFIER": TEST_BUNDLE_IDENTIFIER,
+        "GENERATE_INFOPLIST_FILE": "YES",
         "TEST_HOST": "",
         "BUNDLE_LOADER": "",
         "MACOSX_DEPLOYMENT_TARGET": DEPLOYMENT_TARGET,
@@ -297,28 +416,19 @@ def verify(project, app, derived_data):
                       "test target opts into shared Core sources and localization resources",
                       f"missing {sorted(TEST_MEMBERSHIP_EXCEPTIONS - paths)}")
 
+    check_signing_isolation(report, objects, project_path.read_text(), app_configurations)
+
+    # Hybrid Info.plist: the manual file keeps only the keys Xcode cannot
+    # generate for it; everything else lives in target build settings.
     plist = load_plist(ROOT / "Veyra/Info.plist")
-    report.expect(plist.get("LSUIElement") is True, "Info.plist: LSUIElement is true (menu bar only)")
+    report.expect(plist.get("CFBundleIconFile") == ICON_FILE,
+                  f"Info.plist: CFBundleIconFile = {ICON_FILE} (INFOPLIST_KEY_* cannot express it)")
     report.expect(plist.get("NSHighResolutionCapable") is True, "Info.plist: NSHighResolutionCapable is true")
-    report.expect(plist.get("CFBundlePackageType") == "APPL", "Info.plist: CFBundlePackageType = APPL")
-    report.expect(plist.get("CFBundleIconFile") == ICON_FILE, f"Info.plist: CFBundleIconFile = {ICON_FILE}")
-    report.expect(plist.get("LSMinimumSystemVersion") == "$(MACOSX_DEPLOYMENT_TARGET)",
-                  "Info.plist: LSMinimumSystemVersion follows MACOSX_DEPLOYMENT_TARGET",
-                  f"found {plist.get('LSMinimumSystemVersion')!r}")
-    report.expect(plist.get("CFBundleDevelopmentRegion") == "en", "Info.plist: CFBundleDevelopmentRegion = en")
+    for key in GENERATED_INFOPLIST_KEYS:
+        report.expect(key not in plist, f"Info.plist: {key} left to Xcode generation")
 
-    version = plist.get("CFBundleShortVersionString")
-    report.expect(isinstance(version, str) and VERSION_RE.match(version) is not None,
-                  "Info.plist: CFBundleShortVersionString is X.Y.Z", f"found {version!r}")
-    build = plist.get("CFBundleVersion")
-    report.expect(isinstance(build, str) and BUILD_NUMBER_RE.match(build) is not None,
-                  "Info.plist: CFBundleVersion is a positive integer", f"found {build!r}")
-    for key in ("CFBundleIdentifier", "CFBundleExecutable", "CFBundleName"):
-        value = plist.get(key)
-        report.expect(isinstance(value, str) and (PLACEHOLDER_RE.match(value) is not None or value),
-                      f"Info.plist: {key} is a build variable or a literal", f"found {value!r}")
-
-    if isinstance(version, str) and VERSION_RE.match(version) is not None:
+    version, build = check_versions(report, app_configurations)
+    if version is not None:
         check_git_tag(report, version)
 
     if app is None:
@@ -326,13 +436,15 @@ def verify(project, app, derived_data):
     else:
         check_binary(report, app, require_both=False)
 
-    release_executable = None
+    release_app = None
     if derived_data is not None:
-        release_executable = derived_data / "Build/Products/Release/Veyra.app/Contents/MacOS/Veyra"
-    if release_executable is None or not release_executable.is_file():
-        report.warn("release binary check skipped; run ./scripts/build.sh and pass --derived-data")
+        release_app = derived_data / "Build/Products/Release/Veyra.app"
+    if release_app is None or not (release_app / "Contents/MacOS/Veyra").is_file():
+        report.warn("release binary and Info.plist merge checks skipped; "
+                    "run ./scripts/build.sh and pass --derived-data")
     else:
-        check_binary(report, release_executable, require_both=True)
+        check_binary(report, release_app / "Contents/MacOS/Veyra", require_both=True)
+        check_release_plist(report, release_app / "Contents/Info.plist", version, build)
 
     print(f"\n{report.checks} checks, {report.failures} failed, {report.warnings} skipped")
     return 1 if report.failures else 0
