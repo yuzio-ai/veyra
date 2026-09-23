@@ -73,9 +73,6 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-# Local agent session data
-/.workbuddy/
-
 .cohestra
 
 # Local signing overrides (never commit — included optionally by Signing.xcconfig)
