@@ -16,6 +16,9 @@ final class MonitorStore {
     }
     var taskError: String? { didSet { updateMenuLabel() } }
     var taskWarning: TaskReadWarning? { didSet { updateMenuLabel() } }
+    /// dsh degrades silently by design: failures surface only here and never
+    /// touch the Codex error/warning state.
+    var dshWarning: String?
     var localQuotaWarning: String?
     var modelConfig: CodexModelConfig?
     var quotaBusy = false
@@ -42,7 +45,12 @@ final class MonitorStore {
     @ObservationIgnored private var authStamp: String?
     @ObservationIgnored private var suspended = false
     @ObservationIgnored private var attemptedLocalRead = false
+    /// Reader outputs stay separated so one backend's failure never rewrites
+    /// the other's tasks; the published `tasks` is their merge.
+    @ObservationIgnored private var codexTasks: [TaskSnapshot] = []
+    @ObservationIgnored private var dshTasks: [TaskSnapshot] = []
     @ObservationIgnored private let readLocal: @Sendable (URL) async throws -> TaskReadResult
+    @ObservationIgnored private let readDsh: @Sendable (URL) async -> DshTaskRead
     @ObservationIgnored private let fetchQuota: @Sendable (CodexLocation) async -> QuotaRefresh
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let clock: PollingClock
@@ -52,6 +60,7 @@ final class MonitorStore {
     }
 
     init(readLocal: (@Sendable (URL) async throws -> TaskReadResult)? = nil,
+         readDsh: (@Sendable (URL) async -> DshTaskRead)? = nil,
          fetchQuota: (@Sendable (CodexLocation) async -> QuotaRefresh)? = nil,
          clock: PollingClock = .continuous(), now: @escaping @MainActor () -> Date = Date.init,
          defaults: UserDefaults = .standard,
@@ -61,6 +70,8 @@ final class MonitorStore {
         self.validatePath = validatePath
         let reader = LocalTaskReader()
         self.readLocal = readLocal ?? { try await reader.fetch(home: $0) }
+        let dshReader = DshTaskReader()
+        self.readDsh = readDsh ?? { await dshReader.fetch(home: $0) }
         self.fetchQuota = fetchQuota ?? { location in
             let client = AppServerClient()
             let result = await client.fetch(location: location)
@@ -148,10 +159,12 @@ final class MonitorStore {
         let version = revision, location = location
         if !attemptedLocalRead { tasksBusy = true; attemptedLocalRead = true }
         checkAuthentication(at: location.home)
+        // dsh reads never throw: failures arrive as a warning plus empty tasks.
+        async let dshRead = readDsh(DshLocation.resolve().home)
         do {
             let result = try await readLocal(location.home)
             guard version == revision else { return }
-            if tasks != result.tasks { tasks = result.tasks }
+            codexTasks = result.tasks
             if taskAncestors != result.ancestors { taskAncestors = result.ancestors }
             tasksUpdatedAt = result.fetchedAt
             if taskWarning != result.warning { taskWarning = result.warning }
@@ -164,14 +177,23 @@ final class MonitorStore {
             guard version == revision else { return }
             let message = L10n.text("Unable to read local task records. Check the data directory.")
             if taskError != message { taskError = message }
-            let uncertain = tasks.map { task in
+            codexTasks = codexTasks.map { task in
                 var copy = task; copy.activity = .unknown
                 return copy
             }
-            if tasks != uncertain { tasks = uncertain }
         }
+        let dsh = await dshRead
+        guard version == revision else { return }
+        dshTasks = dsh.tasks
+        if dshWarning != dsh.warning { dshWarning = dsh.warning }
+        mergeTasks()
         if tasksBusy { tasksBusy = false }
         scheduler.update(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty)
+    }
+
+    private func mergeTasks() {
+        let merged = codexTasks + dshTasks
+        if tasks != merged { tasks = merged }
     }
     @discardableResult
     private func checkAuthentication(at home: URL) -> String {
@@ -244,6 +266,7 @@ final class MonitorStore {
         quotaState = QuotaDisplayState(); quota = quotaState
         calibrationPolicy = QuotaCalibrationPolicy(); nextCalibrationAt = nil; authStamp = nil
         tasks = []; tasksUpdatedAt = nil; taskError = nil; taskWarning = nil
+        codexTasks = []; dshTasks = []; dshWarning = nil
         taskAncestors = []
         localQuotaWarning = nil; quotaBusy = false; tasksBusy = false
         modelConfig = nil

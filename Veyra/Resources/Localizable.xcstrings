@@ -1986,6 +1986,23 @@
         }
       }
     },
+    "Some dsh session records are unreadable." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some dsh session records are unreadable."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分 dsh 会话记录无法读取。"
+          }
+        }
+      }
+    },
     "Some expiry details are unavailable" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2492,6 +2509,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法核对 Codex 进程，任务状态暂不确定。"
+          }
+        }
+      }
+    },
+    "Unable to verify dsh processes. Task status is uncertain." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to verify dsh processes. Task status is uncertain."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法核对 dsh 进程，任务状态暂不确定。"
           }
         }
       }

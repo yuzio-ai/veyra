@@ -358,6 +358,10 @@ struct TokenUsage: Equatable, Sendable {
 
 enum TaskActivity: String, Sendable { case running, unknown }
 
+/// The monitoring backend that produced a task. Codex stays the default so
+/// existing construction sites remain valid; only the dsh reader passes `.dsh`.
+enum TaskBackend: String, Sendable { case codex, dsh }
+
 enum TaskSource: Sendable {
     case cli, desktop, subtask
 
@@ -384,7 +388,12 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     var agentNickname: String?
     var agentRole: String?
     var progress: TaskProgress?
-    var sourceLabel: String { source.label }
+    /// Trailing on purpose: the memberwise default keeps every existing call
+    /// site valid; `source` carries no meaning for dsh tasks (a placeholder)
+    /// and their label comes from the backend instead. (`var`, not `let`:
+    /// only variables join the memberwise initializer with a default value.)
+    var backend: TaskBackend = .codex
+    var sourceLabel: String { backend == .dsh ? "dsh" : source.label }
 }
 
 struct TaskReadResult: Sendable {

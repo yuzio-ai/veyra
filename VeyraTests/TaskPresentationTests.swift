@@ -61,6 +61,26 @@ final class TaskPresentationTests: XCTestCase {
         XCTAssertEqual(groups[0].rows[1].parentTitle, "root")
     }
 
+    func testGroupBackendFollowsFirstSnapshotAndDefaultsToCodex() {
+        var dshTask = task("dsh:s1")
+        XCTAssertEqual(dshTask.backend, .codex)
+        XCTAssertEqual(dshTask.sourceLabel, L10n.text("Desktop"))
+        dshTask = TaskSnapshot(id: "dsh:s1", title: "dsh task", model: nil, source: .desktop,
+                               parentID: nil, startedAt: nil, updatedAt: .distantPast,
+                               tokens: TokenUsage(), activity: .running, backend: .dsh)
+        XCTAssertEqual(dshTask.sourceLabel, "dsh")
+        let groups = TaskGroup.make(tasks: [task("codex-1"), dshTask], ancestors: [])
+        XCTAssertEqual(groups.count, 2)
+        let tasksByID = Dictionary(groups.flatMap(\.rows).compactMap { $0.task }.map { ($0.id, $0) },
+                                   uniquingKeysWith: { first, _ in first })
+        XCTAssertEqual(groups[0].backend(tasksByID: tasksByID), .codex)
+        XCTAssertEqual(groups[1].backend(tasksByID: tasksByID), .dsh)
+        // Ancestor-only rows carry no snapshot and belong to Codex by construction.
+        let context = TaskGroup.make(tasks: [task("child", parent: "ended")],
+                                     ancestors: [TaskReference(id: "ended", title: "t", parentID: nil)])
+        XCTAssertEqual(context.first?.backend(tasksByID: tasksByID), .codex)
+    }
+
     func testTitleFallbackAndSourceMetadata() {
         var metadata = ThreadMetadata(id: "12345678-rest", title: " \n ", rolloutPath: "/missing", model: nil,
             source: #"{"subagent":{"thread_spawn":{"parent_thread_id":"parent","agent_path":"/root/ios_phone_auth_r2_review","agent_nickname":"Lorentz","agent_role":"reviewer"}}}"#,

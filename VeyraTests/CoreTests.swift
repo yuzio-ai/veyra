@@ -201,6 +201,36 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(evidence.rolloutPaths, [home.path + "/sessions/rollout.jsonl"])
     }
 
+    func testDshProcessEvidenceKeepsOnlySessionLocksUnderHome() {
+        let home = URL(fileURLWithPath: "/private/tmp/dsh-fixture")
+        let session = "session-" + UUID().uuidString.lowercased()
+        let log = """
+        p91272
+        cnode
+        n\(home.path)/sessions/--tmp-work--/\(session)/session.lock
+        n\(home.path)/sessions/--tmp-work--/\(session)/session.v3.jsonl.zstd
+        n\(home.path)/storages/session_projcache/sessions/\(session).json
+        n/private/tmp/other/.dsh/sessions/--x--/session-a/session.lock
+        p91300
+        cnode
+        n\(home.path)/sessions/--tmp-web--/614ab421-be16-4441-8a31-85711cf32e5a/session.lock
+        """
+        let evidence = DshProcessEvidence.parse(log, home: home)
+        XCTAssertEqual(evidence.sessionIDs, [session, "614ab421-be16-4441-8a31-85711cf32e5a"])
+        XCTAssertTrue(evidence.matches(sessionID: session))
+        XCTAssertFalse(evidence.matches(sessionID: "session-a"))
+    }
+
+    func testDshLocationPrefersEnvironmentAndExpandsTilde() {
+        let resolved = DshLocation.resolve(environment: ["DSH_HOME": "~/custom-dsh"])
+        XCTAssertEqual(resolved.home.path,
+                       FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("custom-dsh").path)
+        let fallback = DshLocation.resolve(environment: [:])
+        XCTAssertEqual(fallback.home.path,
+                       FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dsh").path)
+        XCTAssertEqual(DshLocation.resolve(environment: ["DSH_HOME": ""]).home, fallback.home)
+    }
+
     func testSQLiteReadsExistingDataWithoutCreatingMissingDB() throws {
         let folder = try temp(), url = folder.appendingPathComponent("state_5.sqlite")
         var db: OpaquePointer?

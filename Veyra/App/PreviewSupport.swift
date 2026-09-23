@@ -190,6 +190,9 @@ enum PreviewSupport {
             store.tasks = [task(1, longTitle: true)]
         case .multiple, .updateAvailable, .planProLite, .planBusiness, .planEnterprise, .planUnknown:
             store.tasks = (1...16).map { task($0, longTitle: $0 == 2 || $0 == 4, parentID: $0 == 2 ? "demo-1" : nil) }
+            if scenario == .multiple {
+                store.tasks += [dshTask(17), dshTask(18, activity: .unknown)]
+            }
         case .unknown:
             store.tasks = [task(1), task(2, longTitle: true, activity: .unknown)]
         case .edgeCases:
@@ -246,6 +249,14 @@ enum PreviewSupport {
                      startedAt: referenceDate.addingTimeInterval(-752), updatedAt: referenceDate,
                      tokens: TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, reasoningOutput: 2_891, total: 884_100),
                      activity: activity)
+    }
+
+    private static func dshTask(_ number: Int, activity: TaskActivity = .running) -> TaskSnapshot {
+        TaskSnapshot(id: "dsh:demo-\(number)", title: "按设计实施 dsh 数据源并核对缓存命中率 · \(number)",
+                     model: "kimi-k3", source: .desktop, parentID: nil,
+                     startedAt: referenceDate.addingTimeInterval(-418), updatedAt: referenceDate,
+                     tokens: TokenUsage(input: 963_704, output: 17_773, cachedInput: 763_904, total: 981_477),
+                     activity: activity, backend: .dsh)
     }
 
     private static func panel(store: MonitorStore, scenario: Scenario, screenHeight: CGFloat = 800, increasedContrast: Bool = false,

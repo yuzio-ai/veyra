@@ -28,6 +28,14 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
     var isRunning: Bool { rows.contains { $0.task?.activity == .running } }
     var unknownCount: Int { rows.filter { $0.task?.activity == .unknown }.count }
 
+    /// A group never mixes backends: dsh tasks carry no parent links, so every
+    /// family tree stays within the reader that produced it. Rows without a
+    /// snapshot (ancestors) belong to Codex by construction.
+    func backend(tasksByID: [String: TaskSnapshot]) -> TaskBackend {
+        for row in rows { if let task = tasksByID[row.id] { return task.backend } }
+        return .codex
+    }
+
     /// Input order is the reader's activity/start-time/ID order. Ancestors never add to counts.
     static func make(tasks: [TaskSnapshot], ancestors: [TaskReference]) -> [TaskGroup] {
         var snapshots: [String: TaskSnapshot] = [:], references: [String: TaskReference] = [:]

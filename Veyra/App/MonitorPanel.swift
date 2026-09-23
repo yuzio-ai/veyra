@@ -191,8 +191,12 @@ struct MonitorPanel: View {
 
     private var tasksSection: some View {
         let groups = TaskGroup.make(tasks: store.tasks, ancestors: store.taskAncestors)
+        let tasksByID = Dictionary(store.tasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let runningGroups = groups.filter(\.isRunning)
         let unknownGroups = groups.filter { !$0.isRunning }
+        // Source labels appear only when both backends are visible, so the
+        // single-backend layout is pixel-identical to before.
+        let splitByBackend = Set(groups.map { $0.backend(tasksByID: tasksByID) }).count > 1
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 sectionTitle("Running tasks")
@@ -226,6 +230,9 @@ struct MonitorPanel: View {
                     Text(!store.hasTaskSnapshot && store.taskError == nil ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks"))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
+            } else if splitByBackend {
+                backendCards("Codex", backend: .codex, groups: runningGroups, tasksByID: tasksByID)
+                backendCards("dsh", backend: .dsh, groups: runningGroups, tasksByID: tasksByID)
             } else {
                 ForEach(runningGroups) { group in
                     TaskGroupCard(group: group, expansion: expandedBinding)
@@ -236,7 +243,12 @@ struct MonitorPanel: View {
                     VStack(spacing: 10) {
                         Text("These sessions have not ended, but no running process could be confirmed. They are excluded from the running count.")
                             .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                        ForEach(unknownGroups) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
+                        if splitByBackend {
+                            backendCards("Codex", backend: .codex, groups: unknownGroups, tasksByID: tasksByID)
+                            backendCards("dsh", backend: .dsh, groups: unknownGroups, tasksByID: tasksByID)
+                        } else {
+                            ForEach(unknownGroups) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
+                        }
                     }.padding(.top, 10)
                 } label: {
                     Label(L10n.text("Unconfirmed status · \(unknownGroups.reduce(0) { $0 + $1.unknownCount })"), systemImage: "questionmark.circle")
@@ -245,6 +257,21 @@ struct MonitorPanel: View {
             }
             if let error = store.taskError { notice(error) }
             if let warning = store.taskWarning { notice(warning.message) }
+            if let warning = store.dshWarning { notice(warning) }
+        }
+    }
+
+    @ViewBuilder
+    private func backendCards(_ title: String, backend: TaskBackend, groups: [TaskGroup],
+                              tasksByID: [String: TaskSnapshot]) -> some View {
+        let filtered = groups.filter { $0.backend(tasksByID: tasksByID) == backend }
+        if !filtered.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                VStack(spacing: 12) {
+                    ForEach(filtered) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
+                }
+            }
         }
     }
 
