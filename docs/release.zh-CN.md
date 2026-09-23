@@ -1,6 +1,6 @@
 # Veyra 手动发布操作手册
 
-适用于通过本机 Xcode 签名、公证，再通过 [GitHub Releases](https://github.com/yuzio-ai/veyra/releases) 分发 macOS 应用的流程。日常开发与提交保持无本机签名身份的配置；发布时临时选择开发者团队，导出后清理工程配置，再提交发布源码并建立标签。
+适用于通过本机 Xcode 签名、公证，再通过 [GitHub Releases](https://github.com/yuzio-ai/veyra/releases) 分发 macOS 应用的流程。日常开发的本机签名身份只放在未入库的 `Local.xcconfig`；发布时核对团队与签名身份，导出后确认工程配置无本机残留，再提交发布源码并建立标签。
 
 仓库不通过 GitHub Actions 编译或公证发布版本，不需要在 GitHub Secrets 中保存 Apple 凭据。本文中的版本号和路径都是示例，执行前替换为当次发布值。构建、测试、Git 命令从仓库根目录执行。
 
@@ -29,7 +29,7 @@
 
 | 配置 | 仓库默认值或约定 |
 | --- | --- |
-| 签名方式 | `CODE_SIGN_STYLE = Manual`，`CODE_SIGN_IDENTITY = "-"`，即 ad-hoc 签名 |
+| 签名方式 | `CODE_SIGN_STYLE = Automatic`，`CODE_SIGN_IDENTITY = "Apple Development"`；Team 由未入库的 `Local.xcconfig` 提供 |
 | 开发者身份 | 不保存本机 `DEVELOPMENT_TEAM`、个人证书名称或描述文件选择 |
 | Hardened Runtime | Veyra App 的 Debug、Release 开启；VeyraTests 关闭 |
 | App Sandbox | 关闭，保持现有本地数据读取设计 |
@@ -79,7 +79,7 @@ Bundle ID 是公开的应用标识，不是密码。更换它可能影响偏好�
 
 1. 打开 `Veyra.xcodeproj`，选择 `Veyra` scheme。
 2. 在 **Xcode → Settings → Accounts** 登录 Apple 开发者账号；已有有效登录时无需重复。
-3. 打开 **Veyra target → Signing & Capabilities**，为本次归档选择正确 Team，并核对正式 Bundle ID。可以让 Xcode 自动管理签名，按提示完成证书与钥匙串授权。这会把 `DEVELOPMENT_TEAM` 等签名设置写回 `project.pbxproj`，发布完成后按第 6 节清理。
+3. 打开 **Veyra target → Signing & Capabilities**，核对 Team 与正式 Bundle ID（Team 通常已由 `Local.xcconfig` 提供）。可以让 Xcode 自动管理签名，按提示完成证书与钥匙串授权。若所选 Team 与 `Local.xcconfig` 不同，`DEVELOPMENT_TEAM` 会写回 `project.pbxproj`，发布完成后按第 6 节清理。
 4. 核对 App 的 Hardened Runtime 已开启、App Sandbox 关闭；不把发布签名要求套到 VeyraTests。
 5. 在 scheme 的 **Archive** 设置中确认使用 **Release** 配置，选择可用于 Mac 归档的运行目标。若提供 **Any Mac**，可选择它；最终是否为通用二进制仍以导出后架构检查为准。
 
@@ -158,7 +158,7 @@ Codex 应按以下顺序处理：
 
 1. 检查所有未提交差异，记录需要保留的配置；必要的备份放在仓库外或忽略目录中。
 2. 确认有意保留的通用工程改动已落入 `project.pbxproj`，其中不含个人签名身份。
-3. 手工删除 Xcode 写回 `project.pbxproj` 的签名设置（`DEVELOPMENT_TEAM`、`CODE_SIGN_STYLE = Automatic`、`CODE_SIGN_IDENTITY = "Apple Development"`、`PROVISIONING_PROFILE_SPECIFIER`），恢复 Manual/ad-hoc 默认；`scripts/verify_configuration.py` 会对残留 `DEVELOPMENT_TEAM` 报错。未入库 `Local.xcconfig` 中的本机 Team 可保留，不影响仓库。
+3. 确认 `project.pbxproj` 不含 `DEVELOPMENT_TEAM`（自动签名与 Apple Development 身份是仓库默认，无需清理）；`scripts/verify_configuration.py` 会对残留 `DEVELOPMENT_TEAM` 报错。未入库 `Local.xcconfig` 中的本机 Team 可保留，不影响仓库。
 4. 逐项检查 `Info.plist`、工程、scheme 以及当次其他改动，清除实际 Team 值、个人证书名称和本机描述文件选择；保留版本、类别、本地化等有效修改。涉及的文件数量不固定。
 5. 检查暂存区、未跟踪文件和本次将推送的提交，防止签名配置或凭据已进入待推送历史。仅在最新提交删掉秘密，不能消除旧提交中的泄露。
 6. 核对 App Hardened Runtime 开启、Tests 关闭、Sandbox 和部署目标保持约定；`scripts/verify_configuration.py` 应全绿。
@@ -266,7 +266,7 @@ SHA-256: 填写最终上传的 ZIP 校验值
 | 提示 `No App Category is set` | 检查 `LSApplicationCategoryType` 与 target 的对应 Info.plist 设置；本项目使用 Developer Tools。检查新构建产物，必要时重新载入工程并清理构建；旧归档不会自动更新 |
 | 公证一直在处理 | 查看 Organizer 状态；失败时查该次日志。不要把“上传成功”当作“公证通过” |
 | 清理后 Xcode 又出现 Team | 检查是否把旧内存状态写回工程，重新载入磁盘版本再检查差异 |
-| 清理后构建变回 ad-hoc | 这是默认开发配置；下一次正式发布时重新选择本机签名，已导出的 App 不受影响 |
+| 克隆或清理后构建报签名错误 | 默认自动签名且工程不含 Team；在未入库的 `Local.xcconfig` 填入本机 Team 即可。已导出的 App 不受影响 |
 | Archive 后修改了版本或实际应用内容 | 重新归档、公证和导出，更新附件与校验值 |
 | 已发布版本发现问题 | 准备新版本和新标签；不把旧标签移到新源码，也不悄悄替换旧产物 |
 

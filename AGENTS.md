@@ -14,7 +14,7 @@ Veyra is a Swift 6/SwiftUI macOS menu bar app monitoring Codex quotas and local 
 
 Use Xcode 26/Swift 6 targeting macOS 14. Run from the repository root:
 
-- `./scripts/build.sh`: build the Release app with local ad-hoc signing.
+- `./scripts/build.sh`: build the Release app with automatic signing; the team comes from the gitignored `Local.xcconfig`, so a fresh clone must fill one in (or the build fails at signing).
 - `./scripts/test.sh`: run the XCTest suite in Debug on macOS, then the isolated app diagnostics, then `scripts/verify_configuration.py`. When the repository sits inside ~/Documents, ~/Desktop, or ~/Downloads, derived data moves to `~/Library/Developer/Xcode/DerivedData/Veyra` because the TCC-protected folders block the test runner from reading the bundle; override with `VEYRA_DERIVED_DATA_PATH`.
 - `open build/Build/Products/Release/Veyra.app`: launch the menu bar app.
 - `open Veyra.xcodeproj`: develop using the `Veyra` scheme.

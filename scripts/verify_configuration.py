@@ -384,8 +384,8 @@ def verify(project, app, derived_data):
     check_target(report, "app", app_configurations, {
         "ENABLE_APP_SANDBOX": "NO",
         "ENABLE_HARDENED_RUNTIME": "YES",
-        "CODE_SIGN_STYLE": "Manual",
-        "CODE_SIGN_IDENTITY": "-",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CODE_SIGN_IDENTITY": "Apple Development",
         "PRODUCT_BUNDLE_IDENTIFIER": APP_BUNDLE_IDENTIFIER,
         "GENERATE_INFOPLIST_FILE": "YES",
         "INFOPLIST_FILE": "Veyra/Info.plist",
