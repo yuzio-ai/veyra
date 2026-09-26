@@ -109,7 +109,13 @@ Direct Distribution 用于 macOS App Store 外的 Developer ID 应用公证。[A
 
 ## 5. 检查导出 App 并打包
 
-这一步我可以手动运行，也可以提供路径让 Codex 完成。将下面路径替换成 Organizer 实际导出的位置：
+这一步我可以手动运行，也可以提供路径让 Codex 完成。上述检查已封装为 [`scripts/verify_release_app.sh`](../scripts/verify_release_app.sh)：
+
+```sh
+./scripts/verify_release_app.sh /absolute/path/to/export/Veyra.app --zip build/releases/v1.1.0/Veyra-v1.1.0-macos-universal.zip
+```
+
+脚本核对版本、构建号、Bundle ID、类别、菜单栏模式、通用二进制、Developer ID 签名、Hardened Runtime、Gatekeeper 评估与公证票据；版本和构建号默认取自 `project.pbxproj`，可用 `--version`、`--build`、`--bundle-id` 显式指定。`--zip` 会在全部通过后打包并输出 SHA-256，校验失败时不打包。将下面路径替换成 Organizer 实际导出的位置：
 
 ```sh
 release_app='/absolute/path/to/export/Veyra.app'

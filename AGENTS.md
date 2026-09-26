@@ -8,7 +8,7 @@ Veyra is a Swift 6/SwiftUI macOS menu bar app monitoring Codex quotas and local 
 - `Veyra/Core/`: models, quota RPC client, read-only SQLite/JSONL readers, process evidence, and panel sizing.
 - `VeyraTests/`: XCTest suites for core behavior and sizing.
 - `assets/brand/`: source SVG artwork; `Veyra/Resources/` and `Veyra/AppIcon.icns`: generated app assets.
-- `scripts/`: build, test, and asset utilities. `Veyra.xcodeproj/` is maintained by hand; `build/` contains ignored outputs.
+- `scripts/`: build, test, release-app verification, and asset utilities. `Veyra.xcodeproj/` is maintained by hand; `build/` contains ignored outputs.
 
 ## Build, Test, and Development Commands
 
@@ -18,6 +18,7 @@ Use Xcode 26/Swift 6 targeting macOS 14. Run from the repository root:
 - `./scripts/test.sh`: run the XCTest suite in Debug on macOS, then the isolated app diagnostics, then `scripts/verify_configuration.py`. When the repository sits inside ~/Documents, ~/Desktop, or ~/Downloads, derived data moves to `~/Library/Developer/Xcode/DerivedData/Veyra` because the TCC-protected folders block the test runner from reading the bundle; override with `VEYRA_DERIVED_DATA_PATH`.
 - `open build/Build/Products/Release/Veyra.app`: launch the menu bar app.
 - `open Veyra.xcodeproj`: develop using the `Veyra` scheme.
+- `./scripts/verify_release_app.sh path/to/Veyra.app [--zip build/releases/vX.Y.Z/Veyra-vX.Y.Z-macos-universal.zip]`: verify an exported release app (version, build, bundle ID, universal binary, Developer ID signing, Hardened Runtime, notarization, stapled ticket) before publishing; with `--zip` it also packages the app and prints the SHA-256. Version and build expectations default to the values in `project.pbxproj`.
 - Project configuration lives in `Veyra.xcodeproj/project.pbxproj`; change it directly or through the Xcode GUI (General tab for version, display name, and category). Xcode synchronized folders automatically pick up file additions/removals for their default targets, but after adding/removing/renaming shared Core sources you must update the test target's `membershipExceptions` in `project.pbxproj` yourself; `scripts/verify_configuration.py` fails on missing or stale entries.
 - `python3 scripts/verify_configuration.py`: read-only check of configuration and packaging invariants (App Sandbox off, app Hardened Runtime on, `LSUIElement` menu-bar mode, no `DEVELOPMENT_TEAM` in `project.pbxproj` so the gitignored `Local.xcconfig` override stays authoritative, hybrid `Info.plist` hygiene, macOS 14 target, Swift 6 strict concurrency, sqlite3 linkage, complete test membership, and the universal Release binary plus merged Info.plist when `--derived-data` is supplied). Update its expectations whenever an invariant changes.
 

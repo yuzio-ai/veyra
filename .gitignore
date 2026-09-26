@@ -75,5 +75,8 @@ fastlane/test_output
 
 .cohestra
 
+# Agent workspace data (WorkBuddy session memory)
+.workbuddy/
+
 # Local signing overrides (never commit — included optionally by Signing.xcconfig)
 Local.xcconfig
