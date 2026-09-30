@@ -25,7 +25,7 @@ Workflow:
     scripts/check-release-notes.sh <NOTES_DIR>/v1.2.0.md
     gh release create v1.2.0 {{ASSET}} --title v1.2.0 --notes-file <NOTES_DIR>/v1.2.0.md
 
-scripts/check-release-notes.sh enforces all of the above; CI runs it too.
+scripts/check-release-notes.sh enforces all of the above; run it before every publish.
 -->
 
 <a href="#english">English</a> | <a href="#简体中文">简体中文</a>
@@ -61,22 +61,13 @@ scripts/check-release-notes.sh enforces all of the above; CI runs it too.
 
 ### Requirements
 
-- macOS 14 or later.
-- dsh installed separately — {{PRODUCT}} is only a shell and does **not** bundle the runtime:
-  ```bash
-  npm install --global @deepseek-ai/dsh
-  ```
-- The first launch asks for notification permission; if nothing ever appears, allow {{PRODUCT}} in
-  System Settings → Notifications.
-- Building from source requires code signing (`DEVELOPMENT_TEAM` in `Local.xcconfig`): macOS's
-  notification service rejects ad-hoc and unsigned builds, and those builds never see the
-  permission prompt.
+- macOS 14 or later. Supports Apple Silicon and Intel Macs.
 
 ### Installation
 
 1. Download `{{ASSET}}` from the assets below
-2. Unzip and move `{{PRODUCT}}.app` to `/Applications`
-3. Launch {{PRODUCT}} — it boots dsh and loads the Web UI automatically
+2. Unzip, quit the running {{PRODUCT}} app, and replace the old version in Applications
+3. Relaunch {{PRODUCT}}
 
 **Full changelog**: {{CHANGELOG_URL}}
 
@@ -111,19 +102,12 @@ scripts/check-release-notes.sh enforces all of the above; CI runs it too.
 
 ### 系统要求
 
-- macOS 14 或更高版本。
-- 需自行安装 dsh —— {{PRODUCT}} 只是一个外壳，本身**不内置**运行时：
-  ```bash
-  npm install --global @deepseek-ai/dsh
-  ```
-- 首次启动会请求通知权限；若始终收不到，请在 系统设置 → 通知 中允许 {{PRODUCT}}。
-- 从源码自行构建需要签名（`Local.xcconfig` 中的 `DEVELOPMENT_TEAM`）：macOS 通知服务不接受
-  ad-hoc / 无签名构建，这类构建下授权弹窗不会出现。
+- macOS 14 或更高版本，支持 Apple Silicon 和 Intel Mac。
 
 ### 安装
 
 1. 下载下方 Assets 中的 `{{ASSET}}`
-2. 解压后将 `{{PRODUCT}}.app` 移入「应用程序」
-3. 启动 {{PRODUCT}} —— 它会自动拉起 dsh 并加载 Web 界面
+2. 解压后退出正在运行的 {{PRODUCT}}，将新版本移入「应用程序」目录并替换旧版本
+3. 重新启动 {{PRODUCT}}
 
 **完整变更**：{{CHANGELOG_URL}}
