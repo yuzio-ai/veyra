@@ -88,4 +88,4 @@ gh release create v1.4.0 Veyra.zip --title v1.4.0 --notes-file docs/releases/v1.
 
 ## 本仓库的既有说明
 
-`docs/releases/` 里 v1.1.0–v1.3.0 的说明已按本规范整理过结构。其中 v1.2.1、v1.3.0 的安装小节保留了当时实际发布的带版本附件名（`Veyra-vX.Y.Z-macos-universal.zip`），是既成事实；从新版本起一律使用不带版本号的 `Veyra.zip`。
+`docs/releases/` 里 v1.0.0–v1.3.0 的说明已按本规范整理过结构，其中 v1.0.0 依据 GitHub 上已发布的正文整理。其中 v1.2.1、v1.3.0 的安装小节保留了当时实际发布的带版本附件名（`Veyra-vX.Y.Z-macos-universal.zip`），是既成事实；从新版本起一律使用不带版本号的 `Veyra.zip`。
