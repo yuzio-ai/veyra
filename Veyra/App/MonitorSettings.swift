@@ -139,7 +139,7 @@ private struct CodexStatusRow: View {
         switch store.configurationState {
         case .detecting: L10n.text("Detecting Codex…")
         case .valid: store.hasManualPaths ? L10n.text("Codex configuration is valid") : L10n.text("Codex detected automatically")
-        case .notFound: L10n.text("Codex executable not found")
+        case .notFound: L10n.missingCodexExecutable()
         case .invalid(.home): L10n.text("Codex data directory is unavailable")
         case .invalid(.executable): L10n.text("Codex executable is invalid")
         }

@@ -711,36 +711,19 @@
         }
       }
     },
-    "Codex executable not found" : {
+    "Codex executable not found. Run which codex in Terminal to find the path, then specify it in Settings." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex executable not found"
+            "value" : "Codex executable not found. Run which codex in Terminal to find the path, then specify it in Settings."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未找到 Codex 可执行文件"
-          }
-        }
-      }
-    },
-    "Codex executable not found. Specify it in Settings." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Codex executable not found. Specify it in Settings."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未找到 Codex 可执行文件，请在设置中指定。"
+            "value" : "未找到 Codex 可执行文件。可在终端运行 which codex 查找路径，并在设置中指定。"
           }
         }
       }

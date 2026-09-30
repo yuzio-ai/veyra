@@ -294,4 +294,160 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(result.error, .timeout)
         await slow.shutdown()
     }
+
+    func testExecutableCandidatesCoverDesktopUserLevelHomebrewAndPath() {
+        let home = URL(fileURLWithPath: "/Users/example")
+        let candidates = CodexLocation.executableCandidates(
+            environment: ["PATH": "/opt/custom/bin:/usr/bin"],
+            homeDirectory: home
+        )
+        XCTAssertEqual(candidates.first, "/Applications/ChatGPT.app/Contents/Resources/codex")
+        for path in [
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
+            "/Applications/Codex.app/Contents/Resources/codex",
+            "/Users/example/Applications/ChatGPT.app/Contents/Resources/codex",
+            "/Users/example/Applications/Codex.app/Contents/Resources/codex",
+            "/Users/example/.local/bin/codex",
+            "/Users/example/.codex/packages/standalone/current/bin/codex",
+            "/opt/homebrew/bin/codex",
+            "/usr/local/bin/codex",
+            "/opt/custom/bin/codex",
+            "/usr/bin/codex",
+        ] {
+            XCTAssertTrue(candidates.contains(path), path)
+        }
+    }
+
+    func testResolveFindsUserLevelAndStandaloneExecutables() throws {
+        for relative in [".local/bin/codex", ".codex/packages/standalone/current/bin/codex"] {
+            let homeDirectory = try temp()
+            let executable = homeDirectory.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+            let location = CodexLocation.resolve(
+                homePath: "",
+                executablePath: "",
+                environment: ["PATH": "/usr/bin:/bin"],
+                homeDirectory: homeDirectory
+            )
+            XCTAssertEqual(location.executable?.path, executable.path, relative)
+        }
+    }
+
+    func testResolvePrefersDesktopAppAndHonorsManualPathAndCodexHome() throws {
+        let homeDirectory = try temp()
+        let desktop = homeDirectory.appendingPathComponent("Applications/Codex.app/Contents/Resources/codex")
+        let userCLI = homeDirectory.appendingPathComponent(".local/bin/codex")
+        for executable in [desktop, userCLI] {
+            try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        }
+        let discovered = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: [:],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(discovered.executable?.path, desktop.path)
+
+        let manual = userCLI.path
+        let customHome = homeDirectory.appendingPathComponent("custom-home")
+        let overridden = CodexLocation.resolve(
+            homePath: customHome.path,
+            executablePath: manual,
+            environment: ["CODEX_HOME": homeDirectory.appendingPathComponent("ignored-home").path],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(overridden.executable?.path, manual)
+        XCTAssertEqual(overridden.home.path, customHome.path)
+
+        let envHome = homeDirectory.appendingPathComponent("codex-home")
+        let fromEnvironment = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: ["CODEX_HOME": envHome.path],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(fromEnvironment.home.path, envHome.path)
+
+        let fallback = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: [:],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(fallback.home.path, homeDirectory.appendingPathComponent(".codex").path)
+    }
+
+    func testResolveReturnsNilExecutableWhenNoCandidateExists() throws {
+        let homeDirectory = try temp()
+        let location = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: ["PATH": homeDirectory.path],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertNil(location.executable)
+    }
+
+    /// Regression guard for the discovery order: fixed user-level paths must win over the
+    /// inherited PATH, because a Finder-launched app rarely sees the shell PATH at all.
+    func testResolvePrefersFixedUserLevelPathOverInheritedPath() throws {
+        let homeDirectory = try temp(), pathEntry = try temp()
+        let fixed = try makeExecutable(homeDirectory.appendingPathComponent(".local/bin/codex"))
+        _ = try makeExecutable(pathEntry.appendingPathComponent("codex"))
+        let location = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: ["PATH": pathEntry.path],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(location.executable?.path, fixed.path)
+    }
+
+    func testResolveFallsBackToInheritedPathWhenNoFixedCandidateExists() throws {
+        let homeDirectory = try temp(), pathEntry = try temp()
+        let onPath = try makeExecutable(pathEntry.appendingPathComponent("codex"))
+        let location = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: ["PATH": pathEntry.path],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(location.executable?.path, onPath.path)
+    }
+
+    /// An empty or whitespace-only `CODEX_HOME` means "unset" and must not degrade into the
+    /// process working directory (which is the filesystem root for a Finder-launched app).
+    func testResolveTreatsBlankCodexHomeAsUnset() throws {
+        let homeDirectory = try temp()
+        let expected = homeDirectory.appendingPathComponent(".codex").path
+        for value in ["", " ", "\n", "  \n "] {
+            let location = CodexLocation.resolve(
+                homePath: "",
+                executablePath: "",
+                environment: ["CODEX_HOME": value],
+                homeDirectory: homeDirectory
+            )
+            XCTAssertEqual(location.home.path, expected, "CODEX_HOME = [\(value)]")
+        }
+        let custom = homeDirectory.appendingPathComponent("custom-codex-home")
+        let padded = CodexLocation.resolve(
+            homePath: "",
+            executablePath: "",
+            environment: ["CODEX_HOME": "  \(custom.path)  "],
+            homeDirectory: homeDirectory
+        )
+        XCTAssertEqual(padded.home.path, custom.path)
+    }
+
+    @discardableResult
+    private func makeExecutable(_ url: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
 }

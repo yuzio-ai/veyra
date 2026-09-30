@@ -249,7 +249,7 @@ enum QuotaFailure: String, Error, LocalizedError, Sendable, CaseIterable {
 
     var message: String {
         switch self {
-        case .missingExecutable: L10n.text("Codex executable not found. Specify it in Settings.")
+        case .missingExecutable: L10n.missingCodexExecutable()
         case .missingHome: L10n.text("Codex data directory does not exist. Check Settings.")
         case .launchFailed: L10n.text("Unable to start Codex. Check the executable and data directory.")
         case .disconnected: L10n.text("Codex disconnected. Try syncing quota again later.")

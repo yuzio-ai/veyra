@@ -24,6 +24,12 @@ enum L10n {
     static func resetCount(_ count: Int64) -> String {
         text("\(count) resets")
     }
+
+    /// Shared by the settings status row and the quota failure notice, so the guidance cannot
+    /// drift into two nearly identical keys again.
+    static func missingCodexExecutable() -> String {
+        text("Codex executable not found. Run which codex in Terminal to find the path, then specify it in Settings.")
+    }
 }
 
 enum TaskReadWarning: String, Sendable, CaseIterable {
