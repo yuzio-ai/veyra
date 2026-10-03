@@ -221,6 +221,28 @@ final class CoreTests: XCTestCase {
         XCTAssertFalse(evidence.matches(sessionID: "session-a"))
     }
 
+    func testDshProcessEvidenceKeepsDesktopHarnessSessionLocks() {
+        // `parse` ignores `c` lines, so pin the scanned process list and the
+        // assembled `lsof` invocation — otherwise this test would pass with or
+        // without the fix.
+        XCTAssertEqual(DshProcessEvidence.processNames, ["node", "DeepSeek", "dsh"])
+        XCTAssertEqual(DshProcessEvidence.lsofArguments,
+                       ["-nP", "-Fpcn", "-c", "node", "-c", "DeepSeek", "-c", "dsh"])
+        let home = URL(fileURLWithPath: "/Users/example/.dsh")
+        let session = "session-" + UUID().uuidString.lowercased()
+        let log = """
+        p95082
+        cDeepSeek Harness
+        n\(home.path)/sessions/--work--/\(session)/session.lock
+        p95083
+        cDeepSeek Harness Helper
+        n\(home.path)/sessions/--work--/614ab421-be16-4441-8a31-85711cf32e5a/session.lock
+        """
+        let evidence = DshProcessEvidence.parse(log, home: home)
+        XCTAssertEqual(evidence.sessionIDs, [session, "614ab421-be16-4441-8a31-85711cf32e5a"])
+        XCTAssertTrue(evidence.matches(sessionID: session))
+    }
+
     func testDshLocationPrefersEnvironmentAndExpandsTilde() {
         let resolved = DshLocation.resolve(environment: ["DSH_HOME": "~/custom-dsh"])
         XCTAssertEqual(resolved.home.path,

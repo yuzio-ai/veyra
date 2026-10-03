@@ -64,11 +64,26 @@ struct ProcessEvidence: Sendable {
 }
 
 /// dsh counterpart of ProcessEvidence: a live dsh instance holds `session.lock`
-/// for every loaded session, so node processes reveal which sessions are open.
-/// Electron-profile sessions do not run as `node` and are simply unconfirmed.
+/// for every loaded session. The CLI runs as `node`; DeepSeek Harness Desktop
+/// runs as `DeepSeek Harness` (plus its renamed helpers, all under the
+/// `DeepSeek` prefix), so both are scanned — parsing only keeps `session.lock`
+/// paths under home. Read-only by contract: never writes, never reads
+/// credentials, no network.
 struct DshProcessEvidence: Sendable {
     var sessionIDs: Set<String> = []
     var reliable = true
+
+    /// Process-name prefixes scanned by a single `lsof -c` pass (`-c` matches
+    /// by prefix). The CLI is a `node` script, so `node` covers it; `DeepSeek`
+    /// covers Harness Desktop and its renamed helpers
+    /// (`DeepSeek Harness Helper (Renderer)`); `dsh` is precautionary in case
+    /// a native binary ever ships. Kept as constants (not inlined in `collect`)
+    /// so tests can pin them: `parse` ignores `c` lines and cannot guard them.
+    static let processNames = ["node", "DeepSeek", "dsh"]
+
+    /// Exact `lsof` invocation built from `processNames`; exposed so tests cover
+    /// the `collect` path, not just `parse`.
+    static var lsofArguments: [String] { ["-nP", "-Fpcn"] + processNames.flatMap { ["-c", $0] } }
 
     func matches(sessionID: String) -> Bool { sessionIDs.contains(sessionID) }
 
@@ -94,7 +109,7 @@ struct DshProcessEvidence: Sendable {
         await Task.detached(priority: .utility) {
             let process = Process(), pipe = Pipe(), errorPipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-            process.arguments = ["-nP", "-Fpcn", "-c", "node"]
+            process.arguments = lsofArguments
             process.standardOutput = pipe
             process.standardError = errorPipe
             do {
