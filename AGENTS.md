@@ -50,6 +50,12 @@ Keep signing overrides local: `DEVELOPMENT_TEAM` belongs only in the gitignored 
 
 A file sandbox also breaks the Swift macro plugin server (`swift-plugin-server`), so `ObservationMacros`/`SwiftMacros` expansion fails with `produced malformed response` regardless of the derived data path. Build and test steps need unsandboxed execution; report that requirement instead of treating the failure as a code defect.
 
+Use `/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py` with `test`, `previews dashboard|menu|settings`, or `release-build` for automated verification. Keep environment setup and log redirection inside the entrypoint so its narrow command rules can match. `test` reuses the existing `test.sh`; `release-build` reuses `build.sh`. The entrypoint uses unsigned builds, isolated fixtures, fixed non-TCC derived data, unique logs, and a nonblocking lock. `--dry-run` prints commands without running them.
+
+For intermediate edits, use `test --only-testing VeyraTests/TestClass[/testMethod]`; run a full `test` at final validation. Reuse unchanged successful evidence rather than repeating a full suite. The entrypoint invalidates evidence when source, toolchain, environment, or artifacts change; failures and concurrent invocations never count as passes. `--force` explicitly reruns. A focused test pass does not replace a full-suite pass. Preserve `SKIP` as reuse of prior evidence, not a fresh execution.
+
+Rules are reviewed in `scripts/codex-local-verification.rules` and installed with `scripts/install_verification_rules.py` into trusted project `.codex/rules/local-verification.rules`. Restart Codex after installation. Do not add generic interpreter, shell, or xcodebuild allow rules. Rules trust script content, so review script changes. Real `launch` and read-only `ax-read <PID>` remain separate approval requests; they must not be folded into automatic testing or previews. Keep sandbox settings and existing generic command permissions unchanged. See `docs/development.zh-CN.md` for commands and evidence paths.
+
 ## Agent Instructions
 
 For library, framework, SDK, API, CLI, or cloud-service questions, use current Context7 docs: `resolve-library-id`, then `query-docs` with the full question. Skip resolution for supplied exact IDs. Excludes general programming, new scripts, refactoring, business-logic debugging, and code review.

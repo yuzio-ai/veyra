@@ -1,0 +1,34 @@
+# Veyra only. Keep generic interpreter, shell, and xcodebuild permissions unchanged.
+# The installer verifies this file, then copies it to .codex/rules/local-verification.rules.
+# Rules trust this script's content; review changes to it before running outside the sandbox.
+prefix_rule(
+    pattern=["/usr/bin/python3", "-I", "-B", "/Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py", ["test", "release-build", "previews"]],
+    decision="allow",
+    justification="Fixed Veyra verification with unsigned builds and isolated fixtures",
+    match=[
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test",
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test --only-testing VeyraTests/HistoryIndexTests",
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py release-build",
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py previews dashboard",
+    ],
+    not_match=[
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py launch",
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py ax-read 123",
+        "python3 scripts/verify_local.py test",
+        "/usr/bin/python3 -I -B /private/tmp/verify_local.py test",
+        "/usr/bin/python3 -c print(1)",
+    ],
+)
+prefix_rule(
+    pattern=["/usr/bin/python3", "-I", "-B", "/Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py", ["launch", "ax-read"]],
+    decision="prompt",
+    justification="Real Veyra launch and accessibility snapshots require separate approval",
+    match=[
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py launch",
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py ax-read 123",
+    ],
+    not_match=[
+        "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test",
+        "/bin/zsh -lc open",
+    ],
+)

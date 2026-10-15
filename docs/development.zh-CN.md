@@ -19,6 +19,34 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 
 受限环境还会让 Swift 宏插件失效：`ObservationMacros` 与 `SwiftMacros` 的宏实现需要 `swift-plugin-server`，该辅助进程在文件沙箱下无法正常工作，编译会报 `External macro implementation type ... could not be found` / `produced malformed response`。这与派生数据路径无关，`VEYRA_DERIVED_DATA_PATH` 不能解决；需要为构建进程放行，或改用不受限的构建环境。放行后验证结论与普通开发机一致。
 
+### Codex 固定验证入口
+
+在此仓库的 Codex 会话中使用完整绝对路径，不在外层追加环境赋值或日志重定向：
+
+```sh
+/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test
+/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test --only-testing VeyraTests/HistoryIndexTests
+/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py previews dashboard
+/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py release-build
+```
+
+`test` 复用 `test.sh`，串联 XCTest、隔离诊断、验证入口的离线回归和配置检查。`previews dashboard|menu|settings` 默认生成中英文固定数据预览，可用 `--language en|zh` 限定语言；需要新的 Debug 产物时只构建，不隐式运行 XCTest。检出版本尚未包含 Dashboard 预览功能时，`previews dashboard` 在启动前报功能不可用，不会退回普通应用启动。`release-build` 复用 `build.sh`，检查无签名通用 Release 产物与辅助功能读取工具的 Swift 6 编译。普通 `build.sh` 与 `test.sh` 仍保留原有签名行为；自动入口使用 `--unsigned`。
+
+派生数据与互斥锁位于 `/private/tmp/veyra-local-verification/<仓库路径哈希>/`，避开 Documents 的测试运行器限制。每次实际执行都在 `build/local-verification/<UTC 时间与随机 ID>/` 保留独立日志和 `result.json`。并发调用直接失败，不视为通过。固定入口不接受任意派生目录、Xcode 参数或可执行路径。
+
+源码、资源、工程、验证脚本、xcconfig、工具链、运行环境与构建产物均未变化时，入口复用相同范围的成功记录，并输出 `SKIP` 和原证据目录；使用 `--force` 可重跑。复用前同时校验原日志的内容哈希与结果文件，删除或损坏证据后会重新执行。失败、证据缺失、运行期间输入变化均不写入可复用记录。局部测试的成功不能替代完整测试。中间修改优先运行相关测试；最终运行一次完整 `test`。已有成功证据后，没有新修改或失败时不重复完整验证。
+
+窄范围规则模板为 `scripts/codex-local-verification.rules`。先校验，再安装到本仓库 `.codex/rules/local-verification.rules`：
+
+```sh
+/usr/bin/python3 -I -B scripts/install_verification_rules.py --check
+/usr/bin/python3 -I -B scripts/install_verification_rules.py
+```
+
+规则只持久放行此绝对路径入口的 `test`、`previews`、`release-build`。规则不会修改沙箱配置或通用命令权限。项目 `.codex/` 需受信任，安装后重启 Codex；静态匹配通过不能证明当前桌面会话已加载规则。仓库搬迁后需审查并更新模板中的绝对路径。规则信任脚本内容，不校验内容哈希；修改验证脚本或规则需审查。
+
+真实启动与辅助功能读取保留 `prompt` 规则：`verify_local.py launch --language zh|en` 只启动当前已验证的 Release 应用；`verify_local.py ax-read <PID>` 只读取该仓库验证目录下、Bundle ID 为 `ai.yuzio.veyra` 的应用。读取工具不提供点击或字段修改，快照留在本机忽略的 `build/`；macOS 辅助功能权限独立于 Codex 授权。两者不属于普通测试或固定数据预览。
+
 测试脚本最后运行 `scripts/verify_configuration.py`，只读校验工程配置与打包中 XCTest 无法覆盖的不变量：App Sandbox 关闭、应用 target 开启 Hardened Runtime 且测试 target 关闭、自动签名（Apple Development）、Team 只经未入库的 `Local.xcconfig` 提供（工程文件不含 `DEVELOPMENT_TEAM`）、混合 Info.plist 卫生（手工 plist 只保留 Xcode 无法生成的 key）、`LSUIElement` 菜单栏模式、macOS 14 部署目标、Swift 6 严格并发、应用仍链接系统 `libsqlite3`，以及测试 target 的成员例外覆盖全部共享 Core 源码和本地化资源且无失效条目。传入 `--app` 时同时检查测试宿主二进制的架构。带 `--derived-data` 且存在 Release 构建时，额外检查发行二进制同时包含 arm64 与 x86_64，以及合并后 Info.plist 的完整键集；没有 Release 构建时这些检查显示为跳过。单独运行：
 
 ```sh

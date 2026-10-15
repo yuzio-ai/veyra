@@ -1,6 +1,19 @@
 #!/bin/zsh
 set -euo pipefail
 cd "${0:A:h:h}"
+build_arguments=()
+while (( $# )); do
+    case "$1" in
+        --unsigned) build_arguments+=(CODE_SIGNING_ALLOWED=NO); shift ;;
+        --only-testing)
+            if (( $# < 2 )) || [[ ! "$2" =~ '^VeyraTests(/[A-Za-z_][A-Za-z0-9_]*){1,2}$' ]]; then
+                print -r -- 'test.sh: expected VeyraTests/TestClass[/testMethod]' >&2
+                exit 2
+            fi
+            build_arguments+=("-only-testing:$2"); shift 2 ;;
+        *) print -r -- "test.sh: unsupported argument: $1" >&2; exit 2 ;;
+    esac
+done
 if [[ -n "${VEYRA_DERIVED_DATA_PATH:-}" ]]; then
     derived_data="$VEYRA_DERIVED_DATA_PATH"
 elif [[ "$PWD" == "$HOME/Documents/"* || "$PWD" == "$HOME/Desktop/"* || "$PWD" == "$HOME/Downloads/"* ]]; then
@@ -20,8 +33,9 @@ if ! mkdir -p "$derived_data" 2>/dev/null || ! { : > "$derived_probe" } 2>/dev/n
     exit 1
 fi
 rm -f "$derived_probe"
-xcodebuild -project Veyra.xcodeproj -scheme Veyra -configuration Debug -derivedDataPath "$derived_data" -destination 'platform=macOS' test
+xcodebuild -project Veyra.xcodeproj -scheme Veyra -configuration Debug -derivedDataPath "$derived_data" -destination 'platform=macOS' "${build_arguments[@]}" test
 python3 scripts/test_diagnostics.py --app "$derived_data/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra"
+python3 -I -B scripts/test_local_verification.py
 # Read-only invariant check for project configuration and packaging, which has
 # no XCTest coverage of its own.
 verify_arguments=(--app "$derived_data/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra")
