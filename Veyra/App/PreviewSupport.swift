@@ -270,12 +270,45 @@ enum PreviewSupport {
             .environment(\.monitorReferenceDate, referenceDate)
     }
 
+    /// Renders the provider settings list in both appearances so layout and
+    /// dark-mode regressions are reviewable without screen recording permission.
+    static func renderProviders(to directory: URL) {
+        Task { @MainActor in
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                for (name, appearance) in [("providers-light", NSAppearance.Name.aqua), ("providers-dark", .darkAqua)] {
+                    let profiles = CodexModelProfilesStore.preview("preset-current")
+                    let monitor = MonitorStore()
+                    monitor.isPreview = true
+                    let hosting = NSHostingView(rootView: MonitorSettings(store: monitor, updates: .preview(.idle), profiles: profiles)
+                        .frame(width: 820, height: 660).background(Color(nsColor: .windowBackgroundColor)))
+                    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 660),
+                                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                    window.appearance = NSAppearance(named: appearance)
+                    window.contentView = hosting
+                    window.setContentSize(NSSize(width: 820, height: 660))
+                    window.setFrameTopLeftPoint(NSPoint(x: 60, y: 900))
+                    window.orderFront(nil)
+                    try await Task.sleep(for: .milliseconds(250))
+                    hosting.layoutSubtreeIfNeeded()
+                    try saveBitmap(hosting, to: directory.appendingPathComponent(name + ".png"))
+                    window.orderOut(nil)
+                }
+                NSApp.terminate(nil)
+            } catch {
+                FileHandle.standardError.write(Data("Provider preview failed: \(error)\n".utf8))
+                exit(1)
+            }
+        }
+    }
+
     static func render(to directory: URL) {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 if CommandLine.arguments.contains("--exercise-settings-only") {
                     try await SettingsInteractionChecks.run(to: directory)
+                    try await ModelProfileWindowChecks.run(to: directory)
                     NSApp.terminate(nil)
                     return
                 }
@@ -368,6 +401,7 @@ enum PreviewSupport {
                         retainedWindow = nil
                     }
                 }
+                results += try await ModelProfilePreviews.render(to: directory)
                 if CommandLine.arguments.contains("--exercise-settings") {
                     try await SettingsInteractionChecks.run(to: directory)
                 }

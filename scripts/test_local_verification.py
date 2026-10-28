@@ -49,6 +49,10 @@ class VerificationTests(unittest.TestCase):
             directory.mkdir()
             (directory / 'layouts.json').write_text('[{"fixture": true}]')
             (directory / 'fixture.png').write_bytes(b'fixture')
+        if name.startswith('native-menu-'):
+            directory = Path(command[command.index('--exercise-menu-to') + 1])
+            directory.mkdir(parents=True)
+            (directory / 'menu-check.json').write_text('[{"toggleAndEscapePassed": true}]')
 
     def testUnchangedSuccessSkipsButForceRuns(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
@@ -133,11 +137,61 @@ class VerificationTests(unittest.TestCase):
             verify.run(verify.arguments(['previews', 'dashboard']))
             self.assertEqual(execute.call_count, 2)
 
+    def testNativeMenuChecksUseOnlyFixedIsolatedPreviewCommands(self):
+        with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            verify.run(verify.arguments(['previews', 'menu']))
+            native = [call.args for call in execute.call_args_list if call.args[0].startswith('native-menu-')]
+            self.assertEqual(len(native), 6)
+            for name, command, timeout, output, env in native:
+                self.assertEqual(command[0], str(verify.binary('Debug')))
+                self.assertEqual(command[command.index('--preview-menu') + 1], 'multiple')
+                self.assertIn('--exit-after-menu-checks', command)
+                self.assertEqual(env['CODEX_HOME'], str(output / 'fixture-codex-home'))
+                self.assertTrue(Path(command[command.index('--exercise-menu-to') + 1]).is_relative_to(output))
+
+    def testNativeOnlyRunsFixedChecksAndCannotReplaceFullPreviewEvidence(self):
+        with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            verify.run(verify.arguments(['previews', 'menu', '--native-only']))
+            names = [call.args[0] for call in execute.call_args_list]
+            self.assertEqual(len([name for name in names if name.startswith('native-menu-')]), 6)
+            self.assertFalse(any(name.startswith('previews-') for name in names))
+            execute.reset_mock()
+            verify.run(verify.arguments(['previews', 'menu']))
+            names = [call.args[0] for call in execute.call_args_list]
+            self.assertIn('previews-en', names)
+            self.assertIn('previews-zh', names)
+            self.assertEqual(len([name for name in names if name.startswith('native-menu-')]), 6)
+
+    def testNativeOnlyRejectsOtherPreviewTargets(self):
+        for target in ('settings', 'dashboard'):
+            with self.assertRaises(SystemExit):
+                verify.arguments(['previews', target, '--native-only'])
+
     def testLaunchRequiresCurrentVerifiedRelease(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
             with self.assertRaisesRegex(RuntimeError, 'release-build first'):
                 verify.run(verify.arguments(['launch']))
             self.assertFalse(execute.called)
+
+    def testLaunchPreservesExplicitCodexHomeWithoutCreatingAFixture(self):
+        with patch.dict(verify.os.environ, {'CODEX_HOME': '/fixture/user-selected-codex'}, clear=True), \
+                patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            verify.run(verify.arguments(['release-build']))
+            verify.run(verify.arguments(['launch']))
+            name, command, timeout, output, env = execute.call_args.args
+            self.assertEqual(name, 'launch')
+            self.assertEqual(env['CODEX_HOME'], '/fixture/user-selected-codex')
+            self.assertFalse((output / 'fixture-codex-home').exists())
+
+    def testLaunchWithoutCodexHomeRetainsApplicationDefaultDiscovery(self):
+        with patch.dict(verify.os.environ, {}, clear=True), \
+                patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            verify.run(verify.arguments(['release-build']))
+            verify.run(verify.arguments(['launch']))
+            name, command, timeout, output, env = execute.call_args.args
+            self.assertEqual(name, 'launch')
+            self.assertNotIn('CODEX_HOME', env)
+            self.assertFalse((output / 'fixture-codex-home').exists())
 
     def testDashboardWithoutFeatureCannotFallThroughToNormalLaunch(self):
         with patch.object(verify, 'execute') as execute:

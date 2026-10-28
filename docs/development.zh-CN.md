@@ -102,6 +102,13 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 # 输出浅色、深色及高对比度 PNG 和 layouts.json，不启动 Codex
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --render-previews "$PWD/build/previews"
 
+# 独立 Dashboard 固定数据预览与筛选／期间切换检查，不读取真实任务或创建生产索引
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
+  --render-dashboard-previews "$PWD/build/dashboard-previews" -AppleLanguages '("zh-Hans")' -AppleLocale zh_CN
+
+# 打开真实 Dashboard；读取当前配置的本机历史，并创建或更新 Veyra 自己的索引
+'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --show-dashboard
+
 # 独立验证中英文界面，含设置页；语言与区域参数仅作用于本次进程
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
   --render-previews "$PWD/build/previews-en" -AppleLanguages '(en)' -AppleLocale en_US
@@ -169,8 +176,36 @@ python3 scripts/measure_energy.py \
 `active` 和 `panel` 场景包含三个持有真实文件句柄的模拟运行任务，并持续追加用量。`panel` 使用相同内容的原生调试窗口，不能替代真实菜单的玻璃与交互验收。脚本会先用目标应用的诊断确认运行任务数；夹具位于忽略的 `build/` 临时目录，结束后清理。测试方法、实测结果和限制见[能耗优化验收记录](energy-validation.md)，结构化汇总见 [energy-measurements.json](energy-measurements.json)。
 
 
+### 模型配置验证
+
+新增 `CodexModelProfilesTests`、`CodexModelProfilesStoreTests` 与 `CodexModelConfigurationIntegrationTests`，分别验证配置补丁与恢复记录、编辑与菜单共享状态、真实 Codex 的隔离配置接口。集成测试只使用临时 `CODEX_HOME`，不读取账号或调用模型接口；未安装 Codex 时标记跳过。
+
+统一入口的 `previews settings` 和 `previews menu` 都补充 `models-*` 固定夹具：普通、空列表、字段错误、接口不可用、长列表和成功提示，覆盖中英文、浅深色、高对比度与不透明回退。布局位图不证明原生菜单交互或系统辅助功能行为；快速入口另覆盖供应商长名称、忙碌、配置不可用和策略覆盖。实际菜单测试仍使用固定夹具入口分别记录。模型方案的新增 Core 文件和可观察状态均加入独立测试 target。
+
+模型固定夹具另外执行原生文本输入、保存、无效地址校验、关闭拦截及取消/放弃检查，结果为 `model-profile-native-checks.json`。`previews menu` 再执行六种固定外观下的真实 `--preview-menu multiple` 弹窗，检查滚动、动态收缩、开关和 Esc 后自动退出，结果保存在对应语言目录的 `native-*/menu-check.json`。这些命令只使用固定夹具；真实数据启动与外部辅助功能读取仍保留单独的审批边界，规则文件没有扩大通用命令权限。
+
 ### 更新检查验证
 
 `update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 和 `--exercise-menu-to` 检查实际菜单与滚动。设置页渲染包含未检查、检查中、有新版、已是最新、失败、限流及检查失败但仍有缓存新版七种更新状态，以及自动/手动路径、检测中、未找到、无效路径、无效草稿和长路径场景；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
 
 新增的更新状态文件与 Core 源码一同加入独立 XCTest target；调整成员关系后更新 `project.pbxproj` 的成员例外，并运行 `scripts/verify_configuration.py` 核对。
+
+供应商入口使用 SwiftUI 排版与原生透明按钮，原生菜单图标为 16pt。固定夹具检查整行点击区域、完整辅助功能名称、菜单当前项、禁用状态与快捷切换。`previews menu --native-only --language en` 可仅执行六种固定外观的原生弹窗检查，其缓存范围与完整预览分开，不能替代完整中英文布局证据。此选项只复用现有固定夹具命令，不扩大真实启动或辅助功能读取权限。Esc 使用已聚焦供应商按钮的原生窗口合成事件；不代表前台硬件键盘或 VoiceOver 人工验收。
+
+
+## 五家 API 预置与钥匙串
+
+普通供应商页面使用固定五家预置；旧连接保留在高级管理。模型列表由 `ProviderModelClient` 获取，不打包模型目录或固定默认模型。新增共享 Core 文件仍需同步更新 `membershipExceptions`。历史预置目录记录见 [此前来源](provider-presets-sources.md)。
+
+`verify_local.py test` 使用内存凭据实现，不接触登录钥匙串。`previews menu` 包括新版设置、原生 SecureField 输入与清空、保存不启用、启用、未保存修改保护和快捷菜单检查。正式交付还需 `verify_local.py release-build`。
+
+真实钥匙串能力单独使用稳定签名构建验收：
+
+```sh
+./scripts/build.sh
+/usr/bin/python3 -I -B scripts/verify_provider_credentials.py --app build/Build/Products/Release/Veyra.app
+```
+
+该检查创建独立测试钥匙串和临时 Codex 目录，使用固定假 Key，仅向本地 Responses 模拟服务发送请求。验收由五家模拟响应动态生成的目录、退出界面后的无界面取钥、独立进程再次取钥、锁定和缺失错误；检查用户钥匙串搜索列表未改变。签名应用的隔离模式负责解析响应并生成目录，使用接口未预置的新模型 ID。结果在 `build/provider-credentials/<UTC时间>/result.json`。unsigned 测试通过不代表签名钥匙串能力通过。
+
+实时模型交付与证据见 [验证记录](provider-model-discovery-validation.md)；此前钥匙串版本见 [历史记录](provider-presets-keychain-validation.md)。真实供应商模型调用需要用户 Key，单独记录，不自动执行付费请求。

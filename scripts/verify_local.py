@@ -35,6 +35,7 @@ def arguments(argv=None):
         if mode == 'previews':
             child.add_argument('target', choices=('dashboard', 'menu', 'settings'))
             child.add_argument('--language', choices=('en', 'zh', 'both'), default='both')
+            child.add_argument('--native-only', action='store_true', help='Run only the six fixed fixture popover checks (menu only)')
         if mode == 'launch':
             child.add_argument('--language', choices=('en', 'zh'), default='zh')
         if mode == 'ax-read':
@@ -44,6 +45,8 @@ def arguments(argv=None):
         parser.error('--only-testing must be VeyraTests/TestClass[/testMethod]')
     if result.mode == 'ax-read' and result.pid <= 0:
         parser.error('pid must be positive')
+    if result.mode == 'previews' and result.native_only and result.target != 'menu':
+        parser.error('--native-only requires previews menu')
     return result
 
 
@@ -172,8 +175,21 @@ def commands(options, output):
         locales = ('en', 'zh') if options.language == 'both' else (options.language,)
         flag = '--render-dashboard-previews' if options.target == 'dashboard' else '--render-previews'
         extra = ['--preview-settings-only'] if options.target == 'settings' else []
-        return [('previews-' + locale, [str(binary('Debug')), flag, str(output / locale)] + extra + language(locale), 300)
+        plan = [('previews-' + locale, [str(binary('Debug')), flag, str(output / locale)] + extra + language(locale), 300)
                 for locale in locales]
+        if options.native_only:
+            plan = []
+        if options.target == 'menu':
+            # Fixed fixture popovers only: no live launch, real Codex home, global hotkey, or network.
+            for style in ('light', 'dark', 'light-increased', 'dark-increased', 'light-opaque', 'dark-opaque'):
+                appearance = style.removesuffix('-opaque')
+                command = [str(binary('Debug')), '--preview-menu', 'multiple', '--show-menu',
+                           '--preview-appearance', appearance, '--exercise-menu-to', str(output / locales[0] / ('native-' + style)),
+                           '--exit-after-menu-checks'] + language(locales[0])
+                if style.endswith('-opaque'):
+                    command.append('--preview-reduce-transparency')
+                plan.append(('native-menu-' + style, command, 40))
+        return plan
     if options.mode == 'launch':
         return [('launch', ['/usr/bin/open', '-n', str(app('Release')), '--args'] + language(options.language), 30)]
     helper = STATE / 'accessibility-snapshot'
@@ -237,7 +253,7 @@ def run(options):
             try:
                 previous = json.loads(stamp.read_text())
                 locales = ('en', 'zh') if options.language == 'both' else (options.language,)
-                artifacts = [app('Debug')] + [Path(previous['output']) / locale for locale in locales]
+                artifacts = [app('Debug')] + [Path(previous['output']) / locale for locale in (locales[:1] if options.native_only else locales)]
             except (OSError, ValueError, KeyError, TypeError):
                 artifacts = []
         if options.mode in ('test', 'release-build', 'previews') and not options.force and artifacts:
@@ -248,8 +264,12 @@ def run(options):
         if options.mode == 'launch' and not cached(stamp_path('release-build'), release_fingerprint, [app('Release')]):
             raise RuntimeError('Run release-build first; launch requires a current verified Release app')
         output.mkdir(parents=True)
-        env['CODEX_HOME'] = str(output / 'fixture-codex-home')
-        Path(env['CODEX_HOME']).mkdir()
+        if options.mode in ('test', 'previews'):
+            env['CODEX_HOME'] = str(output / 'fixture-codex-home')
+            Path(env['CODEX_HOME']).mkdir()
+        elif options.mode == 'launch' and 'CODEX_HOME' in os.environ:
+            # Preserve the user's explicit home without forwarding other account variables.
+            env['CODEX_HOME'] = os.environ['CODEX_HOME']
         env['VEYRA_DERIVED_DATA_PATH'] = str(STATE / ('release' if options.mode == 'release-build' else 'debug'))
         stamp.unlink(missing_ok=True)
         result = {'scope': scope, 'fingerprint': expected, 'status': 'running'}
@@ -265,11 +285,16 @@ def run(options):
                 raise RuntimeError('Inputs changed during verification; result is inconclusive and will not be reused')
             if options.mode == 'previews':
                 locales = ('en', 'zh') if options.language == 'both' else (options.language,)
-                artifacts = [app('Debug')] + [output / locale for locale in locales]
-                for locale in locales:
+                artifacts = [app('Debug')] + [output / locale for locale in (locales[:1] if options.native_only else locales)]
+                for locale in (() if options.native_only else locales):
                     layouts = json.loads((output / locale / 'layouts.json').read_text())
                     if not layouts or not list((output / locale).glob('*.png')):
                         raise RuntimeError(f'Preview evidence is missing for {locale}')
+                if options.target == 'menu':
+                    for style in ('light', 'dark', 'light-increased', 'dark-increased', 'light-opaque', 'dark-opaque'):
+                        records = json.loads((output / locales[0] / ('native-' + style) / 'menu-check.json').read_text())
+                        if not any(row.get('toggleAndEscapePassed') is True for row in records):
+                            raise RuntimeError(f'Native menu interaction evidence is missing for {style}')
             if options.mode == 'test' or rebuilt_debug:
                 save_stamp(stamp_path('debug-build'), debug_fingerprint, [app('Debug')], output)
             if options.mode == 'release-build':

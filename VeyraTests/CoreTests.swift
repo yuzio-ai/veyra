@@ -68,6 +68,21 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(DisplayFormat.tokens(nil), "—")
     }
 
+    func testCompactContextWindowKeepsRoundSizeAndExactCount() {
+        XCTAssertEqual(DisplayFormat.compactTokens(1_048_576), "1M")
+        XCTAssertEqual(DisplayFormat.compactTokens(1_500_000), "1.5M")
+        XCTAssertEqual(DisplayFormat.compactTokens(200_000), "200K")
+        XCTAssertEqual(DisplayFormat.compactTokens(999), "999")
+        for language in ["en", "zh-Hans"] {
+            L10n.$languageOverride.withValue(language) {
+                XCTAssertEqual(DisplayFormat.contextWindow(200_000), "200K tokens")
+                XCTAssertEqual(DisplayFormat.contextWindow(1_048_576), language == "en"
+                    ? "1M tokens (1,048,576)"
+                    : "1M tokens（1,048,576）")
+            }
+        }
+    }
+
     func testCachedInputPercentUsesRawInputCount() throws {
         let usage = TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, total: 884_100)
         XCTAssertEqual(try XCTUnwrap(usage.cachedInputPercent), 79.616236970023, accuracy: 0.000001)
@@ -301,6 +316,33 @@ final class CoreTests: XCTestCase {
         let requests = try String(contentsOf: home.appendingPathComponent("requests"), encoding: .utf8)
             .split(separator: "\n").map { try json(String($0))["method"].string }
         XCTAssertEqual(requests, ["initialize", "initialized", "account/read", "account/rateLimits/read", "account/read", "account/rateLimits/read"])
+    }
+
+    func testConfigurationRPCPreservesLargeFragmentedResponseByteOrder() async throws {
+        let home = try temp(), executable = try temp().appendingPathComponent("fragmented-codex")
+        let script = #"""
+        #!/usr/bin/python3
+        import json, os, sys
+        for line in sys.stdin:
+            request = json.loads(line)
+            if 'id' not in request: continue
+            if request['method'] == 'initialize':
+                result = {}
+            else:
+                config = {'model': 'fixture-model', 'fixture_large_value': '界' * 100000}
+                result = {'config': config, 'layers': [{'name': {'type': 'user', 'file': os.environ['CODEX_HOME'] + '/config.toml'}, 'version': 'fixture-version', 'config': config}]}
+            data = (json.dumps({'id': request['id'], 'result': result}, ensure_ascii=False) + '\n').encode()
+            for offset in range(0, len(data), 257): os.write(1, data[offset:offset+257])
+        """#
+        try script.write(to: executable, atomically: false, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let client = AppServerClient(requestTimeout: .seconds(5))
+        for _ in 0..<5 {
+            let result = try await client.readConfiguration(location: CodexLocation(home: home, executable: executable))
+            XCTAssertEqual(result.user["model"].string, "fixture-model")
+            XCTAssertEqual(result.user["fixture_large_value"].string?.count, 100000)
+        }
+        await client.shutdown()
     }
 
     func testRPCMissingExecutableAndTimeoutAreRecoverable() async throws {

@@ -75,6 +75,9 @@ fastlane/test_output
 
 .cohestra
 
+# Local agent design artifacts
+/.yuzio/
+
 # Agent workspace data (WorkBuddy session memory)
 .workbuddy/
 

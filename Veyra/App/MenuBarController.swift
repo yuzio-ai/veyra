@@ -11,7 +11,8 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     private var previousApplication: NSRunningApplication?
     private var stopped = false
 
-    init(store: MonitorStore, updates: UpdateStore, openSettings: @escaping () -> Void) {
+    init(store: MonitorStore, updates: UpdateStore, openSettings: @escaping () -> Void, openDashboard: @escaping () -> Void = {},
+         profiles: CodexModelProfilesStore? = nil, openModelProfiles: @escaping () -> Void = {}) {
         self.store = store
         super.init()
         popover.behavior = .transient
@@ -27,7 +28,13 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             }, openSettings: { [weak self] in
                 self?.hide(restoringFocus: false)
                 openSettings()
-            })
+            }, openDashboard: { [weak self] in
+                self?.hide(restoringFocus: false)
+                openDashboard()
+            }, profiles: profiles, openModelProfiles: { [weak self] in
+                self?.hide(restoringFocus: false)
+                openModelProfiles()
+            }, closeMenu: { [weak self] in self?.hide() })
             .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
             .environment(\.monitorOpaquePreview, PreviewSupport.menuReduceTransparency)
             .environment(\.monitorPreviewContrast, PreviewSupport.menuIncreasedContrast ? .increased : nil)

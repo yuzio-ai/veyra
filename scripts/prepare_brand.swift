@@ -28,6 +28,11 @@ func draw(_ image: NSImage, in rect: NSRect, on output: NSBitmapImageRep) {
 
 func render(_ svg: Data, destination: String, square: Bool, size: Int) throws {
     guard let image = NSImage(data: svg), image.isValid else { fatalError("Invalid SVG") }
+    // `1em`-sized artwork reports a 1×1 point size; give the vector rep a real
+    // raster canvas instead of upscaling two pixels.
+    if image.size.width < 4 || image.size.height < 4 {
+        image.size = NSSize(width: 1024, height: 1024)
+    }
     let width = Int(image.size.width * 2), height = Int(image.size.height * 2)
     let source = bitmap(width: width, height: height)
     draw(image, in: NSRect(x: 0, y: 0, width: width, height: height), on: source)
@@ -81,3 +86,21 @@ for case let text as XMLElement in try darkLogo.nodes(forXPath: "//*[local-name(
     text.attribute(forName: "fill")?.stringValue = "#F4F3EF"
 }
 try render(darkLogo.xmlData, destination: "assets/brand/veyra-logo-preview-dark.png", square: false, size: 1200)
+
+// Provider marks for the built-in presets. Single-color artwork stays black on
+// transparent in the PNG; the app marks those images as templates at runtime.
+let providerMarks = [
+    ("deepseek-color", "DeepSeekProvider"),
+    ("kimi-color", "KimiProvider"),
+    ("zai", "GLMProvider"),
+    ("minimax-color", "MiniMaxProvider")
+]
+for (source, destination) in providerMarks {
+    let svg = try Data(contentsOf: root.appendingPathComponent("assets/brand/provider-logos/\(source).svg"))
+    try render(svg, destination: "Veyra/Resources/\(destination).png", square: true, size: 512)
+}
+
+// Xiaomi publishes its mark only as a raster app icon, so it joins the same
+// crop-and-pad pass instead of an SVG render.
+let xiaomiMark = try Data(contentsOf: root.appendingPathComponent("assets/brand/provider-logos/xiaomi-mi-512.png"))
+try render(xiaomiMark, destination: "Veyra/Resources/MiMoProvider.png", square: true, size: 512)

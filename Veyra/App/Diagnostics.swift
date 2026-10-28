@@ -50,30 +50,56 @@ enum Diagnostics {
                     guard window.frame.height < originalHeight else { throw MenuCheckError.didNotShrink }
                     try PreviewSupport.saveBitmap(view, to: directory.appendingPathComponent("shrunk-layout.png"))
                     records.append(["position": "shrunk", "windowHeight": window.frame.height])
+                    // A transient popover can be dismissed by a foreground-app change during
+                    // the asynchronous layout checks. Establish the shown baseline before
+                    // testing toggle-to-close, otherwise toggle would reopen it instead.
+                    let restoredVisibilityBeforeToggle = !window.isVisible
+                    if restoredVisibilityBeforeToggle {
+                        print("Fixture dismissed before toggle check; restoring the shown baseline")
+                        toggleMenu?()
+                        guard await waitFor({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
+                    }
+                    guard let closing = menuWindow?(), closing.isVisible else { throw MenuCheckError.didNotOpen }
                     // Exercise the same controller used by the registered hotkey and status button.
                     toggleMenu?()
-                    try await Task.sleep(for: .milliseconds(150))
-                    guard !window.isVisible else { throw MenuCheckError.didNotClose }
+                    guard await waitFor({ !closing.isVisible }) else { throw MenuCheckError.didNotClose }
                     toggleMenu?()
-                    try await Task.sleep(for: .milliseconds(150))
+                    guard await waitFor({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
                     guard let reopened = menuWindow?(), reopened.isVisible else { throw MenuCheckError.didNotOpen }
+                    // Shell-launched fixtures may not activate over the user's foreground app.
+                    // Focus the real control and dispatch through its native window rather than
+                    // NSApplication's global key-window routing. This is synthetic input evidence.
+                    let provider = reopened.contentView.flatMap { providerButton(in: $0) }
+                    let focused = provider.map { reopened.makeFirstResponder($0) } ?? false
+                    let keyboardAppWasActive = NSApp.isActive
+                    print("Keyboard fixture: active=\(NSApp.isActive), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), provider=\(provider != nil), focused=\(focused)")
+                    guard provider != nil, focused else {
+                        throw MenuCheckError.keyboardFocusUnavailable
+                    }
+                    print("Escape check: key=\(reopened.isKeyWindow), firstResponder=\(String(describing: reopened.firstResponder.map { type(of: $0) })), appKey=\(String(describing: NSApp.keyWindow?.windowNumber)), target=\(reopened.windowNumber)")
                     if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: reopened.windowNumber, context: nil,
                         characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
-                        NSApp.sendEvent(escape)
+                        reopened.sendEvent(escape)
                     }
-                    try await Task.sleep(for: .milliseconds(150))
-                    guard !reopened.isVisible else { throw MenuCheckError.escapeDidNotClose }
+                    guard await waitFor({ !reopened.isVisible }) else { throw MenuCheckError.escapeDidNotClose }
                     toggleMenu?()
-                    records.append(["position": "controls", "toggleAndEscapePassed": true])
+                    records.append(["position": "controls", "toggleAndEscapePassed": true,
+                                    "keyboardDispatch": "native-window", "keyboardFirstResponder": "provider-button",
+                                    "appWasActive": keyboardAppWasActive,
+                                    "restoredVisibilityBeforeToggle": restoredVisibilityBeforeToggle])
                     try JSONSerialization.data(withJSONObject: records, options: [.prettyPrinted, .sortedKeys])
                         .write(to: directory.appendingPathComponent("menu-check.json"))
                     print("Menu checks passed: top, middle, bottom, rapid scrolling, live shrink. Window \(window.windowNumber)")
+                    if CommandLine.arguments.contains("--exit-after-menu-checks"), PreviewSupport.menuScenario != nil {
+                        NSApp.terminate(nil)
+                    }
                     return
                 }
                 throw MenuCheckError.timedOut
             } catch {
                 print("Menu checks failed: \(error)")
+                if CommandLine.arguments.contains("--exit-after-menu-checks"), PreviewSupport.menuScenario != nil { exit(1) }
             }
         }
     }
@@ -83,9 +109,23 @@ enum Diagnostics {
         return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
     }
 
+    private static func providerButton(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton, button.accessibilityIdentifier() == "models.quickSwitch" { return button }
+        return view.subviews.lazy.compactMap { providerButton(in: $0) }.first
+    }
+
+    private static func waitFor(_ condition: () -> Bool) async -> Bool {
+        for _ in 0..<20 {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return condition()
+    }
+
     private enum MenuCheckError: Error {
         case missingScrollView, expectedOverflow, unstableHeight, didNotShrink, timedOut
         case didNotClose, didNotOpen, escapeDidNotClose
+        case keyboardFocusUnavailable
     }
 
     /// Capture our own real popover, avoiding a fixed preview window that

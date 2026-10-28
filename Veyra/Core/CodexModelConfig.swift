@@ -19,48 +19,25 @@ struct CodexModelConfig: Equatable, Sendable {
         return parse(text)
     }
 
-    private enum Section { case topLevel, activeProfile, other }
-
-    /// Reads top-level keys and, when `profile` names one, the matching
-    /// `[profiles.<name>]` table; every other table is ignored. Keys passed
-    /// via `--profile` on the command line leave no trace here and stay undetected.
+    /// Global defaults only. Modern Codex uses separate CLI profile files;
+    /// a legacy `profile` selector is not evidence of the global default.
     static func parse(_ text: String) -> CodexModelConfig {
-        var model: String?, provider: String?, profile: String?
-        var section = Section.topLevel
+        var model: String?, provider: String?
         for line in text.split(whereSeparator: \.isNewline) {
             let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
             if trimmed.hasPrefix("[") {
-                if let name = profileName(trimmed), name == profile {
-                    section = .activeProfile
-                } else {
-                    section = .other
-                }
-                continue
+                break
             }
-            guard section != .other else { continue }
             guard let equals = trimmed.firstIndex(of: "=") else { continue }
             let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)
             guard let value = quotedValue(trimmed[trimmed.index(after: equals)...]) else { continue }
             switch key {
             case "model": model = value
             case "model_provider": provider = value
-            case "profile" where section == .topLevel: profile = value
             default: break
             }
         }
         return CodexModelConfig(model: model, provider: provider)
-    }
-
-    /// Header name for `[profiles.<name>]`; quoted segments are unquoted.
-    private static func profileName(_ line: Substring) -> String? {
-        guard let close = line.firstIndex(of: "]") else { return nil }
-        var name = line[line.index(after: line.startIndex)..<close].trimmingCharacters(in: .whitespaces)
-        guard name.hasPrefix("profiles.") else { return nil }
-        name = name.dropFirst("profiles.".count).trimmingCharacters(in: .whitespaces)
-        if let quote = name.first, quote == "\"" || quote == "'", name.last == quote, name.count > 1 {
-            name = String(name.dropFirst().dropLast())
-        }
-        return name.isEmpty ? nil : name
     }
 
     /// TOML strings are quoted; anything else is ignored conservatively.

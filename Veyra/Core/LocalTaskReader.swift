@@ -77,13 +77,7 @@ enum TaskResolver {
         guard hasProcess || boundary?.isRunning == true || resolution == .ambiguous else { return nil }
         // Historical inProgress records can outlive their process indefinitely.
         // Use recorded activity, never file timestamps that a migration may refresh.
-        if evidence.reliable && !hasProcess {
-            let latestActivity = [metadata.updatedAt, rollout.usageDate, rollout.boundary?.date, storedTurn?.date]
-                .compactMap { $0?.timeIntervalSince1970 }
-                .filter { $0.isFinite && $0 > 0 }
-                .max()
-            if let latestActivity, now.timeIntervalSince1970 - latestActivity >= recentActivityWindow { return nil }
-        }
+        if evidence.reliable && !hasProcess && isExpired(metadata: metadata, rollout: rollout, storedTurn: storedTurn, now: now) { return nil }
         let activity: TaskActivity = boundary?.isRunning == true && hasProcess && evidence.reliable ? .running : .unknown
         let usage = rollout.usage ?? TokenUsage(total: metadata.tokens)
         return TaskSnapshot(id: metadata.id, title: metadata.displayTitle, model: rollout.model ?? metadata.model,
@@ -92,6 +86,15 @@ enum TaskResolver {
                             updatedAt: rollout.usageDate ?? metadata.updatedAt, tokens: usage, activity: activity,
                             agentPath: metadata.agentPath, agentNickname: metadata.agentNickname, agentRole: metadata.agentRole,
                             progress: metadata.parentID == nil ? nil : rollout.display.progress(for: boundary))
+    }
+
+    static func isExpired(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, now: Date) -> Bool {
+        let latestActivity = [metadata.updatedAt, rollout.usageDate, rollout.boundary?.date, storedTurn?.date]
+            .compactMap { $0?.timeIntervalSince1970 }
+            .filter { $0.isFinite && $0 > 0 }
+            .max()
+        guard let latestActivity else { return false }
+        return now.timeIntervalSince1970 - latestActivity >= recentActivityWindow
     }
 }
 
@@ -148,6 +151,7 @@ actor LocalTaskReader {
         }.prefix(20).map(\.rolloutPath))
         var tasks: [TaskSnapshot] = [], unreadable = false, quotaUnreadable = false
         var readPaths: [String: RolloutState] = [:]
+        var expiredCompressedPaths: Set<String> = []
         let recent = checkedAt.addingTimeInterval(-TaskResolver.recentActivityWindow)
         // Task reads go first so a shared path is never tail-read and then reopened.
         for thread in metadata where !thread.archived {
@@ -165,14 +169,25 @@ actor LocalTaskReader {
                     readPaths[thread.rolloutPath] = rollout
                 }
                 quotaByPath[thread.rolloutPath] = rollout.quotaBuckets
-            } catch { rollout = RolloutState(); unreadable = true }
+            } catch {
+                rollout = RolloutState()
+                if evidence.reliable && !hasProcess,
+                   TaskResolver.isExpired(metadata: thread, rollout: rollout, storedTurn: stored, now: checkedAt),
+                   Self.hasCompressedReplacement(for: thread.rolloutPath, readError: error) {
+                    // Codex can compress old logs without updating rollout_path or
+                    // clearing inProgress. This expired task needs no live details.
+                    expiredCompressedPaths.insert(thread.rolloutPath)
+                    continue
+                }
+                unreadable = true
+            }
             if let snapshot = TaskResolver.resolve(metadata: thread, rollout: rollout, storedTurn: stored,
                                                    evidence: evidence, processMatch: hasProcess, now: checkedAt) {
                 tasks.append(snapshot)
             }
         }
         let modelByPath = Dictionary(metadata.map { ($0.rolloutPath, $0.model) }, uniquingKeysWith: { first, _ in first })
-        for path in quotaPaths where readPaths[path] == nil {
+        for path in quotaPaths where readPaths[path] == nil && !expiredCompressedPaths.contains(path) {
             do {
                 let rollout = try rollouts.read(URL(fileURLWithPath: path), quotaOnly: true, modelHint: modelByPath[path] ?? nil)
                 metrics.rolloutBytes += rollouts.lastReadByteCount
@@ -211,6 +226,15 @@ actor LocalTaskReader {
                               localQuota: LocalQuotaBucket.snapshot(buckets),
                               quotaWarning: quotaUnreadable ? L10n.text("Some local quota records are unreadable.") : nil, modelConfig: modelConfig, metrics: metrics,
                               ancestors: ancestors.values.sorted { $0.id < $1.id })
+    }
+
+    private static func hasCompressedReplacement(for path: String, readError: Error) -> Bool {
+        let error = readError as NSError
+        guard error.domain == NSCocoaErrorDomain,
+              error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError else { return false }
+        let url = URL(fileURLWithPath: path)
+        guard url.pathExtension == "jsonl" else { return false }
+        return (try? url.appendingPathExtension("zst").resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
     }
 
     private static func readMetadata(_ db: SQLiteReader) throws -> [ThreadMetadata] {

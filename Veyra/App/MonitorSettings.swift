@@ -17,9 +17,19 @@ struct MonitorSettings: View {
     @Bindable var store: MonitorStore
     @Bindable var updates: UpdateStore
     var shortcuts: ShortcutStore?
+    var profiles: CodexModelProfilesStore?
     @State private var previewShortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar())
 
     var body: some View {
+        Group {
+            if let profiles {
+                ModelSettingsContainer(store: store, updates: updates, shortcuts: shortcuts ?? previewShortcuts, profiles: profiles)
+            } else { general }
+        }
+        .task { await store.detectConfiguration() }
+    }
+
+    private var general: some View {
         VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing / 2) {
             ShortcutSettingsSection(shortcuts: shortcuts ?? previewShortcuts)
             Divider()
@@ -30,7 +40,33 @@ struct MonitorSettings: View {
         .padding(.horizontal, SettingsLayout.horizontalPadding)
         .padding(.vertical, SettingsLayout.verticalPadding)
         .frame(width: SettingsLayout.width)
-        .task { await store.detectConfiguration() }
+    }
+}
+
+private struct ModelSettingsContainer: View {
+    let store: MonitorStore
+    let updates: UpdateStore
+    let shortcuts: ShortcutStore
+    @Bindable var profiles: CodexModelProfilesStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if profiles.isPreview { SettingsTabControl(profiles: profiles).padding(14); Divider() }
+            if profiles.tab == .models { CodexModelProfilesView(profiles: profiles) }
+            else {
+                ScrollView {
+                    MonitorSettings(store: store, updates: updates, shortcuts: shortcuts)
+                        .frame(maxWidth: .infinity)
+                }.disabled(profiles.busy)
+            }
+        }
+        .frame(minWidth: 900, idealWidth: 1100, maxWidth: .infinity, minHeight: 600, idealHeight: 740, maxHeight: .infinity)
+        .task(id: store.location) { await profiles.load(location: store.location) }
+        .alert("Save changes to this provider?", isPresented: $profiles.showUnsavedPrompt) {
+            Button("Save") { Task { await profiles.resolveNavigation(save: true) } }
+            Button("Discard changes", role: .destructive) { Task { await profiles.resolveNavigation(save: false) } }
+            Button("Cancel", role: .cancel) { profiles.cancelNavigation() }
+        } message: { Text("Your changes have not been saved. Saving does not switch Codex's default configuration.") }
     }
 }
 
@@ -267,5 +303,38 @@ private struct NativePathField: NSViewRepresentable {
             parent.commit()
             return true
         }
+    }
+}
+
+struct SettingsTabControl: View {
+    @Bindable var profiles: CodexModelProfilesStore
+    var body: some View {
+        Picker("Settings", selection: Binding(get: { profiles.tab }, set: { tab in profiles.navigate { profiles.tab = tab } })) {
+            Text("General").tag(VeyraSettingsTab.general)
+            Text("Models").tag(VeyraSettingsTab.models)
+        }.labelsHidden().pickerStyle(.segmented).frame(width: 240)
+            .accessibilityIdentifier("settings.tabs")
+    }
+}
+
+@MainActor
+final class SettingsToolbarController: NSObject, NSToolbarDelegate {
+    private let profiles: CodexModelProfilesStore
+    private let tabs = NSToolbarItem.Identifier("veyra.settings.tabs")
+    init(profiles: CodexModelProfilesStore, window: NSWindow) {
+        self.profiles = profiles
+        super.init()
+        let toolbar = NSToolbar(identifier: "veyra.settings.toolbar")
+        toolbar.delegate = self; toolbar.displayMode = .iconOnly; toolbar.allowsUserCustomization = false
+        window.toolbar = toolbar; window.toolbarStyle = .unified
+    }
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.flexibleSpace, tabs] }
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.flexibleSpace, tabs, .flexibleSpace] }
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        guard itemIdentifier == tabs else { return nil }
+        let item = NSToolbarItem(itemIdentifier: tabs)
+        item.label = L10n.text("Settings")
+        item.view = NSHostingView(rootView: SettingsTabControl(profiles: profiles).padding(.vertical, 4))
+        return item
     }
 }

@@ -8,6 +8,10 @@ struct MonitorPanel: View {
     var screenOverride: PanelScreenMetrics?
     var onSizingChange: ((PanelSizing) -> Void)?
     var openSettings: (() -> Void)?
+    var openDashboard: (() -> Void)?
+    var profiles: CodexModelProfilesStore?
+    var openModelProfiles: (() -> Void)?
+    var closeMenu: (() -> Void)?
     @State private var showUnknown = false
     @State private var expandedTaskIDs: Set<String> = []
     @State private var contentHeight: CGFloat = 1
@@ -19,19 +23,31 @@ struct MonitorPanel: View {
 
     init(store: MonitorStore, updates: UpdateStore? = nil, screenOverride: PanelScreenMetrics? = nil,
          initiallyExpandedTaskIDs: Set<String> = [], initiallyShowUnknown: Bool = false,
-         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil) {
+         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil, openDashboard: (() -> Void)? = nil,
+         profiles: CodexModelProfilesStore? = nil, openModelProfiles: (() -> Void)? = nil,
+         closeMenu: (() -> Void)? = nil) {
         self.store = store
         self.updates = updates
         self.screenOverride = screenOverride
         self.onSizingChange = onSizingChange
         self.openSettings = openSettings
+        self.openDashboard = openDashboard
+        self.profiles = profiles
+        self.openModelProfiles = openModelProfiles
+        self.closeMenu = closeMenu
         _expandedTaskIDs = State(initialValue: initiallyExpandedTaskIDs)
         _showUnknown = State(initialValue: initiallyShowUnknown)
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            VStack(spacing: 0) {
+                header
+                if let profiles {
+                    ModelProfileQuickSwitch(profiles: profiles, manage: { openModelProfiles?() }, closeMenu: { closeMenu?() })
+                        .padding(.horizontal, 16).padding(.bottom, 8)
+                }
+            }
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self, of: { ceil($0.size.height) }) { headerHeight = $0 }
                 .accessibilityIdentifier("monitor.header")
@@ -68,7 +84,10 @@ struct MonitorPanel: View {
         .background {
             PanelWindowReader(onChange: { screen = $0 }, onVisibilityChange: { visible in
                 store.setPanelVisible(visible)
-                if visible, !store.isPreview { Task { await updates?.checkAutomatically() } }
+                if visible, !store.isPreview {
+                    Task { await updates?.checkAutomatically() }
+                    Task { await profiles?.load(location: store.location) }
+                }
             })
                 .allowsHitTesting(false)
         }
@@ -78,6 +97,7 @@ struct MonitorPanel: View {
         .onChange(of: store.tasks.map(\.id)) { _, ids in
             expandedTaskIDs.formIntersection(ids)
         }
+        .task(id: store.location) { if !store.isPreview { await profiles?.load(location: store.location) } }
     }
 
     private var sizing: PanelSizing {
@@ -299,6 +319,13 @@ struct MonitorPanel: View {
             Spacer(minLength: 0)
             MonitorGlassGroup {
                 HStack(spacing: 8) {
+                    Button { openDashboard?() } label: {
+                        Image(systemName: "chart.bar").font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.primary).frame(width: 18, height: 18)
+                    }
+                    .modifier(MonitorActionStyle())
+                    .help("Task statistics").accessibilityLabel("Task statistics")
+                    .accessibilityIdentifier("monitor.dashboard")
                     Button { openSettings?() } label: {
                         Image(systemName: "gearshape").font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.primary).frame(width: 18, height: 18)

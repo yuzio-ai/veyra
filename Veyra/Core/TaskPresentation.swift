@@ -101,6 +101,14 @@ enum TaskText {
         return text
     }
 
+    static func historyTitle(name: String?, title: String?) -> String {
+        guard let text = nonempty(name) ?? nonempty(title) else { return L10n.text("Untitled task") }
+        // Legacy Codex titles can contain the entire first prompt. Keep only a bounded label.
+        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        let label = String(line.prefix(240))
+        return line.count > 240 || line.count < text.count ? label + "…" : label
+    }
+
     static func title(_ title: String?, id: String, parentID: String?, agentPath: String?, nickname: String?) -> String {
         if let title = nonempty(title) { return title }
         if let leaf = nonempty(agentPath)?.split(separator: "/").last, leaf != "root" {

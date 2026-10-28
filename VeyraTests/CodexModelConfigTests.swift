@@ -45,7 +45,7 @@ final class CodexModelConfigTests: XCTestCase {
         XCTAssertFalse(config.usesCustomProvider)
     }
 
-    func testSelectedProfileOverridesTopLevelModelAndProvider() {
+    func testLegacyProfileDoesNotOverrideGlobalModelAndProvider() {
         let config = CodexModelConfig.parse("""
             model = "gpt-5.6-sol"
             profile = "work"
@@ -57,10 +57,10 @@ final class CodexModelConfigTests: XCTestCase {
             [profiles.play]
             model_provider = "other"
             """)
-        XCTAssertEqual(config.model, "kimi-k3")
-        XCTAssertEqual(config.provider, "moonshot")
-        XCTAssertTrue(config.usesCustomProvider)
-        XCTAssertEqual(config.customProvider, "moonshot")
+        XCTAssertEqual(config.model, "gpt-5.6-sol")
+        XCTAssertNil(config.provider)
+        XCTAssertFalse(config.usesCustomProvider)
+        XCTAssertNil(config.customProvider)
     }
 
     func testProfilePartialOverrideKeepsTopLevelProvider() {
@@ -71,7 +71,7 @@ final class CodexModelConfigTests: XCTestCase {
             [profiles.fast]
             model = "gpt-5.3-codex-spark"
             """)
-        XCTAssertEqual(config.model, "gpt-5.3-codex-spark")
+        XCTAssertNil(config.model)
         XCTAssertEqual(config.provider, "openai")
         XCTAssertFalse(config.usesCustomProvider)
     }
@@ -85,15 +85,15 @@ final class CodexModelConfigTests: XCTestCase {
         XCTAssertFalse(config.usesCustomProvider)
     }
 
-    func testQuotedProfileNameMatchesHeader() {
+    func testQuotedLegacyProfileIsNotAGlobalProvider() {
         let config = CodexModelConfig.parse("""
             profile = "my profile"
 
             [profiles."my profile"]
             model_provider = "moonshot"
             """)
-        XCTAssertEqual(config.provider, "moonshot")
-        XCTAssertTrue(config.usesCustomProvider)
+        XCTAssertNil(config.provider)
+        XCTAssertFalse(config.usesCustomProvider)
     }
 
     func testQuotedValuesKeepHashesAndSingleQuotesWork() {

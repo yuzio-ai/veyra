@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 enum VeyraApp {
     static func main() {
+        if let result = ProviderCredentialCommand.run(Array(CommandLine.arguments.dropFirst())) { exit(result) }
         let application = NSApplication.shared
         let delegate = MonitorAppDelegate()
         application.delegate = delegate
@@ -13,14 +14,19 @@ enum VeyraApp {
 }
 
 @MainActor
-final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
+final class MonitorAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var previewWindow: NSWindow?
+    private var settingsToolbar: SettingsToolbarController?
     private var settingsWindow: NSWindow?
+    private var dashboardWindow: NSWindow?
+    private lazy var dashboard = DashboardStore()
+    private lazy var modelProfiles = PreviewSupport.menuScenario == nil ? CodexModelProfilesStore() : CodexModelProfilesStore.preview()
+    private var modelSettingsDelegate: ModelProfileSettingsWindowDelegate?
     private var menuBar: MenuBarController?
     private lazy var shortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar(), defaults: allowsGlobalShortcut ? .standard : nil)
     private var allowsGlobalShortcut: Bool {
-        let isolatedModes = ["--diagnose", "--render-previews", "--preview-menu", "--show-panel",
-                             "--capture-menu-to", "--exercise-menu-to"]
+        let isolatedModes = ["--diagnose", "--render-previews", "--render-dashboard-previews", "--preview-menu", "--show-panel",
+                             "--capture-menu-to", "--exercise-menu-to", "--render-provider-previews"]
         return !CommandLine.arguments.contains(where: { isolatedModes.contains($0) })
             && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
     }
@@ -42,9 +48,18 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             Diagnostics.run()
             return
         }
+        if let index = arguments.firstIndex(of: "--render-dashboard-previews"), arguments.indices.contains(index + 1) {
+            DashboardPreview.render(to: URL(fileURLWithPath: arguments[index + 1]))
+            return
+        }
         if let index = arguments.firstIndex(of: "--render-previews"), arguments.indices.contains(index + 1) {
             MonitorStore.shared.isPreview = true
             PreviewSupport.render(to: URL(fileURLWithPath: arguments[index + 1]))
+            return
+        }
+        if let index = arguments.firstIndex(of: "--render-provider-previews"), arguments.indices.contains(index + 1) {
+            MonitorStore.shared.isPreview = true
+            PreviewSupport.renderProviders(to: URL(fileURLWithPath: arguments[index + 1]))
             return
         }
         if let scenario = PreviewSupport.menuScenario {
@@ -60,6 +75,10 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         configureMainMenu()
         menuBar = MenuBarController(store: MonitorStore.shared, updates: updates, openSettings: { [weak self] in
             self?.showSettings()
+        }, openDashboard: { [weak self] in
+            self?.showDashboard()
+        }, profiles: modelProfiles, openModelProfiles: { [weak self] in
+            self?.showModelProfiles()
         })
         shortcuts.onTrigger = { [weak self] in self?.menuBar?.toggle() }
         if allowsGlobalShortcut { shortcuts.start() }
@@ -68,6 +87,13 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(250))
                 self?.menuBar?.show()
+            }
+        }
+        if arguments.contains("--show-dashboard") {
+            // Opt-in live-data smoke test; uses the same window and configured home as the menu action.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(250))
+                self?.showDashboard()
             }
         }
         if let index = arguments.firstIndex(of: "--capture-menu-to"), arguments.indices.contains(index + 1) {
@@ -94,15 +120,19 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showSettings() {
         menuBar?.hide(restoringFocus: false)
         if settingsWindow == nil {
-            let hosting = NSHostingView(rootView: MonitorSettings(store: MonitorStore.shared, updates: updates, shortcuts: shortcuts))
-            hosting.sizingOptions = [.intrinsicContentSize, .minSize, .maxSize]
-            let window = NSWindow(contentRect: NSRect(origin: .zero, size: hosting.fittingSize),
-                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            let hosting = NSHostingView(rootView: MonitorSettings(store: MonitorStore.shared, updates: updates, shortcuts: shortcuts,
+                                                                profiles: modelProfiles))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 780),
+                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.title = L10n.text("Settings")
             window.identifier = NSUserInterfaceItemIdentifier("veyra.settings")
             window.isReleasedWhenClosed = false
             window.contentView = hosting
-            window.setContentSize(hosting.fittingSize)
+            window.minSize = NSSize(width: 900, height: 630)
+            settingsToolbar = SettingsToolbarController(profiles: modelProfiles, window: window)
+            let delegate = ModelProfileSettingsWindowDelegate(profiles: modelProfiles)
+            modelSettingsDelegate = delegate
+            window.delegate = delegate
             window.center()
             settingsWindow = window
         }
@@ -110,10 +140,52 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
+    private func showModelProfiles() {
+        if modelProfiles.tab != .models { modelProfiles.navigate { self.modelProfiles.tab = .models } }
+        showSettings()
+    }
+
+    @objc private func showDashboard() {
+        menuBar?.hide(restoringFocus: false)
+        if dashboardWindow == nil {
+            let view = DashboardView(store: dashboard, monitor: MonitorStore.shared)
+                .onChange(of: MonitorStore.shared.location.home.path) { [weak self] _, _ in
+                    guard let self, self.dashboardWindow?.isVisible == true, !MonitorStore.shared.isPreview else { return }
+                    self.dashboard.start(home: MonitorStore.shared.location.home)
+                }
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 900),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            window.title = L10n.text("Task overview")
+            window.identifier = NSUserInterfaceItemIdentifier("veyra.dashboard")
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: view)
+            window.minSize = NSSize(width: 900, height: 660)
+            if let available = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+                window.setContentSize(NSSize(width: min(1280, available.width), height: min(900, available.height - 40)))
+            }
+            window.delegate = self
+            window.center()
+            dashboardWindow = window
+        }
+        if MonitorStore.shared.isPreview {
+            dashboard.configurePreview(DashboardPreview.fixture(scenario: "normal"), anchor: DashboardPreview.referenceDate)
+        } else {
+            dashboard.start(home: MonitorStore.shared.location.home)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === dashboardWindow { dashboard.stop() }
+    }
+
     private func configureMainMenu() {
         let menu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
+        let statistics = appMenu.addItem(withTitle: L10n.text("Task statistics"), action: #selector(showDashboard), keyEquivalent: "d")
+        statistics.target = self
         let settings = appMenu.addItem(withTitle: L10n.text("Settings"), action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         appMenu.addItem(.separator())
@@ -150,6 +222,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         shortcuts.stop()
         menuBar?.stop()
         MonitorStore.shared.stop()
+        dashboard.stop()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }

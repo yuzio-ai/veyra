@@ -416,6 +416,27 @@ enum DisplayFormat {
         if n >= 1_000 { return String(format: "%.1fK", n / 1_000) }
         return String(value)
     }
+    /// Round-number size for a provider's model specification board: 1,048,576 → "1M".
+    static func compactTokens(_ value: Int) -> String { scaledTokens(value).text }
+    /// "1M tokens (1,048,576)"; the exact count only appears when rounding lost precision.
+    static func contextWindow(_ value: Int) -> String {
+        let scaled = scaledTokens(value)
+        guard !scaled.isExact else { return L10n.text("\(scaled.text) tokens") }
+        return L10n.text("\(scaled.text) tokens (\(value.formatted()))")
+    }
+    private static func scaledTokens(_ value: Int) -> (text: String, isExact: Bool) {
+        let divisor: Double
+        let suffix: String
+        switch value {
+        case 1_000_000_000...: divisor = 1_000_000_000; suffix = "B"
+        case 1_000_000...: divisor = 1_000_000; suffix = "M"
+        case 1_000...: divisor = 1_000; suffix = "K"
+        default: return (String(value), true)
+        }
+        let scaled = (Double(value) / divisor * 10).rounded() / 10
+        let number = scaled == scaled.rounded(.towardZero) ? String(Int(scaled)) : String(format: "%.1f", scaled)
+        return (number + suffix, scaled * divisor == Double(value))
+    }
     static func percent(_ value: Double?) -> String {
         guard let value else { return "—" }
         // Avoid rounding a nearly exhausted quota up to a misleading full percent.

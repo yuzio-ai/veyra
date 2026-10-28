@@ -40,7 +40,9 @@ History uses concise imperative subjects with `feat:` or `fix:` prefixes. Keep c
 
 ## Security & Configuration
 
-Preserve read-only monitoring: never modify Codex databases, control tasks, or persist credentials. Respect configurable paths and `CODEX_HOME`; keep diagnostics free of private account or session content.
+Preserve read-only monitoring: never modify Codex databases or control tasks. Provider credentials are an explicit exception: only user-initiated save, replace, or remove actions may store API Keys in the local macOS Keychain. Never store Key values in JSON, config.toml, environment variables, command arguments, logs, exports, or diagnostics. Respect configurable paths and `CODEX_HOME`; keep diagnostics free of private account or session content.
+
+Model configuration is the explicit write exception: only user-initiated apply/undo actions may update user-level `config.toml` through Codex's version-checked configuration RPC. Keep model profiles, discovered capability catalogs and field-level recovery records in Veyra's own directory; these may contain opaque Keychain references but never Key values. Never copy existing provider secrets or edit Codex authentication files. The --provider-credential mode must run before NSApplication and return only the requested Key to Codex on stdout; it must not initialize UI, monitoring, or updates. Keychain integration tests must use an independent fixture keychain and local mock endpoint. Stable signing is required for real Keychain acceptance; unsigned builds only establish compilation and fixture evidence.
 
 Keep signing overrides local: `DEVELOPMENT_TEAM` belongs only in the gitignored `Local.xcconfig` (optionally included by `Signing.xcconfig`). Never pick a Team in Xcode's Signing panel — it writes `DEVELOPMENT_TEAM` back into `project.pbxproj` and overrides the xcconfig layer. `Veyra/Info.plist` only holds keys Xcode cannot generate (`CFBundleIconFile`, `NSHighResolutionCapable`); standard and `INFOPLIST_KEY_*` keys come from target build settings.
 
@@ -59,3 +61,7 @@ Rules are reviewed in `scripts/codex-local-verification.rules` and installed wit
 ## Agent Instructions
 
 For library, framework, SDK, API, CLI, or cloud-service questions, use current Context7 docs: `resolve-library-id`, then `query-docs` with the full question. Skip resolution for supplied exact IDs. Excludes general programming, new scripts, refactoring, business-logic debugging, and code review.
+
+## Vistra static visuals
+
+Vistra delivers static images using the host image tools. The shared Vistra executor, user Hook and rules have been retired. Do not use the former rendering or frame-extraction entry. Existing project build/test commands and historical design artifacts remain unchanged.

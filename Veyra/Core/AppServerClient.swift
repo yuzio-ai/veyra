@@ -2,15 +2,18 @@ import Foundation
 import Darwin
 
 /// Owns only the monitor's sidecar; never attaches, resumes, or writes a Codex task.
-actor AppServerClient {
+actor AppServerClient: CodexModelConfigurationTransport {
     private var process: Process?
     private var input: FileHandle?
     private var output: FileHandle?
     private var errors: FileHandle?
     private var buffer = Data()
+    private var readTask: Task<Void, Never>?
+    private var outputContinuation: AsyncStream<Data>.Continuation?
     private var pending: [Int64: CheckedContinuation<JSONValue, Error>] = [:]
     private var timeouts: [Int64: Task<Void, Never>] = [:]
     private var nextID: Int64 = 0
+    private var configRequests: Set<Int64> = []
     private var generation = UUID()
     private var location: CodexLocation?
     private var authStamp: String?
@@ -18,6 +21,38 @@ actor AppServerClient {
     private let requestTimeout: Duration
 
     init(requestTimeout: Duration = .seconds(25)) { self.requestTimeout = requestTimeout }
+
+    func readConfiguration(location: CodexLocation) async throws -> CodexConfigSnapshot {
+        let response = try await configurationRequest("config/read", params: .object([
+            "includeLayers": .bool(true), "cwd": .string("/")
+        ]), location: location)
+        return try CodexConfigSnapshot(response: response, home: location.home)
+    }
+
+    func writeConfiguration(location: CodexLocation, edits: [CodexConfigEdit], expectedVersion: String) async throws -> CodexConfigWriteReceipt {
+        let response = try await configurationRequest("config/batchWrite", params: .object([
+            "edits": .array(edits.map(\.rpc)), "expectedVersion": .string(expectedVersion),
+            "filePath": .string(location.home.appendingPathComponent("config.toml").path), "reloadUserConfig": .bool(false)
+        ]), location: location)
+        guard let version = response["version"].string else { throw ModelProfileFailure.unsupported }
+        return CodexConfigWriteReceipt(version: version, overridden: response["overriddenMetadata"].object != nil)
+    }
+
+    private func configurationRequest(_ method: String, params: JSONValue, location newLocation: CodexLocation) async throws -> JSONValue {
+        defer { shutdown() }
+        do {
+            if location != newLocation { shutdown() }
+            location = newLocation
+            if process == nil { try await start(at: newLocation) }
+            return try await request(method, params: params)
+        } catch let error as ModelProfileFailure { throw error }
+        catch {
+            #if DEBUG
+            print("[configuration] \(method) failed: \(QuotaFailure.classify(error).rawValue)")
+            #endif
+            throw ModelProfileFailure.unavailable
+        }
+    }
 
     func fetch(location newLocation: CodexLocation) async -> QuotaRefresh {
         let stamp = Self.authenticationStamp(at: newLocation.home)
@@ -85,9 +120,18 @@ actor AppServerClient {
         child.environment = environment
         child.standardInput = stdinPipe; child.standardOutput = stdoutPipe; child.standardError = stderrPipe
         input = stdinPipe.fileHandleForWriting; output = stdoutPipe.fileHandleForReading; errors = stderrPipe.fileHandleForReading
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            Task { await self?.receive(data, generation: currentGeneration) }
+        // A Task per chunk can enter the actor out of order. One stream consumer
+        // preserves byte order even when a config response spans many pipe reads.
+        let (stream, continuation) = AsyncStream<Data>.makeStream()
+        outputContinuation = continuation
+        readTask = Task { [weak self] in
+            for await data in stream {
+                guard !Task.isCancelled else { break }
+                await self?.receive(data, generation: currentGeneration)
+            }
+        }
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            continuation.yield(handle.availableData)
         }
         // Drain diagnostics, but never persist raw CLI output or credentials.
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in _ = handle.availableData }
@@ -106,6 +150,7 @@ actor AppServerClient {
     private func request(_ method: String, params: JSONValue? = nil) async throws -> JSONValue {
         nextID += 1
         let id = nextID
+        if method.hasPrefix("config/") { configRequests.insert(id) }
         var message: [String: JSONValue] = ["id": .number(Double(id)), "method": .string(method)]
         if let params { message["params"] = params }
         return try await withCheckedThrowingContinuation { continuation in
@@ -147,7 +192,11 @@ actor AppServerClient {
             guard let id = value["id"].integer, pending[id] != nil else { continue }
             if value["error"].object != nil {
                 // Neither message nor data is retained: both can contain private account data.
-                finish(id: id, result: .failure(QuotaFailureDetails(rpcError: value["error"])))
+                if configRequests.contains(id) {
+                    finish(id: id, result: .failure(ModelProfileFailure.rpc(value["error"])))
+                } else {
+                    finish(id: id, result: .failure(QuotaFailureDetails(rpcError: value["error"])))
+                }
             } else if object["result"] != nil {
                 finish(id: id, result: .success(value["result"]))
             } else {
@@ -159,6 +208,7 @@ actor AppServerClient {
     }
 
     private func finish(id: Int64, result: Result<JSONValue, Error>) {
+        configRequests.remove(id)
         timeouts.removeValue(forKey: id)?.cancel()
         pending.removeValue(forKey: id)?.resume(with: result)
     }
@@ -172,6 +222,7 @@ actor AppServerClient {
     }
     func shutdown(reason: QuotaFailure = .disconnected) {
         generation = UUID()
+        readTask?.cancel(); readTask = nil; outputContinuation?.finish(); outputContinuation = nil
         output?.readabilityHandler = nil; errors?.readabilityHandler = nil
         try? input?.close()
         if let child = process, child.isRunning { child.terminate() }

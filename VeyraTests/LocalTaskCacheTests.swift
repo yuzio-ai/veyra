@@ -287,6 +287,124 @@ final class LocalTaskCacheTests: XCTestCase {
         XCTAssertEqual(recent.warning, .sessionUnreadable)
     }
 
+    private func compressedUnfinishedTask(_ id: String, fixture: SQLiteFixture) throws -> URL {
+        let path = try unfinishedTask(id, fixture: fixture)
+        // An empty Zstandard frame; the reader only checks the replacement file,
+        // and must never decompress or rewrite a historical source log.
+        try Data([0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x00, 0x01, 0x00, 0x00])
+            .write(to: path.appendingPathExtension("zst"))
+        try FileManager.default.removeItem(at: path)
+        return path
+    }
+
+    func testExpiredCompressedRolloutSkipsTaskAndQuotaWarningsOnCacheHits() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        let path = try compressedUnfinishedTask("compressed", fixture: fixture)
+        let quota = try fixture.log("quota")
+        try fixture.insert("quota", path: quota, updated: 1788397201, archived: true)
+        let lastActivity = Date(timeIntervalSince1970: 1788397200)
+        let clock = TaskReaderClock(lastActivity.addingTimeInterval(86_400))
+        let reader = LocalTaskReader(now: { clock.get() }) { _ in ProcessEvidence() }
+        for age in [86_400.0, 180.0 * 86_400] {
+            clock.set(lastActivity.addingTimeInterval(age))
+            let expired = try await reader.fetch(home: fixture.home)
+            XCTAssertTrue(expired.tasks.isEmpty)
+            XCTAssertNil(expired.warning)
+            XCTAssertNil(expired.quotaWarning)
+            XCTAssertEqual(expired.localQuota?.menuWindow?.remainingPercent, 80)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: path.path))
+            XCTAssertEqual(try Data(contentsOf: path.appendingPathExtension("zst")).count, 9)
+            if age > 86_400 {
+                XCTAssertEqual(expired.metrics.metadataQueries, 0)
+                XCTAssertEqual(expired.metrics.historyQueries, 0)
+            }
+        }
+        // A missing source without its compressed replacement is still a fault.
+        try FileManager.default.removeItem(at: path.appendingPathExtension("zst"))
+        let missing = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(missing.warning, .sessionUnreadable)
+        XCTAssertNotNil(missing.quotaWarning)
+    }
+
+    func testCompressedRolloutKeepsRecentAndLiveTaskWarnings() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        _ = try compressedUnfinishedTask("task", fixture: fixture)
+        let lastActivity = Date(timeIntervalSince1970: 1788397200)
+        let clock = TaskReaderClock(lastActivity.addingTimeInterval(86_399.999))
+        let evidence = EvidenceFixture(ProcessEvidence())
+        let reader = LocalTaskReader(now: { clock.get() }) { _ in await evidence.get() }
+        let recent = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(recent.warning, .sessionUnreadable)
+        XCTAssertEqual(recent.tasks.first?.activity, .unknown)
+
+        clock.set(lastActivity.addingTimeInterval(86_400))
+        await evidence.set(ProcessEvidence(threadIDs: ["task"]))
+        let live = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(live.warning, .sessionUnreadable)
+        XCTAssertEqual(live.tasks.first?.activity, .running)
+
+        await evidence.set(ProcessEvidence(reliable: false))
+        let unverified = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(unverified.warning, .processUnverified)
+        XCTAssertEqual(unverified.tasks.first?.activity, .unknown)
+        XCTAssertNotNil(unverified.quotaWarning)
+    }
+
+    func testCompressedRolloutUsesLatestRecordedActivityRatherThanFileDate() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        let path = try compressedUnfinishedTask("task", fixture: fixture)
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788570001) }) { _ in ProcessEvidence() }
+        // Recent history overrides old metadata even though the source is missing.
+        try fixture.execute("UPDATE thread_turns SET started_at=1788570000", database: "thread_history_1")
+        let recentTurn = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(recentTurn.warning, .sessionUnreadable)
+        XCTAssertEqual(recentTurn.tasks.count, 1)
+        try fixture.execute("UPDATE thread_turns SET started_at=NULL", database: "thread_history_1")
+        try fixture.execute("UPDATE threads SET updated_at=1788570000")
+        let recentMetadata = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(recentMetadata.warning, .sessionUnreadable)
+        XCTAssertEqual(recentMetadata.tasks.count, 1)
+        try fixture.execute("UPDATE threads SET updated_at=0")
+        let unknownAge = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(unknownAge.warning, .sessionUnreadable)
+        XCTAssertEqual(unknownAge.tasks.count, 1)
+        // A newly created compressed file cannot revive an expired task.
+        try fixture.execute("UPDATE threads SET updated_at=1788397200")
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1788570001)],
+                                             ofItemAtPath: path.appendingPathExtension("zst").path)
+        let expired = try await reader.fetch(home: fixture.home)
+        XCTAssertNil(expired.warning)
+        XCTAssertTrue(expired.tasks.isEmpty)
+    }
+
+    func testCompressedSiblingDoesNotHideOtherReadFailures() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        let path = try compressedUnfinishedTask("task", fixture: fixture)
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788570001) }) { _ in ProcessEvidence() }
+        let unreadable = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(unreadable.warning, .sessionUnreadable)
+        XCTAssertNotNil(unreadable.quotaWarning)
+
+        // A directory named *.zst is not a compressed replacement.
+        try FileManager.default.removeItem(at: path)
+        try FileManager.default.removeItem(at: path.appendingPathExtension("zst"))
+        try FileManager.default.createDirectory(at: path.appendingPathExtension("zst"), withIntermediateDirectories: false)
+        let invalidReplacement = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(invalidReplacement.warning, .sessionUnreadable)
+    }
+
+    func testExpiredCompressedTaskDoesNotHideAnotherMissingSession() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
+        _ = try compressedUnfinishedTask("compressed", fixture: fixture)
+        let missingPath = try unfinishedTask("missing", fixture: fixture)
+        try FileManager.default.removeItem(at: missingPath)
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788570001) }) { _ in ProcessEvidence() }
+        let result = try await reader.fetch(home: fixture.home)
+        XCTAssertTrue(result.tasks.isEmpty)
+        XCTAssertEqual(result.warning, .sessionUnreadable)
+    }
+
     func testFetchCapturesOneTimeBeforeAwaitingProcessCollection() async throws {
         let fixture = try SQLiteFixture(); try fixture.threads()
         let path = try fixture.log("recent-without-history")
