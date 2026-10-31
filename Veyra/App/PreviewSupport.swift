@@ -219,18 +219,18 @@ enum PreviewSupport {
                     source: .desktop, parentID: nil, startedAt: referenceDate.addingTimeInterval(-9_960),
                     updatedAt: referenceDate, tokens: TokenUsage(input: 435_519_979, output: 904_902,
                         cachedInput: 432_755_456, reasoningOutput: 507_192, total: 436_424_881), activity: .running),
-                TaskSnapshot(id: "token-child", title: "profile preview worker", model: "example-coding-model",
+                TaskSnapshot(id: "token-child", title: "任务明细检查 · 子代理", model: "example-coding-model",
                     source: .subtask, parentID: "token-parent", startedAt: referenceDate.addingTimeInterval(-187),
                     updatedAt: referenceDate, tokens: TokenUsage(input: 1_493_699, output: 7_891,
                         cachedInput: 1_397_632, reasoningOutput: 546, total: 1_501_590), activity: .running,
-                    agentPath: "/root/profile_preview_worker", agentNickname: "FixtureAgent", agentRole: "reviewer",
-                    progress: TaskProgress(kind: .message, text: "已完成固定资料、首页与编辑入口的调用核对。正在检查直接进入编辑页面时的加载与恢复行为，验证长进展可以完整读取。")),
+                    agentPath: "/root/task_details_review", agentNickname: "FixtureAgent", agentRole: "reviewer",
+                    progress: TaskProgress(kind: .message, text: "已核对任务用量、缓存占比与完整数值。正在检查独立展开、收起和窗口高度恢复，验证较长的任务进展可以完整读取。")),
                 TaskSnapshot(id: "token-deep", title: "长名称子代理 · 完整路径和极长数值换行验证",
                     model: "example-long-model-name-for-layout-validation", source: .subtask, parentID: "token-child",
                     startedAt: referenceDate.addingTimeInterval(-90), updatedAt: referenceDate,
                     tokens: TokenUsage(input: Int64.max / 2, output: Int64.max / 2, cachedInput: Int64.max / 3,
                         reasoningOutput: Int64.max / 4, total: Int64.max - 1), activity: .running,
-                    agentPath: "/root/profile_preview_worker/very_long_nested_path_for_truncation_checks",
+                    agentPath: "/root/task_details_review/very_long_nested_path_for_truncation_checks",
                     agentNickname: "A very long subagent nickname for layout validation",
                     progress: TaskProgress(kind: .tool, text: L10n.text("Running command")))
             ]
@@ -249,11 +249,11 @@ enum PreviewSupport {
         case .taskFamily, .familyExpanded:
             store.tasks = [task(1), task(2, parentID: "demo-1"), task(3, parentID: "demo-1", activity: .unknown),
                            task(4, parentID: "demo-2")]
-            store.tasks[1] = TaskSnapshot(id: "demo-2", title: "ios phone auth r2 review", model: "example-coding-model",
+            store.tasks[1] = TaskSnapshot(id: "demo-2", title: "任务家族检查 · 子代理", model: "example-coding-model",
                 source: .subtask, parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
                 updatedAt: referenceDate, tokens: TokenUsage(input: 240_400, output: 1_300, total: 241_700), activity: .running,
-                agentPath: "/root/ios_phone_auth_r2_review", agentNickname: "Lorentz", agentRole: "reviewer",
-                progress: TaskProgress(kind: .message, text: "已核对认证表单与传输边界，目前正在检查快照失效、缓存提交和账号接续后的资料选择，确保长进展文本能正确截断并通过悬停查看。"))
+                agentPath: "/root/task_family_review", agentNickname: "FixtureReviewer", agentRole: "reviewer",
+                progress: TaskProgress(kind: .message, text: "已核对父子任务分组、运行数量和多层缩进。正在检查祖先缺失与状态待确认的显示，确保长进展文本能正确截断并通过悬停查看。"))
             store.tasks[3].progress = TaskProgress(kind: .tool, text: L10n.text("Running command"))
         case .familyContext:
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
@@ -439,22 +439,31 @@ enum PreviewSupport {
     }
 
     private static func renderStatusItems(to directory: URL) throws {
-        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            let taskCounts = ["0", "1", "2", "12", "—", "2", "123", "1234", "—"]
-            let strip = NSView(frame: NSRect(x: 0, y: 0, width: 8 + taskCounts.count * 84, height: 36))
+        let samples: [(Double?, String, Bool)] = [
+            (100, "0", true), (30, "1", true), (29.9, "2", true), (10, "12", true),
+            (9.9, "—", true), (0.4, "2", true), (0, "123", true), (nil, "—", true),
+            (nil, "1234", false)
+        ]
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
+                                  ("light-contrast", .accessibilityHighContrastAqua),
+                                  ("dark-contrast", .accessibilityHighContrastDarkAqua)] {
+            // Rows: current values, stale values after failure, and native highlight.
+            let strip = NSView(frame: NSRect(x: 0, y: 0, width: 8 + samples.count * 84, height: 108))
             strip.wantsLayer = true
-            strip.layer?.backgroundColor = (name == "light" ? NSColor.white : .black).cgColor
+            strip.layer?.backgroundColor = (name.hasPrefix("light") ? NSColor.white : .black).cgColor
             strip.appearance = NSAppearance(named: appearance)
-            let samples: [Double?] = [0, 0.4, 48, 100, nil]
-            for index in taskCounts.indices {
-                let button = NSButton(frame: NSRect(x: 8 + index * 84, y: 7, width: 76, height: 22))
-                button.isBordered = false
-                button.imagePosition = .imageOnly
-                button.title = ""
-                button.image = MenuBarController.statusImage(percent: index < samples.count ? samples[index] : nil,
-                                                            showsQuota: index < samples.count, taskCount: taskCounts[index])
-                button.contentTintColor = name == "light" ? .black : .white
-                strip.addSubview(button)
+            for row in 0..<3 {
+                for (index, sample) in samples.enumerated() {
+                    let button = NSButton(frame: NSRect(x: 8 + index * 84, y: 7 + row * 36, width: 76, height: 22))
+                    button.isBordered = false
+                    button.imagePosition = .imageOnly
+                    button.title = ""
+                    button.image = MenuBarController.statusImage(percent: sample.0, showsQuota: sample.2, taskCount: sample.1,
+                        quotaReliable: row != 1, appearance: strip.effectiveAppearance, highlighted: row == 2,
+                        increasedContrast: name.hasSuffix("-contrast"))
+                    button.contentTintColor = name.hasPrefix("light") ? .black : .white
+                    strip.addSubview(button)
+                }
             }
             try saveBitmap(strip, to: directory.appendingPathComponent("status-items-\(name).png"))
         }

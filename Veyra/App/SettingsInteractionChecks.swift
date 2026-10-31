@@ -26,7 +26,15 @@ enum SettingsInteractionChecks {
         let shortcuts = ShortcutStore(registrar: registrar, defaults: defaults)
         shortcuts.start()
         defer { shortcuts.stop() }
-        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle), shortcuts: shortcuts)
+        let updates = UpdateStore.preview(.idle)
+        let bundledVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        try require(bundledVersion != nil && updates.currentVersion == bundledVersion, "preview uses built app version")
+        let available = UpdateStore.preview(.available).availableRelease
+        guard let current = AppVersion(updates.currentVersion), let available,
+              let next = AppVersion(available.version), next > current else {
+            throw CheckError.failed("preview update is newer than built app")
+        }
+        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: updates, shortcuts: shortcuts)
             .background(Color(nsColor: .windowBackgroundColor)))
         let window = SettingsWindow.make(hosting: hosting)
         window.appearance = NSAppearance(named: .aqua)
@@ -163,10 +171,11 @@ enum SettingsInteractionChecks {
         replace(try focus(dshField, in: window), with: closeDirectory.path)
         window.close()
         try await wait { defaults.string(forKey: "dshHome") == closeDirectory.path }
-        let checks = ["single-page-settings", "settings-overflow-scroll", "dsh-valid-close-commit", "dsh-path-commit", "dsh-invalid-draft", "dsh-close-and-reopen", "dsh-restore", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
+        let checks = ["preview-build-version", "preview-newer-version", "single-page-settings", "settings-overflow-scroll", "dsh-valid-close-commit", "dsh-path-commit", "dsh-invalid-draft", "dsh-close-and-reopen", "dsh-restore", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
                       "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore",
                       "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur"]
-        try JSONSerialization.data(withJSONObject: ["passed": checks], options: [.prettyPrinted, .sortedKeys])
+        try JSONSerialization.data(withJSONObject: ["passed": checks, "currentVersion": updates.currentVersion,
+            "exampleAvailableVersion": available.version], options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("settings-native-checks.json"))
         print("Passed \(checks.count) native Settings interaction checks")
     }

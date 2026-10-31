@@ -91,6 +91,8 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 
 ## 开发检查
 
+当前验证范围、截图入口与历史记录的区别见[验证索引](validation.md)。`build/local-verification/<run>/` 中的图片只对应该次源码；复核界面时使用本次成功记录中的目录，不混用早期预览或设计图片。
+
 ```sh
 # 一次真实只读联调；默认不联网，输出不含邮箱、凭据、标题或会话正文
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --diagnose
@@ -182,6 +184,8 @@ python3 scripts/measure_energy.py \
 
 `update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 手动检查实际菜单与滚动；自动交互检查使用固定验证入口。设置页渲染包含未检查、检查中、有新版、已是最新、失败、限流及检查失败但仍有缓存新版七种更新状态，以及自动/手动路径、检测中、未找到、无效路径、无效草稿和长路径场景；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
 
+预览的“当前版本”读取本次应用的 Bundle 版本，不固定为旧版本。“有新版”使用下一补丁版本的合成数据，仅验证提示与布局，不表示该版本已发布。额度重置时间采用固定参考时钟，以保持边界场景可重复；任务标题、进展和路径均为监控功能的固定示例。
+
 新增的更新状态文件与 Core 源码一同加入独立 XCTest target；调整成员关系后更新 `project.pbxproj` 的成员例外，并运行 `scripts/verify_configuration.py` 核对。
 
 `previews menu --native-only --language en` 可仅执行六种固定外观的原生弹窗检查。其缓存范围与完整预览分开，不能替代完整中英文布局证据。
@@ -189,6 +193,10 @@ python3 scripts/measure_energy.py \
 GUI 夹具的许可、进程回执、隔离数据和布局先写入临时验证目录，避免 Documents 的访问检查阻塞启动；完成或失败后将证据归档到仓库的本次输出目录。布局预览与原生菜单夹具均通过 LaunchServices 启动独立的 Debug 应用实例，传入固定预览参数和隔离 `CODEX_HOME`，以支持布局夹具内的原生键盘检查。菜单键盘检查要求应用已激活、弹窗是 key window，且任务用量展开按钮已成为 first responder，再通过原生窗口发送合成 Escape 事件。纯 dsh 场景也检查真实 key window 和 Escape 关闭。菜单专项先等待独立身份的固定宿主激活，再启动预览；宿主只向预览 PID 交出激活权限。结果同时记录 `appWasActive`、`windowWasKey`、`openedFromBackground`、`previousApplicationRestored`；缺少任一焦点证据不能算通过。这仍是合成事件证据，不代表硬件键盘或 VoiceOver 人工验收。
 
 每次夹具启动都有独立许可和进程回执。超时或中断先撤销许可；迟到的应用实例会在初始化 AppKit 前退出。已运行的实例只有在 PID、进程组、可执行文件路径和本次启动标识全部匹配时才会回收。LaunchServices 启动器返回零不能证明应用检查通过，运行器还要求有效的 `layouts.json` 或 `menu-check.json`。这些检查不启动已安装应用，不扩大通用命令权限。
+
+焦点交接必须先确认宿主位于前台，再发送 `focus-request`；请求之后不能再重复激活宿主，否则可能取消其刚交出的激活权。宿主仅负责交接，实际菜单仍需通过 active、key window、Escape 与前台恢复断言。宿主日志立即记录交接状态；测试期间切换其他应用仍可能中断检查，此类失败保留为失败，不能按成功缓存。修复与补验证据见[验证索引](validation.md#2026-10-31-原生外观补验与焦点握手修复)。
+
+指定预览外观时，菜单夹具直接设置 `NSPopover.appearance` 及其窗口外观，以覆盖弹窗默认的浅色内容外观。原生检查在截图前核对实际 `effectiveAppearance`；`menu-check.json` 的 `appearance` 记录包含请求、系统解析与实际外观，并核对对比度和降低透明度夹具开关。实际外观必须与系统解析结果一致且保持请求的浅深色归属。当前系统会将手动高对比度外观解析为普通 Aqua／DarkAqua，应用仍使用既有对比度绘制夹具；此检查不修改全局辅助显示设置。仅场景名称或交互通过不足以证明外观正确。
 
 
 ### 纯 dsh 体验验证

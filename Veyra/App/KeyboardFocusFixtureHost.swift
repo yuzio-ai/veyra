@@ -8,6 +8,7 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var timer: Timer?
     private var lastRequest: String?
+    private var observedRequest: String?
     private var announcedReady = false
 
     init(directory: URL) { self.directory = directory }
@@ -21,7 +22,7 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
         window.center(); window.makeKeyAndOrderFront(nil)
         self.window = window
         NSApp.activate()
-        print("Focus host launched: active=\(NSApp.isActive), policy=\(NSApp.activationPolicy().rawValue)")
+        trace("launched: active=\(NSApp.isActive), key=\(window.isKeyWindow)")
         timer = Timer.scheduledTimer(timeInterval: 0.05, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
     }
 
@@ -38,17 +39,30 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
             } catch { timer?.invalidate(); NSApp.terminate(nil); return }
         }
         let parent = directory.deletingLastPathComponent()
+        guard let request = try? String(contentsOf: parent.appendingPathComponent("focus-request"), encoding: .utf8),
+              request != lastRequest else { return }
+        if request != observedRequest {
+            trace("request: active=\(NSApp.isActive), key=\(window?.isKeyWindow == true), front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")")
+            observedRequest = request
+        }
+        // The host only lends activation. After Escape restores the host app,
+        // AppKit may leave its window non-key; no keyboard input is sent here.
+        // The menu itself must still prove that it owns an active key window.
         guard NSApp.isActive,
-              let request = try? String(contentsOf: parent.appendingPathComponent("focus-request"), encoding: .utf8), request != lastRequest,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier,
               let data = try? Data(contentsOf: parent.appendingPathComponent("process.json")),
               let receipt = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               receipt["token"] as? String == arguments[index + 1],
               let rawPID = receipt["pid"] as? Int, let target = NSRunningApplication(processIdentifier: pid_t(rawPID)) else { return }
         NSApp.yieldActivation(to: target)
-        print("Focus host yielded to parent \(target.processIdentifier)")
+        trace("yielded to parent \(target.processIdentifier): active=true, key=\(window?.isKeyWindow == true)")
         do {
             try request.write(to: parent.appendingPathComponent("focus-ready"), atomically: true, encoding: .utf8)
             lastRequest = request
         } catch { timer?.invalidate(); NSApp.terminate(nil) }
+    }
+
+    private func trace(_ message: String) {
+        FileHandle.standardOutput.write(Data("Focus host \(message)\n".utf8))
     }
 }

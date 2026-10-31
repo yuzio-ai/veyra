@@ -113,21 +113,26 @@ final class UpdateStore {
 
     enum PreviewState: String, CaseIterable { case idle, checking, available, current, failed, limited, availableFailed }
 
-    static func preview(_ state: PreviewState = .idle) -> UpdateStore {
-        let store = UpdateStore(currentVersion: "1.1.0")
+    static func preview(_ state: PreviewState = .idle,
+                        currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—") -> UpdateStore {
+        let store = UpdateStore(currentVersion: currentVersion)
+        // A synthetic next patch keeps the update fixture newer than the built app.
+        // This never checks GitHub or claims that the example release is published.
+        let release: AppRelease? = {
+            guard let version = AppVersion(currentVersion), version.components[2] < Int.max else { return nil }
+            let next = "\(version.components[0]).\(version.components[1]).\(version.components[2] + 1)"
+            return try? AppRelease(version: next,
+                pageURL: URL(string: "https://github.com/yuzio-ai/veyra/releases/tag/v\(next)")!)
+        }()
         switch state {
         case .idle: break
         case .checking: store.isChecking = true
         case .available:
-            if let release = try? AppRelease(version: "1.2.0", pageURL: URL(string: "https://github.com/yuzio-ai/veyra/releases/tag/v1.2.0")!) {
-                store.apply(release)
-            }
+            if let release { store.apply(release) }
         case .current: store.result = .upToDate
         case .failed: store.result = .failed(.network)
         case .availableFailed:
-            if let release = try? AppRelease(version: "1.2.0", pageURL: URL(string: "https://github.com/yuzio-ai/veyra/releases/tag/v1.2.0")!) {
-                store.apply(release)
-            }
+            if let release { store.apply(release) }
             store.result = .failed(.network)
         case .limited:
             let until = Date(timeIntervalSince1970: 1_788_410_400 + 3_600)

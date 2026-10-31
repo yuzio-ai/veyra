@@ -193,6 +193,21 @@ def binary(configuration):
     return app(configuration) / 'Contents/MacOS/Veyra'
 
 
+def validate_preview_versions(directory):
+    settings = json.loads((directory / 'settings-native-checks.json').read_text())
+    info = plistlib.loads((app('Debug') / 'Contents/Info.plist').read_bytes())
+    current = settings.get('currentVersion')
+    available = settings.get('exampleAvailableVersion')
+    def version(value):
+        if not isinstance(value, str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value):
+            return None
+        return tuple(map(int, value.split('.')))
+    if (current != info.get('CFBundleShortVersionString') or version(current) is None
+            or version(available) is None or version(available) <= version(current)):
+        raise RuntimeError('Settings preview versions do not match the built app and a newer example release')
+    return settings
+
+
 def focus_host_app():
     return STATE / 'focus-host/Veyra Keyboard Fixture.app'
 
@@ -472,7 +487,7 @@ def run(options):
                     if not layouts or not list((output / locale).glob('*.png')):
                         raise RuntimeError(f'Preview evidence is missing for {locale}')
                     if options.target == 'settings':
-                        settings = json.loads((output / locale / 'settings-native-checks.json').read_text())
+                        settings = validate_preview_versions(output / locale)
                         required = {'single-page-settings', 'settings-overflow-scroll', 'return-commit',
                                     'focus-loss-commit', 'close-and-reopen', 'shortcut-recording', 'dsh-path-commit'}
                         if not required.issubset(settings.get('passed', [])):
@@ -482,12 +497,25 @@ def run(options):
                                     'no-sources-light', 'mixed-error-light', 'settings-missing-light'}
                         if not required.issubset({row.get('name') for row in layouts}):
                             raise RuntimeError(f'dsh capability preview evidence is missing for {locale}')
-                        settings = json.loads((output / locale / 'settings-native-checks.json').read_text())
+                        settings = validate_preview_versions(output / locale)
                         if not {'dsh-path-commit', 'dsh-invalid-draft', 'dsh-close-and-reopen', 'dsh-restore'}.issubset(settings.get('passed', [])):
                             raise RuntimeError(f'Native dsh settings evidence is missing for {locale}')
                 if options.target == 'menu':
                     for style in ('light', 'dark', 'light-increased', 'dark-increased', 'light-opaque', 'dark-opaque'):
                         records = json.loads((output / locales[0] / ('native-' + style) / 'menu-check.json').read_text())
+                        expected_appearance = {
+                            'light': 'NSAppearanceNameAqua', 'dark': 'NSAppearanceNameDarkAqua',
+                            'light-increased': 'NSAppearanceNameAccessibilityAqua',
+                            'dark-increased': 'NSAppearanceNameAccessibilityDarkAqua',
+                        }[style.removesuffix('-opaque')]
+                        base_appearance = 'NSAppearanceNameDarkAqua' if style.startswith('dark') else 'NSAppearanceNameAqua'
+                        if not any(row.get('position') == 'appearance'
+                                   and row.get('requestedAppearance') == expected_appearance
+                                   and row.get('resolvedAppearance') in {expected_appearance, base_appearance}
+                                   and row.get('effectiveAppearance') == row.get('resolvedAppearance')
+                                   and row.get('increasedContrast') is style.endswith('-increased')
+                                   and row.get('reduceTransparency') is style.endswith('-opaque') for row in records):
+                            raise RuntimeError(f'Native menu appearance evidence is missing or incorrect for {style}')
                         if not any(row.get('toggleAndEscapePassed') is True and row.get('appWasActive') is True
                                    and row.get('windowWasKey') is True and row.get('openedFromBackground') is True
                                    and row.get('previousApplicationRestored') is True for row in records):

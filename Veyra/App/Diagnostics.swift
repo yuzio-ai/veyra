@@ -49,10 +49,22 @@ enum Diagnostics {
                     guard let window = menuWindow?(), window.isVisible,
                           let view = window.contentView else { continue }
                     try await Task.sleep(for: .milliseconds(700))
+                    let effectiveAppearance = view.effectiveAppearance.name
+                    guard let requestedAppearance = PreviewSupport.menuAppearance,
+                          let resolvedAppearance = NSAppearance(named: requestedAppearance)?.name,
+                          effectiveAppearance == resolvedAppearance else {
+                        print("Menu appearance mismatch: requested=\(PreviewSupport.menuAppearance?.rawValue ?? "none"), resolved=\(PreviewSupport.menuAppearance.flatMap { NSAppearance(named: $0)?.name.rawValue } ?? "none"), effective=\(effectiveAppearance.rawValue)")
+                        throw MenuCheckError.appearanceMismatch
+                    }
                     guard let scroll = scrollView(in: view), let document = scroll.documentView else {
                         throw MenuCheckError.missingScrollView
                     }
-                    var records: [[String: Any]] = []
+                    var records: [[String: Any]] = [["position": "appearance",
+                        "requestedAppearance": requestedAppearance.rawValue,
+                        "resolvedAppearance": resolvedAppearance.rawValue,
+                        "effectiveAppearance": effectiveAppearance.rawValue,
+                        "increasedContrast": PreviewSupport.menuIncreasedContrast,
+                        "reduceTransparency": PreviewSupport.menuReduceTransparency]]
                     let originalHeight = window.frame.height
                     let maximumOffset = max(0, document.bounds.height - scroll.contentView.bounds.height)
                     guard maximumOffset > 0 else { throw MenuCheckError.expectedOverflow }
@@ -217,24 +229,34 @@ enum Diagnostics {
         let request = UUID().uuidString
         let pid = host.processIdentifier
         print("Keyboard host request: appActive=\(NSApp.isActive), hostActive=\(host.isActive), host=\(pid)")
-        try request.write(to: directory.appendingPathComponent("focus-request"), atomically: true, encoding: .utf8)
-        NSApp.yieldActivation(to: host)
-        host.activate(options: [])
+        // Complete activation before asking the host to yield back. Activating
+        // an already-active app can cancel a yield it has just granted.
+        if NSApp.isActive { NSApp.yieldActivation(to: host) }
+        if !host.isActive { host.activate(options: []) }
         guard await waitFor({
             !NSApp.isActive && host.isActive
-                && (try? String(contentsOf: directory.appendingPathComponent("focus-ready"), encoding: .utf8)) == request
+                && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
         }) else {
-            print("Keyboard host timeout: appActive=\(NSApp.isActive), hostActive=\(host.isActive), ready=\(FileManager.default.fileExists(atPath: directory.appendingPathComponent("focus-ready").path))")
+            print("Keyboard host activation failed: front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"), appActive=\(NSApp.isActive), hostActive=\(host.isActive)")
             throw MenuCheckError.backgroundSetupFailed
         }
-        print("Keyboard background fixture: active=\(NSApp.isActive), previous=\(pid), cooperativeYield=true")
+        try request.write(to: directory.appendingPathComponent("focus-request"), atomically: true, encoding: .utf8)
+        guard await waitFor({
+            !NSApp.isActive && host.isActive
+                && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+                && (try? String(contentsOf: directory.appendingPathComponent("focus-ready"), encoding: .utf8)) == request
+        }) else {
+            print("Keyboard host timeout: appActive=\(NSApp.isActive), hostActive=\(host.isActive), front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"), ready=\(FileManager.default.fileExists(atPath: directory.appendingPathComponent("focus-ready").path))")
+            throw MenuCheckError.backgroundSetupFailed
+        }
+        print("Keyboard background fixture: active=\(NSApp.isActive), previous=\(pid), cooperativeYield=true, activationBeforeRequest=true")
         return pid
     }
 
     private enum MenuCheckError: Error {
         case missingScrollView, expectedOverflow, unstableHeight, didNotShrink, timedOut
         case didNotClose, didNotOpen, escapeDidNotClose
-        case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidDshState, invalidLease
+        case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidDshState, invalidLease, appearanceMismatch
     }
 
     /// Capture our own real popover, avoiding a fixed preview window that

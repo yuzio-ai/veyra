@@ -94,7 +94,7 @@ actor AppServerClient {
         child.standardInput = stdinPipe; child.standardOutput = stdoutPipe; child.standardError = stderrPipe
         input = stdinPipe.fileHandleForWriting; output = stdoutPipe.fileHandleForReading; errors = stderrPipe.fileHandleForReading
         // A Task per chunk can enter the actor out of order. One stream consumer
-        // preserves byte order even when a config response spans many pipe reads.
+        // preserves byte order even when a quota response spans many pipe reads.
         let (stream, continuation) = AsyncStream<Data>.makeStream()
         outputContinuation = continuation
         readTask = Task { [weak self] in

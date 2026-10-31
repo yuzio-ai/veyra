@@ -51,21 +51,50 @@ final class UpdateStoreTests: XCTestCase {
     }
 
     func testSettingsStatusIsLocalizedAndHidesFailureDetails() {
+        let version = "7.4.2"
         for language in ["en", "zh-Hans"] {
             L10n.$languageOverride.withValue(language) {
                 let chinese = language == "zh-Hans"
-                XCTAssertEqual(UpdateStore.preview(.idle).settingsStatus, chinese ? "当前版本 1.1.0" : "Current version 1.1.0")
-                XCTAssertEqual(UpdateStore.preview(.current).settingsStatus, chinese
-                    ? "当前版本 1.1.0 · 已是最新版本" : "Current version 1.1.0 · You’re up to date")
+                XCTAssertEqual(UpdateStore.preview(.idle, currentVersion: version).settingsStatus, chinese ? "当前版本 \(version)" : "Current version \(version)")
+                XCTAssertEqual(UpdateStore.preview(.current, currentVersion: version).settingsStatus, chinese
+                    ? "当前版本 \(version) · 已是最新版本" : "Current version \(version) · You’re up to date")
                 XCTAssertEqual(UpdateStore.preview(.checking).settingsStatus, chinese ? "正在检查更新…" : "Checking for updates…")
                 for state: UpdateStore.PreviewState in [.failed, .limited, .availableFailed] {
-                    let store = UpdateStore.preview(state)
-                    XCTAssertEqual(store.settingsStatus, chinese ? "当前版本 1.1.0 · 暂时无法检查更新"
-                        : "Current version 1.1.0 · Unable to check for updates right now")
+                    let store = UpdateStore.preview(state, currentVersion: version)
+                    XCTAssertEqual(store.settingsStatus, chinese ? "当前版本 \(version) · 暂时无法检查更新"
+                        : "Current version \(version) · Unable to check for updates right now")
                     XCTAssertFalse(store.settingsStatus.contains("GitHub"))
-                    if state == .availableFailed { XCTAssertEqual(store.availableRelease?.version, "1.2.0") }
+                    if state == .availableFailed { XCTAssertNotNil(store.availableRelease) }
                 }
             }
+        }
+    }
+
+    func testPreviewVersionsFollowTheBuiltAppAndInjectedVersionsWithoutNetworking() async throws {
+        let bundledVersion = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        // This is a standalone XCTest bundle; Bundle.main is xctest, not Veyra.app.
+        // The native settings fixture also checks the real app's bundle version.
+        for version in ["2.7.9", "10.0.0"] {
+            for state in UpdateStore.PreviewState.allCases {
+                let store = UpdateStore.preview(state, currentVersion: version)
+                XCTAssertEqual(store.currentVersion, version)
+                if state == .available || state == .availableFailed {
+                    let release = try XCTUnwrap(store.availableRelease)
+                    XCTAssertGreaterThan(try XCTUnwrap(AppVersion(release.version)), try XCTUnwrap(AppVersion(version)))
+                    XCTAssertTrue(release.pageURL.path.hasSuffix("/v" + release.version))
+                    // Preview stores remain offline even when checks are requested.
+                    await store.checkAutomatically()
+                    await store.checkManually()
+                    XCTAssertEqual(store.availableRelease, release)
+                } else {
+                    XCTAssertNil(store.availableRelease)
+                }
+            }
+        }
+        XCTAssertEqual(UpdateStore.preview().currentVersion, bundledVersion)
+        XCTAssertEqual(UpdateStore.preview(.available, currentVersion: "2.7.9").availableRelease?.version, "2.7.10")
+        for version in ["unknown", "1.2.\(Int.max)"] {
+            XCTAssertNil(UpdateStore.preview(.available, currentVersion: version).availableRelease)
         }
     }
 

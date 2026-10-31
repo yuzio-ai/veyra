@@ -126,7 +126,6 @@ struct MonitorPanel: View {
                     }
                 }
             }
-            ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
             if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
                 let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
                     if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
@@ -158,6 +157,7 @@ struct MonitorPanel: View {
                 Text("No online quota data").font(.system(size: 12)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
             }
+            ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
             if let error = store.quota.error { notice(error) }
         }
     }
@@ -341,13 +341,14 @@ private struct QuotaWindowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(window.durationTitle)
                     .font(.system(size: 13, weight: .medium)).monospacedDigit()
+                Spacer(minLength: 8)
                 resetLabel
             }
+            .frame(minHeight: 56, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(minHeight: 56, alignment: .top)
             Spacer(minLength: 0)
             QuotaRingView(remainingPercent: window.remainingPercent)
         }

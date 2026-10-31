@@ -123,7 +123,8 @@ class VerificationTests(unittest.TestCase):
         built = verify.binary(configuration)
         built.parent.mkdir(parents=True, exist_ok=True)
         built.write_text('fixture binary')
-        (verify.app(configuration) / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': 'com.veyra.fixture'}))
+        (verify.app(configuration) / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+            'CFBundleIdentifier': 'com.veyra.fixture', 'CFBundleShortVersionString': '7.4.2'}))
         if name == 'tests-diagnostics-configuration':
             suite = verify.STATE / 'debug/Build/Products/Debug/VeyraTests.xctest/tests'
             suite.parent.mkdir(parents=True, exist_ok=True)
@@ -136,7 +137,8 @@ class VerificationTests(unittest.TestCase):
             (directory / 'layouts.json').write_text(json.dumps([{'name': name} for name in names]))
             (directory / 'fixture.png').write_bytes(b'fixture')
             if '--exercise-settings' in command:
-                (directory / 'settings-native-checks.json').write_text(json.dumps({'passed': [
+                (directory / 'settings-native-checks.json').write_text(json.dumps({
+                    'currentVersion': '7.4.2', 'exampleAvailableVersion': '7.4.3', 'passed': [
                     'dsh-path-commit', 'dsh-invalid-draft', 'dsh-close-and-reopen', 'dsh-restore',
                     'single-page-settings', 'settings-overflow-scroll', 'return-commit', 'focus-loss-commit',
                     'close-and-reopen', 'shortcut-recording']}))
@@ -149,6 +151,18 @@ class VerificationTests(unittest.TestCase):
                 {'position': 'dsh-only', 'quotaHidden': True, 'escapePassed': True,
                  'appWasActive': True, 'windowWasKey': True,
                  'openedFromBackground': True, 'previousApplicationRestored': True}]))
+            path = directory / 'menu-check.json'
+            records = json.loads(path.read_text())
+            appearance = {
+                'light': 'NSAppearanceNameAqua', 'dark': 'NSAppearanceNameDarkAqua',
+                'light-increased': 'NSAppearanceNameAccessibilityAqua',
+                'dark-increased': 'NSAppearanceNameAccessibilityDarkAqua',
+            }[command[command.index('--preview-appearance') + 1]]
+            records.append({'position': 'appearance', 'requestedAppearance': appearance,
+                            'resolvedAppearance': appearance, 'effectiveAppearance': appearance,
+                            'increasedContrast': command[command.index('--preview-appearance') + 1].endswith('-increased'),
+                            'reduceTransparency': '--preview-reduce-transparency' in command})
+            path.write_text(json.dumps(records))
 
     def testUnchangedSuccessSkipsButForceRuns(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
@@ -238,10 +252,30 @@ class VerificationTests(unittest.TestCase):
             self.fake_execute(name, command, timeout, output, env)
             if name.startswith('previews-'):
                 directory = Path(command[command.index('--render-previews') + 1])
-                (directory / 'settings-native-checks.json').write_text('{"passed": []}')
+                path = directory / 'settings-native-checks.json'
+                record = json.loads(path.read_text())
+                record['passed'] = []
+                path.write_text(json.dumps(record))
         with patch.object(verify, 'execute', side_effect=incomplete):
             with self.assertRaisesRegex(RuntimeError, 'Native single-page settings'):
                 verify.run(verify.arguments(['previews', 'settings']))
+
+    def testSettingsPreviewRejectsOldMissingAndNonNewerVersionEvidence(self):
+        for current, available in [('1.1.0', '1.2.0'), (None, None), ('7.4.2', '7.4.2'),
+                                   ('7.4.2', '7.4.1'), ('7.4.2', 'invalid')]:
+            with self.subTest(current=current, available=available):
+                def stale(name, command, timeout, output, env):
+                    self.fake_execute(name, command, timeout, output, env)
+                    if name.startswith('previews-'):
+                        path = Path(command[command.index('--render-previews') + 1]) / 'settings-native-checks.json'
+                        record = json.loads(path.read_text())
+                        record.update(currentVersion=current, exampleAvailableVersion=available)
+                        path.write_text(json.dumps(record))
+                with patch.object(verify, 'execute', side_effect=stale):
+                    with self.assertRaisesRegex(RuntimeError, 'Settings preview versions'):
+                        verify.run(verify.arguments(['previews', 'settings', '--force']))
+                results = [json.loads(path.read_text()) for path in verify.OUTPUT.glob('*/result.json')]
+                self.assertFalse(any(row['status'] == 'passed' and row['scope']['mode'] == 'previews' for row in results))
 
     def testNativeMenuChecksUseOnlyFixedIsolatedPreviewCommands(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
@@ -330,6 +364,26 @@ class VerificationTests(unittest.TestCase):
         with patch.object(verify, 'execute', side_effect=inactive):
             with self.assertRaisesRegex(RuntimeError, 'interaction evidence'):
                 verify.run(verify.arguments(['previews', 'menu', '--native-only']))
+
+    def testNativeMenuRejectsMissingOrIncorrectActualAppearanceEvidence(self):
+        for invalid in ('missing', 'wrong-appearance', 'wrong-resolution', 'wrong-contrast', 'wrong-transparency'):
+            with self.subTest(invalid=invalid):
+                def incorrect(name, command, timeout, output, env):
+                    self.fake_execute(name, command, timeout, output, env)
+                    if name.startswith('native-menu-'):
+                        path = Path(command[command.index('--exercise-menu-to') + 1]) / 'menu-check.json'
+                        records = json.loads(path.read_text())
+                        row = next(r for r in records if r.get('position') == 'appearance')
+                        if invalid == 'missing': records.remove(row)
+                        elif invalid == 'wrong-appearance': row['effectiveAppearance'] = 'NSAppearanceNameDarkAqua'
+                        elif invalid == 'wrong-resolution':
+                            row['resolvedAppearance'] = row['effectiveAppearance'] = 'NSAppearanceNameDarkAqua'
+                        elif invalid == 'wrong-contrast': row['increasedContrast'] = True
+                        else: row['reduceTransparency'] = True
+                        path.write_text(json.dumps(records))
+                with patch.object(verify, 'execute', side_effect=incorrect):
+                    with self.assertRaisesRegex(RuntimeError, 'appearance evidence'):
+                        verify.run(verify.arguments(['previews', 'menu', '--native-only', '--force']))
 
     def testNativeMenuRequiresBackgroundOpeningAndFocusRestorationForBothSources(self):
         for source in (0, 1):
