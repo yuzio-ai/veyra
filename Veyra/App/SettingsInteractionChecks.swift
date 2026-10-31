@@ -20,6 +20,8 @@ enum SettingsInteractionChecks {
             CodexConfigurationReport(location: location, state: .valid)
         })
         store.isPreview = true
+        store.dshHomePath = home.path
+        store.dshReadState = .available
         let registrar = SettingsHotKeyFixture()
         let shortcuts = ShortcutStore(registrar: registrar, defaults: defaults)
         shortcuts.start()
@@ -33,7 +35,7 @@ enum SettingsInteractionChecks {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         defer { window.close() }
-        try await wait { store.configurationState == .valid && fields(in: hosting).count == 2 }
+        try await wait { store.configurationState == .valid && fields(in: hosting).count == 3 }
         hosting.layoutSubtreeIfNeeded()
         window.setContentSize(hosting.fittingSize)
         let pathFields = fields(in: hosting)
@@ -122,7 +124,42 @@ enum SettingsInteractionChecks {
         await store.restoreAutomaticPaths()
         try await wait { homeField.stringValue == home.path && executableField.stringValue == executable.path }
         try require(!store.hasManualPaths, "restore clears both overrides and drafts")
-        let checks = ["matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
+        let dshField = pathFields[2]
+        try require(dshField.accessibilityLabel() == L10n.text("dsh data directory"), "dsh directory accessibility label")
+        let dshDirectory = home.appendingPathComponent("dsh fixtures")
+        try files.createDirectory(at: dshDirectory, withIntermediateDirectories: true)
+        let dshEditor = try focus(dshField, in: window)
+        replace(dshEditor, with: dshDirectory.path)
+        dshEditor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        try await wait { defaults.string(forKey: "dshHome") == dshDirectory.path }
+        try require(!store.hasManualPaths, "dsh edits preserve automatic Codex paths")
+        replace(try focus(dshField, in: window), with: "invalid/dsh-path")
+        window.makeFirstResponder(nil)
+        try await pause()
+        try require(defaults.string(forKey: "dshHome") == dshDirectory.path, "invalid dsh path not persisted")
+        window.close(); try await pause(); window.makeKeyAndOrderFront(nil)
+        try await wait { dshField.stringValue == dshDirectory.path }
+        _ = await store.commitDshPath("", restoringAutomatic: true)
+        try require(store.dshHomePath.isEmpty, "dsh restore returns to automatic paths")
+        // A Codex request must disable only its own paths, leaving dsh usable.
+        let busyHosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle),
+            shortcuts: shortcuts, codexControlsEnabled: false))
+        window.contentView = busyHosting
+        try await pause()
+        let busyFields = fields(in: busyHosting)
+        try require(busyFields.count == 3, "busy settings path fields exist")
+        try require(!busyFields[0].isEditable && !busyFields[1].isEditable, "Codex paths respect disabled state")
+        try require(busyFields[2].isEditable && busyFields[2].isEnabled, "dsh path remains usable while Codex is busy")
+        let enabledDshEditor = try focus(busyFields[2], in: window)
+        replace(enabledDshEditor, with: dshDirectory.path)
+        enabledDshEditor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        try await wait { defaults.string(forKey: "dshHome") == dshDirectory.path }
+        let closeDirectory = home.appendingPathComponent("dsh close fixture")
+        try files.createDirectory(at: closeDirectory, withIntermediateDirectories: true)
+        replace(try focus(busyFields[2], in: window), with: closeDirectory.path)
+        window.close()
+        try await wait { defaults.string(forKey: "dshHome") == closeDirectory.path }
+        let checks = ["dsh-valid-close-commit", "dsh-independent-of-codex-busy", "disabled-codex-paths", "dsh-path-commit", "dsh-invalid-draft", "dsh-close-and-reopen", "dsh-restore", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
                       "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore",
                       "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur"]
         try JSONSerialization.data(withJSONObject: ["passed": checks], options: [.prettyPrinted, .sortedKeys])
@@ -131,7 +168,8 @@ enum SettingsInteractionChecks {
     }
 
     private static func fields(in view: NSView) -> [NSTextField] {
-        if let field = view as? NSTextField, field.isEditable { return [field] }
+        if let field = view as? NSTextField,
+           field.isEditable || field.accessibilityIdentifier().hasPrefix("settings.path.") { return [field] }
         return view.subviews.flatMap { fields(in: $0) }
     }
 

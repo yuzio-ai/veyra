@@ -1,55 +1,5 @@
 import Foundation
 
-/// One event is one complete bucket snapshot. Missing windows never inherit old values.
-/// The session model is kept alongside: token_count events report the limit
-/// governing the request under a generic limit_id, so the model is the only
-/// local signal identifying the model family the bucket belongs to.
-struct LocalQuotaBucket: Equatable, Sendable {
-    let id: String
-    let windows: [QuotaWindow]
-    let recordedAt: Date
-    let model: String?
-    /// Reported limit name. A generic "codex" record naming the account limit
-    /// describes that family-neutral bucket, not a model-family bucket.
-    let limitName: String?
-
-    init(id: String, windows: [QuotaWindow], recordedAt: Date, model: String? = nil, limitName: String? = nil) {
-        self.id = id
-        self.windows = windows
-        self.recordedAt = recordedAt
-        self.model = model
-        self.limitName = limitName
-    }
-
-    static func parse(_ value: JSONValue, at date: Date, model: String? = nil) -> LocalQuotaBucket? {
-        guard value.object != nil else { return nil }
-        let id = value["limit_id"].string.flatMap { $0.isEmpty ? nil : $0 } ?? "codex"
-        let reportedName = value["limit_name"].string.flatMap { $0.isEmpty ? nil : $0 }
-        let name = reportedName ?? (id == "codex" ? "Codex" : id)
-        let windows = ["primary", "secondary"].compactMap { kind -> QuotaWindow? in
-            let window = value[kind]
-            guard window.object != nil else { return nil }
-            return QuotaWindow(id: "\(id):\(kind)", bucketID: id, bucketName: name, isPrimary: kind == "primary",
-                               usedPercent: window["used_percent"].double,
-                               durationMinutes: window["window_minutes"].integer,
-                               resetsAt: window["resets_at"].double.map(Date.init(timeIntervalSince1970:)))
-        }
-        return LocalQuotaBucket(id: id, windows: windows, recordedAt: date, model: model, limitName: reportedName)
-    }
-
-    static func snapshot(_ buckets: [String: LocalQuotaBucket]) -> QuotaSnapshot? {
-        guard let latest = buckets.values.map(\.recordedAt).max() else { return nil }
-        let ordered = buckets.values.sorted {
-            if ($0.id == "codex") != ($1.id == "codex") { return $0.id == "codex" }
-            return $0.id < $1.id
-        }
-        return QuotaSnapshot(windows: ordered.flatMap(\.windows), fetchedAt: latest, accountID: nil,
-                             source: .local, bucketDates: buckets.mapValues(\.recordedAt),
-                             bucketModels: buckets.compactMapValues(\.model),
-                             bucketLimitNames: buckets.compactMapValues(\.limitName))
-    }
-}
-
 /// Extract only bounded, structured transport metadata; never retain backend message/data.
 struct QuotaFailureDetails: Error, Equatable, Sendable {
     let category: QuotaFailure

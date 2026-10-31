@@ -4,14 +4,13 @@ import Foundation
 private actor MonitorFixture {
     var localReads = 0
     var networkReads = 0
-    var local: QuotaSnapshot? = QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 100), accountID: nil, source: .local)
     var networkResult = QuotaRefresh(snapshot: QuotaSnapshot(windows: [], fetchedAt: Date(timeIntervalSince1970: 200), accountID: "fixture"), didRequestQuota: true)
     var networkGate: CheckedContinuation<Void, Never>?
     var gateWaiters: [CheckedContinuation<Void, Never>] = []
     var holdNetwork = false
     func read() -> TaskReadResult {
         localReads += 1
-        return TaskReadResult(tasks: [], fetchedAt: .now, warning: nil, localQuota: local)
+        return TaskReadResult(tasks: [], fetchedAt: .now, warning: nil)
     }
     func network() async -> QuotaRefresh {
         networkReads += 1
@@ -25,7 +24,6 @@ private actor MonitorFixture {
         return result
     }
     func counts() -> (Int, Int) { (localReads, networkReads) }
-    func setLocal(_ snapshot: QuotaSnapshot?) { local = snapshot }
     func setNetwork(_ result: QuotaRefresh) { networkResult = result }
     func hold() { holdNetwork = true }
     func waitUntilHeld() async {
@@ -41,6 +39,7 @@ final class MonitorStoreTests: XCTestCase {
         let suite = "veyra-test-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(home.path, forKey: "codexHome")
+        defaults.set("/usr/bin/true", forKey: "codexExecutable")
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
         return defaults
     }
@@ -53,31 +52,27 @@ final class MonitorStoreTests: XCTestCase {
     }
     func testCalibrationInvalidatesChangedAuthenticationBeforeEarlyFailure() async throws {
         for failure: QuotaFailure in [.timeout, .disconnected] {
-            for hasLocal in [false, true] {
-                let folder = try SQLiteFixture(), fixture = MonitorFixture()
-                let local = hasLocal ? await fixture.read().localQuota : nil
-                await fixture.setLocal(local)
-                await fixture.setNetwork(verifiedQuota)
-                var now = Date(timeIntervalSince1970: 300)
-                let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
-                                         now: { now }, defaults: defaults(home: folder.home))
-                await store.refreshAll()
-                await store.calibrateQuota()
-                XCTAssertEqual(store.quota.account?.identity, "account-a")
-                try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"), options: .atomic)
-                await fixture.setNetwork(QuotaRefresh(error: failure))
-                now = now.addingTimeInterval(61)
-                await store.calibrateQuota()
-                XCTAssertNil(store.quota.account)
-                XCTAssertEqual(store.quota.snapshot, local)
-                XCTAssertEqual(store.quota.error, failure.message)
-                await store.refreshAll()
-                XCTAssertNil(store.quota.account)
-                XCTAssertEqual(store.quota.snapshot, local)
-                let counts = await fixture.counts()
-                XCTAssertEqual(counts.1, 2)
-                store.stop()
-            }
+            let folder = try SQLiteFixture(), fixture = MonitorFixture()
+            await fixture.setNetwork(verifiedQuota)
+            var now = Date(timeIntervalSince1970: 300)
+            let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+                                     now: { now }, defaults: defaults(home: folder.home))
+            await store.refreshAll()
+            await store.calibrateQuota()
+            XCTAssertEqual(store.quota.account?.identity, "account-a")
+            try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"), options: .atomic)
+            await fixture.setNetwork(QuotaRefresh(error: failure))
+            now = now.addingTimeInterval(61)
+            await store.calibrateQuota()
+            XCTAssertNil(store.quota.account)
+            XCTAssertNil(store.quota.snapshot)
+            XCTAssertEqual(store.quota.error, failure.message)
+            await store.refreshAll()
+            XCTAssertNil(store.quota.account)
+            XCTAssertNil(store.quota.snapshot)
+            let counts = await fixture.counts()
+            XCTAssertEqual(counts.1, 2)
+            store.stop()
         }
     }
     func testCalibrationFailureKeepsVerifiedQuotaWhenAuthenticationIsUnchanged() async throws {
@@ -106,7 +101,7 @@ final class MonitorStoreTests: XCTestCase {
         try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"))
         await store.calibrateQuota()
         XCTAssertNil(store.quota.account)
-        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        XCTAssertNil(store.quota.snapshot)
         XCTAssertEqual(store.nextCalibrationAt, deadline)
         let counts = await fixture.counts()
         XCTAssertEqual(counts.1, 1)
@@ -130,122 +125,129 @@ final class MonitorStoreTests: XCTestCase {
             if pollWhilePending { await store.refreshAll() }
             await fixture.release(); await request.value
             XCTAssertNil(store.quota.account)
-            XCTAssertEqual(store.quota.snapshot?.source, .local)
+            XCTAssertNil(store.quota.snapshot)
             XCTAssertEqual(store.quota.error, L10n.text("Your sign-in has changed. Sync quota again."))
             XCTAssertEqual(store.nextCalibrationAt, now.addingTimeInterval(60))
             XCTAssertFalse(store.quotaBusy)
             store.stop()
         }
     }
-    func testStartupVisibilityWakeAndNormalRefreshNeverRequestQuota() async throws {
+    func testAutomaticQuotaUsesHourlyIdleAndMinuteActiveCadence() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock(), active = Flag()
+        let store = MonitorStore(readLocal: { _ in
+            TaskReadResult(tasks: await active.get() ? [Self.codexTask()] : [], fetchedAt: .now, warning: nil)
+        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
+        store.start(); await store.refreshAll(); await drain()
+        var counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        clock.advance(3599); await store.refreshAll(); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        clock.advance(1); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        await active.set(true); await store.refreshAll(); await drain()
+        clock.advance(59); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        clock.advance(1); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 3)
+        await active.set(false); await store.refreshAll(); await drain()
+        clock.advance(60); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 3)
+        store.sleep(); clock.advance(7200); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 3)
+        store.wake(); await store.refreshAll(); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 4)
+        store.stop(); clock.finish(); await drain()
+    }
+
+    func testActiveTransitionFetchesOverdueQuotaWithoutWaitingForIdleDeadline() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock(), active = Flag()
+        let store = MonitorStore(readLocal: { _ in
+            TaskReadResult(tasks: await active.get() ? [Self.codexTask()] : [], fetchedAt: .now, warning: nil)
+        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
+        store.start(); await store.refreshAll(); await drain()
+        clock.advance(120); await drain()
+        await active.set(true); await store.refreshAll(); await drain()
+        let counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        store.stop(); clock.finish(); await drain()
+    }
+
+    func testLocalTaskRefreshAndPanelOpeningPreserveOnlineQuota() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
-                                 clock: clock.clock, defaults: defaults(home: folder.home))
-        store.start(); await drain()
-        await store.refreshAll()
-        store.setPanelVisible(true); await drain()
-        store.sleep(); clock.advance(100); await drain()
-        store.wake(); await drain()
-        let counts = await fixture.counts()
-        XCTAssertGreaterThanOrEqual(counts.0, 3)
-        XCTAssertEqual(counts.1, 0)
-        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        try folder.threads()
+        let log = try folder.log("running", used: 99)
+        try folder.insert("running", path: log)
+        let reader = LocalTaskReader(collectEvidence: { _ in ProcessEvidence(threadIDs: ["running"]) })
+        let online = verifiedQuota
+        await fixture.setNetwork(online)
+        let store = MonitorStore(readLocal: { try await reader.fetch(home: $0) }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, clock: clock.clock, defaults: defaults(home: folder.home))
+        store.start(); await store.refreshAll(); await store.calibrateQuota(); await drain()
+        for _ in 0..<3 {
+            let update = #"{"type":"event_msg","timestamp":"2026-10-30T06:00:00Z","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":456}},"rate_limits":{"primary":{"used_percent":99,"window_minutes":300}}}}"# + "\n"
+            let handle = try FileHandle(forWritingTo: log)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(update.utf8))
+            try handle.close()
+            store.setPanelVisible(false); store.setPanelVisible(true)
+            await store.refreshAll()
+            XCTAssertEqual(store.tasks.map(\.id), ["running"])
+            XCTAssertEqual(store.tasks.first?.tokens.total, 456)
+            XCTAssertEqual(store.quota.snapshot, online.snapshot)
+            XCTAssertEqual(store.menuQuotaPercent, 80)
+            XCTAssertFalse(store.menuLabel.contains("~"))
+        }
+        let counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        store.stop(); clock.finish(); await drain()
+    }
+
+    func testCustomProviderHidesQuotaSkipsRequestsAndDiscardsInFlightResponse() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
+        await fixture.setNetwork(verifiedQuota)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+            now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
+        await fixture.hold()
+        let request = Task { await store.calibrateQuota() }
+        await fixture.waitUntilHeld()
+        try Data("model_provider = \"deepseek\"\n".utf8).write(to: folder.home.appendingPathComponent("config.toml"))
+        store.configurationDidChange()
+        XCTAssertFalse(store.showsQuota)
+        XCTAssertFalse(store.menuLabel.contains(L10n.text("Quota —")))
+        XCTAssertNil(store.menuQuotaPercent)
+        await fixture.release(); await request.value
+        XCTAssertNil(store.quota.snapshot)
         XCTAssertFalse(store.quotaBusy)
+        store.start(); await store.refreshAll(); await store.calibrateQuota(); await drain()
+        var counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        try Data("model_provider = \"openai\"\n".utf8).write(to: folder.home.appendingPathComponent("config.toml"))
+        store.configurationDidChange(); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        XCTAssertTrue(store.showsQuota)
+        XCTAssertNil(store.menuQuotaPercent)
+        clock.advance(60); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        XCTAssertEqual(store.menuQuotaPercent, 80)
         store.stop(); clock.finish(); await drain()
     }
-    func testReopeningPanelKeepsSparkAndPlanAfterNewerLocalCodexRecord() async throws {
-        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
-        let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "planType": .string("prolite")]),
-                                      accountID: "account-a")
-        let codex = verifiedQuota.snapshot!.windows[0]
-        let spark = QuotaWindow(id: "spark:primary", bucketID: "spark", bucketName: "Spark", isPrimary: true,
-                                usedPercent: 0, durationMinutes: 300, resetsAt: nil)
-        let network = QuotaSnapshot(windows: [codex, spark], fetchedAt: Date(timeIntervalSince1970: 200), accountID: "account-a")
-        await fixture.setNetwork(QuotaRefresh(account: account, snapshot: network, didRequestQuota: true))
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
-                                 clock: clock.clock, defaults: defaults(home: folder.home))
-        store.start()
-        await store.refreshAll()
-        store.setPanelVisible(true)
-        await store.refreshAll()
-        await store.calibrateQuota()
-        XCTAssertEqual(store.quota.snapshot, network)
 
-        let updated = QuotaWindow(id: codex.id, bucketID: "codex", bucketName: "Codex", isPrimary: true,
-                                  usedPercent: 89, durationMinutes: 300, resetsAt: nil)
-        let local = QuotaSnapshot(windows: [updated], fetchedAt: Date(timeIntervalSince1970: 210), accountID: nil, source: .local)
-        await fixture.setLocal(local)
-        for _ in 0..<3 {
-            store.setPanelVisible(false)
-            store.setPanelVisible(true)
-            // Join the local read scheduled by reopening the menu.
-            await store.refreshAll()
-            XCTAssertEqual(store.quota.snapshot?.windows, [updated, spark])
-            XCTAssertEqual(store.quota.account?.plan, "prolite")
-            XCTAssertEqual(store.quota.snapshot?.source(for: "spark"), .network)
-            XCTAssertEqual(store.quota.snapshot?.recordedAt(for: "spark"), network.fetchedAt)
-            XCTAssertEqual(store.quota.snapshot?.source(for: "codex"), .local)
-            XCTAssertTrue(store.menuLabel.contains("11%"))
-            XCTAssertTrue(store.menuLabel.contains("~"))
-        }
-        let counts = await fixture.counts()
-        XCTAssertEqual(counts.1, 1)
-        try Data("changed auth fixture".utf8).write(to: folder.home.appendingPathComponent("auth.json"))
-        await store.refreshAll()
-        XCTAssertEqual(store.quota.snapshot, local)
-        XCTAssertNil(store.quota.account)
-        store.stop(); clock.finish(); await drain()
-    }
-    func testLocalSparkRecordRefreshesSparkCardWithoutTouchingExhaustedCodex() async throws {
+    func testAutomaticFailureBackoffAndManualRequestsShareOneRequest() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
-        let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "planType": .string("prolite")]),
-                                      accountID: "account-a")
-        let exhausted = QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex", isPrimary: true,
-                                    usedPercent: 100, durationMinutes: 10_080,
-                                    resetsAt: Date(timeIntervalSince1970: 1_789_543_273))
-        let spark5h = QuotaWindow(id: "codex_bengalfox:primary", bucketID: "codex_bengalfox",
-                                  bucketName: "GPT-5.3-Codex-Spark", isPrimary: true,
-                                  usedPercent: 0, durationMinutes: 300, resetsAt: nil)
-        let sparkWeek = QuotaWindow(id: "codex_bengalfox:secondary", bucketID: "codex_bengalfox",
-                                    bucketName: "GPT-5.3-Codex-Spark", isPrimary: false,
-                                    usedPercent: 0, durationMinutes: 10_080, resetsAt: nil)
-        let network = QuotaSnapshot(windows: [exhausted, spark5h, sparkWeek],
-                                    fetchedAt: Date(timeIntervalSince1970: 200), accountID: "account-a")
-        await fixture.setNetwork(QuotaRefresh(account: account, snapshot: network, didRequestQuota: true))
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
-                                 clock: clock.clock, defaults: defaults(home: folder.home))
-        store.start()
-        await store.refreshAll()
-        await store.calibrateQuota()
-        XCTAssertEqual(store.quota.snapshot, network)
-
-        // A Spark task then reports its governing limit under the generic limit_id "codex".
-        let reported = [QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex", isPrimary: true,
-                                    usedPercent: 7, durationMinutes: 300, resetsAt: nil),
-                        QuotaWindow(id: "codex:secondary", bucketID: "codex", bucketName: "Codex", isPrimary: false,
-                                    usedPercent: 3, durationMinutes: 10_080, resetsAt: nil)]
-        let local = LocalQuotaBucket.snapshot(["codex": LocalQuotaBucket(id: "codex", windows: reported,
-            recordedAt: Date(timeIntervalSince1970: 210), model: "gpt-5.3-codex-spark")])!
-        await fixture.setLocal(local)
-        for _ in 0..<3 {
-            store.setPanelVisible(false)
-            store.setPanelVisible(true)
-            // Join the local read scheduled by reopening the menu.
-            await store.refreshAll()
-            let displayed = try XCTUnwrap(store.quota.snapshot)
-            // The Spark record refreshes the Spark card and never rewrites the
-            // exhausted Codex card, which still owns its own weekly window.
-            XCTAssertEqual(displayed.windows, [exhausted,
-                                               reported[0].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark"),
-                                               reported[1].rebucketed(to: "codex_bengalfox", name: "GPT-5.3-Codex-Spark")])
-            XCTAssertEqual(displayed.source(for: "codex"), .network)
-            XCTAssertEqual(displayed.recordedAt(for: "codex"), network.fetchedAt)
-            XCTAssertEqual(displayed.source(for: "codex_bengalfox"), .local)
-            XCTAssertEqual(displayed.menuWindow?.remainingPercent, 0)
-            XCTAssertEqual(store.quota.account?.plan, "prolite")
-        }
+        await fixture.setNetwork(QuotaRefresh(error: .rateLimited, didRequestQuota: true))
+        let store = MonitorStore(readLocal: { _ in
+            TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
+        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
+        store.start(); await store.refreshAll(); await drain()
+        clock.advance(299); await drain(); await store.calibrateQuota()
+        var counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        await fixture.setNetwork(verifiedQuota)
+        clock.advance(1); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        XCTAssertNil(store.quota.error)
         store.stop(); clock.finish(); await drain()
     }
+
     func testManualRequestsCoalesceAndAuthenticationChangeInvalidatesNetworkResult() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let now = Date(timeIntervalSince1970: 300)
@@ -260,17 +262,17 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(pending.1, 1)
         await fixture.release(); await first.value; await second.value
         XCTAssertFalse(store.quotaBusy)
-        XCTAssertEqual(store.quota.snapshot?.source, .network)
+        XCTAssertNotNil(store.quota.snapshot)
         await store.calibrateQuota()
         let throttled = await fixture.counts()
         XCTAssertEqual(throttled.1, 1)
         try Data("fixture auth changed".utf8).write(to: folder.home.appendingPathComponent("auth.json"))
         await store.refreshAll()
-        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        XCTAssertNil(store.quota.snapshot)
         XCTAssertNil(store.quota.account)
         store.stop(); clock.finish(); await drain()
     }
-    func testAutomaticPathCommitRefreshesLocallyWithoutRequestingQuota() async throws {
+    func testAutomaticPathCommitRefreshesTasksAndOnlineQuota() async throws {
         let firstHome = try SQLiteFixture(), secondHome = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
                                  clock: clock.clock, defaults: defaults(home: firstHome.home))
@@ -281,12 +283,14 @@ final class MonitorStoreTests: XCTestCase {
         await store.refreshAll()
         let after = await fixture.counts()
         XCTAssertGreaterThan(after.0, before.0)
-        XCTAssertEqual(after.1, 0)
-        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        await drain()
+        let finalCounts = await fixture.counts()
+        XCTAssertEqual(finalCounts.1, 1)
+        XCTAssertNotNil(store.quota.snapshot)
         store.stop(); clock.finish(); await drain()
     }
 
-    func testSavingSettingsClearsCachesWithoutNetworkRequest() async throws {
+    func testSavingSettingsClearsCachesAndStartsQuotaForNewLocation() async throws {
         let firstHome = try SQLiteFixture(), secondHome = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
                                  clock: clock.clock, defaults: defaults(home: firstHome.home))
@@ -297,18 +301,14 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertNil(store.quota.snapshot)
         await drain()
         let counts = await fixture.counts()
-        XCTAssertEqual(counts.1, 1)
-        XCTAssertEqual(store.quota.snapshot?.source, .local)
+        XCTAssertEqual(counts.1, 2)
+        XCTAssertNotNil(store.quota.snapshot)
         store.stop(); clock.finish(); await drain()
     }
 
-    func testCreditsPublishIndependentlyOfNewerLocalQuotaAndClearOnSettingsChange() async throws {
+    func testOnlineQuotaAndCreditsSurviveTaskRefreshAndClearOnSettingsChange() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         var now = Date(timeIntervalSince1970: 300)
-        let local = QuotaSnapshot(windows: [QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex",
-            isPrimary: true, usedPercent: 89, durationMinutes: 300, resetsAt: nil)],
-            fetchedAt: Date(timeIntervalSince1970: 1_000), accountID: nil, source: .local)
-        await fixture.setLocal(local)
         let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
                                  now: { now }, defaults: defaults(home: folder.home))
         await store.refreshAll()
@@ -319,8 +319,9 @@ final class MonitorStoreTests: XCTestCase {
             result.snapshot?.resetCredits = credits
             await fixture.setNetwork(result)
             await store.calibrateQuota()
-            XCTAssertEqual(store.quota.snapshot?.windows, local.windows)
-            XCTAssertEqual(store.quota.snapshot?.source(for: "codex"), .local)
+            XCTAssertEqual(store.quota.snapshot?.windows, verifiedQuota.snapshot?.windows)
+            await store.refreshAll()
+            XCTAssertEqual(store.quota.snapshot, result.snapshot)
             XCTAssertEqual(store.quota.resetCredits, credits)
             now = now.addingTimeInterval(61)
         }
@@ -407,7 +408,7 @@ final class MonitorStoreTests: XCTestCase {
         store.stop()
     }
 
-    func testSaveSettingsClearsDshState() async throws {
+    func testSaveCodexSettingsPreservesDshState() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         let store = MonitorStore(
             readLocal: { _ in TaskReadResult(tasks: [], fetchedAt: .now, warning: nil) },
@@ -417,8 +418,8 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(store.tasks.map(\.id), ["dsh:s1"])
         XCTAssertEqual(store.dshWarning, "dsh broken")
         store.saveSettings(home: folder.home.path, executable: "")
-        XCTAssertTrue(store.tasks.isEmpty)
-        XCTAssertNil(store.dshWarning)
+        XCTAssertEqual(store.tasks.map(\.id), ["dsh:s1"])
+        XCTAssertEqual(store.dshWarning, "dsh broken")
         store.stop()
         await drain()
     }
@@ -428,4 +429,246 @@ private actor Flag {
     private var value = false
     func get() -> Bool { value }
     func set(_ new: Bool) { value = new }
+}
+
+
+@MainActor
+extension MonitorStoreTests {
+    func testOpenAIBaseURLSwitchHidesOfficialQuota() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        let config = folder.home.appendingPathComponent("config.toml")
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        await fixture.setNetwork(verifiedQuota)
+        var now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        await store.refreshAll(); await store.calibrateQuota()
+        XCTAssertEqual(store.menuQuotaPercent, 80)
+        let gateway = "https://gateway.example.invalid/v1"
+        let snapshot = CodexConfigSnapshot(user: .object(["model_provider": .string("openai"), "openai_base_url": .string(gateway)]),
+            version: "fixture", file: config)
+        XCTAssertFalse(snapshot.providerIdentity.isOfficial)
+        try Data("model_provider = \"openai\"\nopenai_base_url = \"https://gateway.example.invalid/v1\"\n".utf8).write(to: config)
+        store.configurationDidChange()
+        XCTAssertFalse(store.showsQuota, "Custom OpenAI routes must hide ChatGPT quota")
+        XCTAssertNil(store.quota.snapshot, "Do not retain official quota for the custom route")
+        now = now.addingTimeInterval(61)
+        await store.calibrateQuota()
+        let counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1, "Custom routes must not request official quota")
+        store.stop()
+    }
+
+    func testProviderRoundTripPreservesServerRetryAfter() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        let config = folder.home.appendingPathComponent("config.toml")
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        let error = try JSONValue.decode(Data(#"{"code":-32000,"data":{"status":429,"retryAfterSeconds":7200}}"#.utf8))
+        await fixture.setNetwork(QuotaRefresh(error: .rateLimited, failureDetails: QuotaFailureDetails(rpcError: error), didRequestQuota: true))
+        let now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        await store.calibrateQuota()
+        let retryAt = try XCTUnwrap(store.nextCalibrationAt)
+        XCTAssertEqual(retryAt, now.addingTimeInterval(7200))
+        try Data("model_provider = \"deepseek\"\n".utf8).write(to: config)
+        store.configurationDidChange()
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        store.configurationDidChange()
+        XCTAssertEqual(store.nextCalibrationAt, retryAt, "Provider switching must retain account-level retry deadline")
+        await fixture.setNetwork(verifiedQuota)
+        await store.calibrateQuota()
+        let counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1, "Provider switching must not bypass Retry-After")
+        store.stop()
+    }
+
+    func testLocalRefreshRemainsIndependentOfPendingQuotaAndCooldown() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        let now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        await store.refreshAll()
+        await fixture.hold()
+        let quota = Task { await store.calibrateQuota() }
+        await fixture.waitUntilHeld()
+        XCTAssertTrue(store.quotaBusy)
+        await store.refreshAll()
+        XCTAssertTrue(store.quotaBusy)
+        XCTAssertFalse(store.tasksBusy)
+        var counts = await fixture.counts()
+        XCTAssertEqual(counts.0, 2)
+        XCTAssertEqual(counts.1, 1)
+        await fixture.release(); await quota.value
+        XCTAssertEqual(store.nextCalibrationAt, now.addingTimeInterval(60))
+        await store.refreshAll()
+        counts = await fixture.counts()
+        XCTAssertEqual(counts.0, 3)
+        XCTAssertEqual(counts.1, 1)
+        store.stop()
+    }
+
+    func testExternalProviderChangeAndTaskRefreshKeepHeaderCurrent() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        let config = folder.home.appendingPathComponent("config.toml")
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        let monitor = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
+        let transport = ModelConfigurationFixture(home: folder.home)
+        let service = CodexModelProfileService(transport: transport, root: folder.home.appendingPathComponent("profiles"),
+            credentials: MemoryCredentialStore(), helperExecutable: URL(fileURLWithPath: "/fixture/Veyra"), capability: { _ in true })
+        let profiles = CodexModelProfilesStore(service: service, configurationChanged: { monitor.configurationDidChange() })
+        await profiles.load(location: monitor.location)
+        profiles.followConfiguration(of: monitor)
+        await monitor.refreshAll()
+        await waitForConfiguration { profiles.snapshot?.configuredProviderID == "openai" && !profiles.busy }
+        XCTAssertEqual(profiles.snapshot?.configuredProviderID, "openai")
+        await transport.change("model_provider", to: .string("deepseek"))
+        try Data("model_provider = \"deepseek\"\n".utf8).write(to: config)
+        await monitor.refreshAll()
+        XCTAssertFalse(monitor.showsQuota)
+        await waitForConfiguration { profiles.snapshot?.configuredProviderID == "deepseek" && !profiles.busy }
+        XCTAssertEqual(profiles.snapshot?.configuredProviderID, monitor.modelConfig?.provider,
+            "Task refresh discovers the new provider, but header must not retain a stale current provider")
+        await transport.change("model_providers.deepseek.name", to: .string("Renamed gateway"))
+        try Data("model_provider = \"deepseek\"\n[model_providers.deepseek]\nname = 'Renamed gateway'\n".utf8).write(to: config, options: .atomic)
+        await monitor.refreshAll()
+        await waitForConfiguration { profiles.defaultProviderIdentity.name == "Renamed gateway" && !profiles.busy }
+        XCTAssertEqual(profiles.defaultProviderIdentity.name, "Renamed gateway",
+            "A provider table change must refresh the header even if its provider ID is unchanged")
+        let gateway = "https://gateway.example.invalid/v1"
+        await transport.change("model_provider", to: .string("openai"))
+        await transport.change("openai_base_url", to: .string(gateway))
+        try Data("model_provider = \"openai\"\nopenai_base_url = 'https://gateway.example.invalid/v1'\n".utf8).write(to: config, options: .atomic)
+        await monitor.refreshAll()
+        await waitForConfiguration { profiles.snapshot?.configuredOpenAIBaseURL == gateway && !profiles.busy }
+        XCTAssertFalse(profiles.defaultProviderIdentity.isOfficial)
+        XCTAssertFalse(monitor.showsQuota)
+        await transport.change("openai_base_url", to: .null)
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config, options: .atomic)
+        await monitor.refreshAll()
+        await waitForConfiguration { profiles.defaultProviderIdentity.isOfficial && !profiles.busy }
+        XCTAssertTrue(profiles.defaultProviderIdentity.isOfficial)
+        XCTAssertTrue(monitor.showsQuota)
+        let reads = await transport.readCount
+        for _ in 0..<3 { await monitor.refreshAll() }
+        await drain()
+        let unchangedReads = await transport.readCount
+        XCTAssertEqual(unchangedReads, reads, "Unchanged local polls must not re-read profile configuration")
+        monitor.stop()
+    }
+
+    func testProviderRoundTripRetainsPendingRetryAfterAndResumesAtDeadline() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
+        let config = folder.home.appendingPathComponent("config.toml")
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        let error = try JSONValue.decode(Data(#"{"code":-32000,"data":{"status":429,"retryAfterSeconds":7200}}"#.utf8))
+        await fixture.setNetwork(QuotaRefresh(error: .rateLimited, failureDetails: QuotaFailureDetails(rpcError: error), didRequestQuota: true))
+        let store = MonitorStore(readLocal: { _ in
+            TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
+        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+            now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
+        await fixture.hold()
+        let first = Task { await store.calibrateQuota() }
+        await fixture.waitUntilHeld()
+        try Data("model_provider = \"deepseek\"\n".utf8).write(to: config)
+        store.configurationDidChange()
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        store.configurationDidChange()
+        let rejoined = Task { await store.calibrateQuota() }
+        store.start(); await store.refreshAll(); await drain()
+        var counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1, "Returning to OpenAI must join the pending account request")
+        await fixture.setNetwork(verifiedQuota)
+        await fixture.release(); await first.value; await rejoined.value; await drain()
+        XCTAssertNil(store.quota.snapshot, "A response from before the provider switch must not publish data")
+        XCTAssertFalse(store.quotaBusy)
+        XCTAssertEqual(store.nextCalibrationAt, Date(timeIntervalSince1970: 7500))
+        clock.advance(7199); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        clock.advance(1); await drain()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        XCTAssertEqual(store.menuQuotaPercent, 80)
+        store.stop(); clock.finish(); await drain()
+    }
+
+    func testOpenAIBaseURLChangeDiscardsPendingQuotaAndRemovalRestoresOfficialRoute() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        let config = folder.home.appendingPathComponent("config.toml")
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        await fixture.setNetwork(verifiedQuota)
+        var now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        await fixture.hold()
+        let pending = Task { await store.calibrateQuota() }
+        await fixture.waitUntilHeld()
+        try Data("model_provider = \"openai\"\nopenai_base_url = 'https://gateway.example.invalid/v1'\n".utf8).write(to: config)
+        store.configurationDidChange()
+        await fixture.release(); await pending.value
+        XCTAssertFalse(store.showsQuota)
+        XCTAssertNil(store.quota.snapshot)
+        XCTAssertNil(store.quota.resetCredits)
+        now = now.addingTimeInterval(61)
+        await store.calibrateQuota()
+        var counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        store.configurationDidChange()
+        await store.calibrateQuota()
+        counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
+        XCTAssertTrue(store.showsQuota)
+        XCTAssertEqual(store.menuQuotaPercent, 80)
+        store.stop()
+    }
+
+    private func waitForConfiguration(_ condition: () -> Bool) async {
+        for _ in 0..<200 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail("Timed out waiting for the provider snapshot")
+    }
+}
+
+
+@MainActor
+extension MonitorStoreTests {
+    func testHeaderRecoversWithoutFileEditOrReopeningAfterTransientReadFailure() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
+        let config = folder.home.appendingPathComponent("config.toml")
+        try Data("model_provider = \"openai\"\n".utf8).write(to: config)
+        let monitor = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
+            fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
+        let transport = ModelConfigurationFixture(home: folder.home)
+        let service = CodexModelProfileService(transport: transport, root: folder.home.appendingPathComponent("profiles"),
+            credentials: MemoryCredentialStore(), helperExecutable: URL(fileURLWithPath: "/fixture/Veyra"), capability: { _ in true })
+        let profiles = CodexModelProfilesStore(service: service, configurationClock: clock.clock,
+            configurationChanged: { monitor.configurationDidChange() })
+        await profiles.load(location: monitor.location)
+        profiles.followConfiguration(of: monitor)
+        profiles.error = "Existing explicit failure"
+        await transport.change("model_provider", to: .string("deepseek"))
+        await transport.configureReadFailures(1)
+        try Data("model_provider = \"deepseek\"\n".utf8).write(to: config)
+        await monitor.refreshAll()
+        await waitForConfiguration { profiles.configurationReloadError != nil && !profiles.busy }
+        await drain()
+        XCTAssertFalse(monitor.showsQuota)
+        XCTAssertEqual(profiles.error, "Existing explicit failure")
+        let failedReadCount = await transport.readCount
+        for _ in 0..<5 { await monitor.refreshAll() }
+        clock.advance(4); await drain()
+        let earlyReads = await transport.readCount; XCTAssertEqual(earlyReads, failedReadCount)
+        clock.advance(1)
+        await waitForConfiguration { profiles.snapshot?.configuredProviderID == "deepseek" && !profiles.busy }
+        XCTAssertNil(profiles.configurationReloadError)
+        XCTAssertEqual(profiles.snapshot?.configuredProviderID, monitor.modelConfig?.provider)
+        XCTAssertEqual(profiles.error, "Existing explicit failure")
+        let recoveredReads = await transport.readCount
+        for _ in 0..<3 { await monitor.refreshAll() }
+        await drain()
+        let finalReads = await transport.readCount; XCTAssertEqual(finalReads, recoveredReads)
+        let writes = await transport.writeCount; XCTAssertEqual(writes, 0)
+        monitor.stop(); clock.finish(); await drain()
+    }
 }

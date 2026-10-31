@@ -59,7 +59,7 @@ final class LocalTaskCacheTests: XCTestCase {
         XCTAssertEqual(first.tasks[0].title, "ios phone auth r2 review")
         XCTAssertEqual(first.tasks[0].agentRole, "reviewer")
         XCTAssertEqual(first.tasks[0].progress?.text, "正在检查认证边界")
-        XCTAssertEqual(first.ancestors, [TaskReference(id: "parent", title: "归档父任务", parentID: nil)])
+        XCTAssertEqual(first.ancestors, [TaskReference(id: "parent", title: "归档父任务", parentID: nil, source: .cli)])
         let cached = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(cached.metrics.metadataQueries, 0)
         XCTAssertEqual(cached.metrics.rolloutBytes, 0)
@@ -137,12 +137,12 @@ final class LocalTaskCacheTests: XCTestCase {
         try fixture.execute("UPDATE threads SET archived=1")
         let archived = try await reader.fetch(home: fixture.home)
         XCTAssertTrue(archived.tasks.isEmpty)
-        XCTAssertNotNil(archived.localQuota)
+
         try fixture.execute("DELETE FROM threads")
         let deleted = try await reader.fetch(home: fixture.home)
-        XCTAssertNil(deleted.localQuota)
+        XCTAssertTrue(deleted.tasks.isEmpty)
     }
-    func testQuotaDiscoveryIncludesArchivedExcludesInternalAndIsBounded() async throws {
+    func testTaskPollingNeverBackfillsArchivedLogs() async throws {
         let fixture = try SQLiteFixture(); try fixture.threads()
         for i in 0..<24 {
             let path = try fixture.log("log-\(i)")
@@ -155,15 +155,17 @@ final class LocalTaskCacheTests: XCTestCase {
         let reader = LocalTaskReader { _ in ProcessEvidence() }
         let first = try await reader.fetch(home: fixture.home)
         XCTAssertTrue(first.tasks.isEmpty)
-        XCTAssertNil(first.localQuota)
-        XCTAssertEqual(first.metrics.rolloutBytes, 20 * 256 * 1024)
+
+        XCTAssertEqual(first.metrics.rolloutBytes, 0)
+        XCTAssertEqual(first.metrics.rolloutOpens, 0)
         let next = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(next.metrics.rolloutBytes, 0)
         XCTAssertEqual(next.metrics.rolloutOpens, 0)
         let fresh = try fixture.log("fresh")
         try fixture.insert("fresh", path: fresh, updated: 2000, archived: true)
         let refreshed = try await reader.fetch(home: fixture.home)
-        XCTAssertEqual(refreshed.localQuota?.menuWindow?.remainingPercent, 80)
+
+        XCTAssertEqual(refreshed.metrics.rolloutOpens, 0)
     }
     func testLegacyProcessPathsResolveSymlinksAndUnreliableEvidenceStaysUnknown() throws {
         let fixture = try SQLiteFixture(), path = try fixture.log("real")
@@ -213,7 +215,7 @@ final class LocalTaskCacheTests: XCTestCase {
         return path
     }
 
-    func testHistoricalUnfinishedTasksExpireOnCacheHitsAndKeepQuotaDiscovery() async throws {
+    func testHistoricalUnfinishedTasksExpireOnCacheHits() async throws {
         let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
         _ = try unfinishedTask("started-only", fixture: fixture)
         _ = try unfinishedTask("resumed", fixture: fixture, resumed: true)
@@ -235,7 +237,6 @@ final class LocalTaskCacheTests: XCTestCase {
             XCTAssertEqual(expired.metrics.historyQueries, 0)
             XCTAssertEqual(expired.metrics.rolloutBytes, 0)
             XCTAssertEqual(expired.metrics.rolloutOpens, 0)
-            XCTAssertEqual(expired.localQuota?.menuWindow?.remainingPercent, 80)
         }
     }
 
@@ -258,7 +259,6 @@ final class LocalTaskCacheTests: XCTestCase {
         XCTAssertEqual(Set(migrated.tasks.map(\.id)), ["fresh-start", "fresh-usage"])
         XCTAssertEqual(migrated.metrics.historyQueries, 1)
         XCTAssertGreaterThan(migrated.metrics.rolloutBytes, 0)
-        XCTAssertNotNil(migrated.localQuota)
     }
 
     func testUnreadableRolloutUsesStoredActivityAndProcessFailuresKeepWarning() async throws {
@@ -297,11 +297,11 @@ final class LocalTaskCacheTests: XCTestCase {
         return path
     }
 
-    func testExpiredCompressedRolloutSkipsTaskAndQuotaWarningsOnCacheHits() async throws {
+    func testExpiredCompressedRolloutSkipsWarningsOnCacheHits() async throws {
         let fixture = try SQLiteFixture(); try fixture.threads(); try unfinishedHistory(fixture)
         let path = try compressedUnfinishedTask("compressed", fixture: fixture)
-        let quota = try fixture.log("quota")
-        try fixture.insert("quota", path: quota, updated: 1788397201, archived: true)
+        let archived = try fixture.log("archived")
+        try fixture.insert("archived", path: archived, updated: 1788397201, archived: true)
         let lastActivity = Date(timeIntervalSince1970: 1788397200)
         let clock = TaskReaderClock(lastActivity.addingTimeInterval(86_400))
         let reader = LocalTaskReader(now: { clock.get() }) { _ in ProcessEvidence() }
@@ -310,8 +310,7 @@ final class LocalTaskCacheTests: XCTestCase {
             let expired = try await reader.fetch(home: fixture.home)
             XCTAssertTrue(expired.tasks.isEmpty)
             XCTAssertNil(expired.warning)
-            XCTAssertNil(expired.quotaWarning)
-            XCTAssertEqual(expired.localQuota?.menuWindow?.remainingPercent, 80)
+
             XCTAssertFalse(FileManager.default.fileExists(atPath: path.path))
             XCTAssertEqual(try Data(contentsOf: path.appendingPathExtension("zst")).count, 9)
             if age > 86_400 {
@@ -323,7 +322,6 @@ final class LocalTaskCacheTests: XCTestCase {
         try FileManager.default.removeItem(at: path.appendingPathExtension("zst"))
         let missing = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(missing.warning, .sessionUnreadable)
-        XCTAssertNotNil(missing.quotaWarning)
     }
 
     func testCompressedRolloutKeepsRecentAndLiveTaskWarnings() async throws {
@@ -347,7 +345,6 @@ final class LocalTaskCacheTests: XCTestCase {
         let unverified = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(unverified.warning, .processUnverified)
         XCTAssertEqual(unverified.tasks.first?.activity, .unknown)
-        XCTAssertNotNil(unverified.quotaWarning)
     }
 
     func testCompressedRolloutUsesLatestRecordedActivityRatherThanFileDate() async throws {
@@ -384,7 +381,6 @@ final class LocalTaskCacheTests: XCTestCase {
         let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788570001) }) { _ in ProcessEvidence() }
         let unreadable = try await reader.fetch(home: fixture.home)
         XCTAssertEqual(unreadable.warning, .sessionUnreadable)
-        XCTAssertNotNil(unreadable.quotaWarning)
 
         // A directory named *.zst is not a compressed replacement.
         try FileManager.default.removeItem(at: path)

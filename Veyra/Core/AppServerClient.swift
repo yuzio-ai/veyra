@@ -20,7 +20,13 @@ actor AppServerClient: CodexModelConfigurationTransport {
     private var lastAccount: AccountSnapshot?
     private let requestTimeout: Duration
 
-    init(requestTimeout: Duration = .seconds(25)) { self.requestTimeout = requestTimeout }
+    private let clientVersion: String
+
+    init(requestTimeout: Duration = .seconds(25),
+         clientVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown") {
+        self.requestTimeout = requestTimeout
+        self.clientVersion = clientVersion
+    }
 
     func readConfiguration(location: CodexLocation) async throws -> CodexConfigSnapshot {
         let response = try await configurationRequest("config/read", params: .object([
@@ -141,7 +147,7 @@ actor AppServerClient: CodexModelConfigurationTransport {
         process = child
         do { try child.run() } catch { shutdown(); throw QuotaFailure.launchFailed }
         _ = try await request("initialize", params: .object([
-            "clientInfo": .object(["name": .string("veyra"), "title": .string("Veyra"), "version": .string("1.0.0")]),
+            "clientInfo": .object(["name": .string("veyra"), "title": .string("Veyra"), "version": .string(clientVersion)]),
             "capabilities": .object(["experimentalApi": .bool(false)])
         ]))
         try send(.object(["method": .string("initialized")]))

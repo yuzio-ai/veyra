@@ -54,6 +54,7 @@ final class DshTaskReaderTests: XCTestCase {
         XCTAssertEqual(task.title, "Live task")
         XCTAssertEqual(task.activity, .running)
         XCTAssertEqual(task.backend, .dsh)
+        XCTAssertEqual(task.workingDirectory, "/tmp/work")
         XCTAssertEqual(task.sourceLabel, "dsh")
         XCTAssertEqual(task.model, "kimi-k3")
         XCTAssertEqual(task.startedAt, Date(timeIntervalSince1970: recentMs / 1000))

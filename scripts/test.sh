@@ -36,6 +36,7 @@ rm -f "$derived_probe"
 xcodebuild -project Veyra.xcodeproj -scheme Veyra -configuration Debug -derivedDataPath "$derived_data" -destination 'platform=macOS' "${build_arguments[@]}" test
 python3 scripts/test_diagnostics.py --app "$derived_data/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra"
 python3 -I -B scripts/test_local_verification.py
+python3 -I -B scripts/test_measure_energy.py
 # Read-only invariant check for project configuration and packaging, which has
 # no XCTest coverage of its own.
 verify_arguments=(--app "$derived_data/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra")

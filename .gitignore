@@ -73,8 +73,6 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-.cohestra
-
 # Local agent design artifacts
 /.yuzio/
 

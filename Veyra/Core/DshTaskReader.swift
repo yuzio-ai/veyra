@@ -6,9 +6,10 @@ struct DshTaskRead: Sendable {
     let warning: String?
     let parsedFiles: Int
     let skippedFiles: Int
+    var state: TaskSourceReadState = .available
 
     static let empty = DshTaskRead(tasks: [], fetchedAt: Date(timeIntervalSince1970: 0),
-                                   warning: nil, parsedFiles: 0, skippedFiles: 0)
+                                   warning: nil, parsedFiles: 0, skippedFiles: 0, state: .notFound)
 }
 
 /// Reads dsh sessions from `storages/session_projcache/sessions/*.json` — plain
@@ -36,11 +37,19 @@ actor DshTaskReader {
         let directory = home.appendingPathComponent("storages/session_projcache/sessions", isDirectory: true)
         // A missing dsh installation is not a warning condition: stay silent.
         // Check before collecting evidence so non-dsh users never spawn lsof (F1).
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]) else {
+        let urls: [URL]
+        do {
+            urls = try FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+                options: [.skipsHiddenFiles])
+        } catch {
             cache.keepOnly(paths: [])
-            return DshTaskRead(tasks: [], fetchedAt: checkedAt, warning: nil, parsedFiles: 0, skippedFiles: 0)
+            let failure = error as NSError
+            let missing = failure.domain == NSCocoaErrorDomain
+                && [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(failure.code)
+            return DshTaskRead(tasks: [], fetchedAt: checkedAt,
+                              warning: missing ? nil : L10n.text("Unable to read dsh session records. Check its data directory."),
+                              parsedFiles: 0, skippedFiles: 0, state: missing ? .notFound : .failed)
         }
         let evidence = await collectEvidence(home)
         var tasks: [TaskSnapshot] = [], parsed = 0, skipped = 0
@@ -89,7 +98,7 @@ actor DshTaskReader {
                                 // the record carries no separate turn-start timestamp.
                                 startedAt: metadata.turnOpen == true ? metadata.lastPromptAt : nil,
                                 updatedAt: updatedAt, tokens: metadata.tokens, activity: activity,
-                                backend: .dsh)
+                                backend: .dsh, workingDirectory: metadata.workingDirectory)
         }
     }
 }

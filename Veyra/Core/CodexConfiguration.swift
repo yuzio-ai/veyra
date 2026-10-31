@@ -32,6 +32,12 @@ enum CodexPathCommitResult: Equatable {
 }
 
 enum CodexConfiguration {
+    static func servicesAvailable(at location: CodexLocation) -> Bool {
+        guard let executable = location.executable else { return false }
+        return validateLocation(location.home, field: .home) == nil
+            && validateLocation(executable, field: .executable) == nil
+    }
+
     static func normalized(_ path: String) -> String {
         path.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -51,7 +57,9 @@ enum CodexConfiguration {
         await Task.detached {
             let location = CodexLocation.resolve(homePath: home, executablePath: executable)
             let state: CodexConfigurationState
-            if validateLocation(location.home, field: .home) != nil {
+            if home.isEmpty, executable.isEmpty, location.executable == nil {
+                state = .notFound
+            } else if validateLocation(location.home, field: .home) != nil {
                 state = .invalid(.home)
             } else if let executable = location.executable {
                 state = validateLocation(executable, field: .executable) == nil ? .valid : .invalid(.executable)

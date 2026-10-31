@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 enum ModelProfilePreviews {
     static func render(to directory: URL) async throws -> [[String: Any]] {
+        try await ModelProfileWindowChecks.run(to: directory)
         var results: [[String: Any]] = []
         let styles: [(String, NSAppearance.Name, Bool)] = [
             ("light", .aqua, false), ("dark", .darkAqua, false),
@@ -12,37 +13,40 @@ enum ModelProfilePreviews {
             ("dark-increased", .accessibilityHighContrastDarkAqua, false),
             ("light-opaque", .aqua, true), ("dark-opaque", .darkAqua, true)
         ]
-        for scenario in ["normal", "empty", "invalid", "error", "long", "success", "undo", "preset-empty", "preset-configured", "preset-current", "preset-error", "preset-unsupported", "preset-busy", "preset-dirty", "preset-loading", "preset-no-models", "preset-cached", "preset-auth", "preset-removed", "preset-capabilities-missing", "preset-repair", "workspace-create", "workspace-local", "workspace-tested", "workspace-protocol", "workspace-small", "workspace-expanded"] {
+        for scenario in ["general", "normal", "empty", "invalid", "error", "long", "success", "preset-empty", "preset-configured", "preset-current", "preset-error", "preset-unsupported", "preset-busy", "preset-dirty", "preset-loading", "preset-no-models", "preset-cached", "preset-auth", "preset-removed", "preset-capabilities-missing", "preset-repair", "workspace-create", "workspace-local", "workspace-tested", "workspace-protocol", "workspace-small", "workspace-expanded"] {
             for (style, appearance, opaque) in styles {
                 let profiles = CodexModelProfilesStore.preview(scenario)
-                let home = URL(fileURLWithPath: "/tmp/veyra-model-profile-preview")
-                let monitor = MonitorStore(inspectConfiguration: { _, _ in
-                    CodexConfigurationReport(location: CodexLocation(home: home, executable: nil), state: .notFound)
-                })
-                monitor.isPreview = true
+                if scenario == "general" { profiles.tab = .general }
+                let monitor = PreviewSupport.settingsStore(.automatic)
                 let width: CGFloat = scenario == "workspace-small" ? 900 : 1100
-                let height: CGFloat = scenario == "workspace-small" ? 630 : 780
+                let height: CGFloat = scenario == "workspace-small" ? 600 : 780
                 let view = MonitorSettings(store: monitor, updates: .preview(.idle), profiles: profiles)
-                    .frame(width: width, height: height)
                     .environment(\.monitorOpaquePreview, opaque)
                     .background(Color(nsColor: .windowBackgroundColor))
                 let host = NSHostingView(rootView: view)
-                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-                                      styleMask: [.borderless], backing: .buffered, defer: false)
-                window.isReleasedWhenClosed = false
+                let window = SettingsWindow.make(hosting: host, contentSize: NSSize(width: width, height: height))
                 window.appearance = NSAppearance(named: appearance)
-                window.contentView = host
-                window.orderFront(nil)
+                let toolbar = SettingsToolbarController(profiles: profiles, window: window)
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeFirstResponder(nil)
                 try await Task.sleep(for: .milliseconds(100))
                 host.layoutSubtreeIfNeeded()
                 let name = "models-\(scenario)-\(style)"
-                try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent(name + ".png"))
-                results.append(["name": name, "width": host.bounds.width, "height": host.bounds.height,
-                                "evidence": "layout-preview", "reduceTransparency": opaque])
+                // Include the native titlebar and toolbar, which a content-only bitmap omits.
+                guard let frame = host.superview else {
+                    throw NSError(domain: "SettingsToolbarPreview", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "Native window frame is missing"])
+                }
+                frame.layoutSubtreeIfNeeded()
+                try PreviewSupport.saveBitmap(frame, to: directory.appendingPathComponent(name + ".png"))
+                results.append(["name": name, "width": frame.bounds.width, "height": frame.bounds.height,
+                                "evidence": "native-window-view-bitmap", "reduceTransparency": opaque])
                 window.close()
+                withExtendedLifetime(toolbar) {}
             }
         }
-        for scenario in ["preset-empty", "preset-configured", "preset-current", "preset-error", "preset-repair", "normal", "empty", "undo", "provider-custom", "provider-long", "provider-busy", "provider-unavailable", "error", "success", "provider-overridden"] {
+        for scenario in ["preset-empty", "preset-configured", "preset-current", "preset-error", "preset-repair", "normal", "empty", "provider-custom", "provider-long", "provider-busy", "provider-unavailable", "error", "success", "provider-overridden"] {
             for (style, appearance, _) in styles {
                 let profiles = CodexModelProfilesStore.preview(scenario)
                 let monitor = MonitorStore()
@@ -77,7 +81,6 @@ enum ModelProfilePreviews {
                 window.close()
             }
         }
-        try await ModelProfileWindowChecks.run(to: directory)
         return results
     }
 }

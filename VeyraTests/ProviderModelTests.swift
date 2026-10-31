@@ -291,48 +291,132 @@ final class ProviderDiscoveryStoreTests: XCTestCase {
             helperExecutable: URL(fileURLWithPath: "/Applications/Veyra.app/Contents/MacOS/Veyra"), capability: { _ in true }, modelClient: client)
         return (CodexLocation(home: home, executable: nil), transport, client, CodexModelProfilesStore(service: service))
     }
-    func testFirstSaveFetchesWithoutSelectingAndModelOnlySaveDoesNotFetch() async throws {
+    func testWorkspaceSaveDoesNotFetchAndExplicitRefreshDoesNotSelectModel() async throws {
         let (location, rpc, client, store) = try fixture()
-        await store.load(location: location)
-        let initialCalls = await client.calls; XCTAssertEqual(initialCalls, 0)
+        await store.load(location: location); store.activateWorkspace()
         store.apiKeyInput = "fixture-store-key"
-        let saved = await store.saveProviderDraft(); XCTAssertTrue(saved)
-        XCTAssertEqual(store.providerDraft?.model, ""); XCTAssertFalse(store.canEnableProviderDraft)
-        XCTAssertEqual(store.modelDiscoveryState, .ready)
-        let firstCalls = await client.calls; XCTAssertEqual(firstCalls, 1)
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+        XCTAssertEqual(store.providerDraft?.model, ""); XCTAssertFalse(store.canApplyWorkspace)
+        let savedCalls = await client.calls; XCTAssertEqual(savedCalls, 0)
+        await store.refreshWorkspaceModels()
+        XCTAssertEqual(store.workspaceModels.map(\.id), ["fixture-model"])
+        XCTAssertEqual(store.providerDraft?.model, "")
         store.providerDraft?.model = "fixture-model"
-        let again = await store.saveProviderDraft(); XCTAssertTrue(again)
-        let secondCalls = await client.calls; XCTAssertEqual(secondCalls, 1)
-        XCTAssertTrue(store.canEnableProviderDraft)
+        let again = await store.saveWorkspace(); XCTAssertTrue(again)
+        let calls = await client.calls; XCTAssertEqual(calls, 1)
+        XCTAssertTrue(store.canApplyWorkspace)
         let writes = await rpc.writeCount; XCTAssertEqual(writes, 0)
     }
     func testFailedKeyReplacementPreservesSavedKeyButDoesNotApply() async throws {
         let (location, rpc, client, store) = try fixture()
-        await store.load(location: location); store.apiKeyInput = "fixture-key"
-        _ = await store.saveProviderDraft(); store.providerDraft?.model = "fixture-model"
-        await store.saveAndApplyProvider()
+        await store.load(location: location); store.activateWorkspace()
+        store.apiKeyInput = "fixture-key"
+        _ = await store.saveWorkspace(); await store.refreshWorkspaceModels()
+        store.providerDraft?.model = "fixture-model"
+        await store.requestWorkspaceApply()
         XCTAssertEqual(store.currentPresetID, "deepseek")
-        let old = store.library.providers[0].credential
+        let old = store.savedConnection?.credential
         await client.configure(failure: .authentication)
         store.apiKeyInput = "replacement-fixture-key"
-        await store.saveAndApplyProvider()
-        XCTAssertTrue(store.apiKeyInput.isEmpty); XCTAssertNotEqual(store.library.providers[0].credential, old)
-        XCTAssertEqual(store.modelDiscoveryState, .failed); XCTAssertFalse(store.canEnableProviderDraft)
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+        XCTAssertTrue(store.apiKeyInput.isEmpty); XCTAssertNotEqual(store.savedConnection?.credential, old)
+        XCTAssertTrue(store.workspaceModels.isEmpty)
+        // Apply may fetch a list for the new credential, but cannot reuse the old Key's cache.
+        await store.requestWorkspaceApply()
+        let calls = await client.calls; XCTAssertEqual(calls, 2)
+        XCTAssertEqual(store.providerModelCaches["deepseek"]?.failure, .authentication)
+        XCTAssertFalse(store.canApplyWorkspace)
         let writes = await rpc.writeCount; XCTAssertEqual(writes, 1)
     }
     func testCancelAndSwitchRejectLateResponse() async throws {
         let (location, _, client, store) = try fixture()
-        await store.load(location: location); store.apiKeyInput = "fixture-key"
-        _ = await store.saveProviderDraft()
+        await store.load(location: location); store.activateWorkspace()
+        store.apiKeyInput = "fixture-key"
+        _ = await store.saveWorkspace(); await store.refreshWorkspaceModels()
         await client.configure(suspend: true)
-        let task = Task { await store.refreshModels() }
+        let task = Task { await store.refreshWorkspaceModels() }
         while await client.calls < 2 { await Task.yield() }
-        store.selectPreset("kimi")
+        store.chooseWorkspace(.connection("kimi"))
         await client.resume([DiscoveredModel(id: "late-model")])
-        let refreshed = await task.value; XCTAssertFalse(refreshed)
-        XCTAssertEqual(store.selectedPresetID, "kimi"); XCTAssertTrue(store.discoveredModels.isEmpty)
+        let refreshed = await task.value; XCTAssertNil(refreshed)
+        XCTAssertEqual(store.workspaceSelection, .connection("kimi")); XCTAssertTrue(store.workspaceModels.isEmpty)
         XCTAssertEqual(store.providerModelCaches["deepseek"]?.models.map(\.id), ["fixture-model"])
     }
+
+    private func pendingApplyFixture() async throws -> (ModelConfigurationFixture, ProviderModelFixture, CodexModelProfilesStore, String, Task<Void, Never>) {
+        let (location, rpc, client, store) = try fixture()
+        await store.load(location: location); store.activateWorkspace()
+        store.chooseWorkspace(.create)
+        store.providerDraft?.name = "Unverified local provider"
+        store.providerDraft?.baseURL = "http://localhost:11434/v1"
+        store.providerDraft?.model = "custom-model"
+        store.providerDraft?.authentication = ModelProfileAuthentication.none
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+        let customID = try XCTUnwrap(store.providerDraft?.id)
+        store.chooseWorkspace(.connection("deepseek"))
+        store.apiKeyInput = "fixture-key"; store.providerDraft?.model = "fixture-model"
+        XCTAssertTrue(store.canApplyWorkspace)
+        await client.configure(suspend: true)
+        let operation = Task { await store.requestWorkspaceApply() }
+        for _ in 0..<1000 {
+            if await client.calls > 0 { return (rpc, client, store, customID, operation) }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        operation.cancel(); await client.resume([])
+        XCTFail("The apply operation never requested its model list")
+        throw CancellationError()
+    }
+
+    func testPendingApplyStopsWhenSelectionChangesEvenIfItChangesBack() async throws {
+        for returnToOriginal in [false, true] {
+            let (rpc, client, store, customID, operation) = try await pendingApplyFixture()
+            store.chooseWorkspace(.connection(customID))
+            XCTAssertTrue(store.canApplyWorkspace)
+            if returnToOriginal { store.chooseWorkspace(.connection("deepseek")) }
+            await client.resume([DiscoveredModel(id: "fixture-model")]); await operation.value
+            let writes = await rpc.writeCount; XCTAssertEqual(writes, 0)
+            XCTAssertNil(store.error); XCTAssertNil(store.message)
+            XCTAssertFalse(store.showUnverifiedPrompt)
+            XCTAssertEqual(store.workspaceSelection, .connection(returnToOriginal ? "deepseek" : customID))
+            XCTAssertEqual(store.snapshot?.user["model"].string, "original")
+        }
+    }
+
+    func testPendingApplyStopsAfterExplicitCancellationOrTaskCancellation() async throws {
+        for cancelTask in [false, true] {
+            let (rpc, client, store, _, operation) = try await pendingApplyFixture()
+            let savedMessage = store.message
+            if cancelTask { operation.cancel() } else { store.cancelModelDiscovery() }
+            await client.resume([DiscoveredModel(id: "fixture-model")]); await operation.value
+            let writes = await rpc.writeCount; XCTAssertEqual(writes, 0)
+            XCTAssertNil(store.error); XCTAssertEqual(store.message, savedMessage)
+            XCTAssertFalse(store.showUnverifiedPrompt)
+            XCTAssertEqual(store.snapshot?.user["model"].string, "original")
+        }
+    }
+
+    func testPendingApplyDoesNotApplyAfterDraftChanges() async throws {
+        let (rpc, client, store, _, operation) = try await pendingApplyFixture()
+        let savedMessage = store.message
+        store.providerDraft?.model = "edited-model"
+        await client.resume([DiscoveredModel(id: "fixture-model"), DiscoveredModel(id: "edited-model")])
+        await operation.value
+        let writes = await rpc.writeCount; XCTAssertEqual(writes, 0)
+        XCTAssertTrue(store.hasUnsavedChanges)
+        XCTAssertEqual(store.providerDraft?.model, "edited-model")
+        XCTAssertEqual(store.savedConnection?.model, "fixture-model")
+        XCTAssertNil(store.error); XCTAssertEqual(store.message, savedMessage)
+    }
+
+    func testPendingApplyCompletesForUnchangedTarget() async throws {
+        let (rpc, client, store, _, operation) = try await pendingApplyFixture()
+        await client.resume([DiscoveredModel(id: "fixture-model")]); await operation.value
+        let writes = await rpc.writeCount; XCTAssertEqual(writes, 1)
+        XCTAssertEqual(store.currentPresetID, "deepseek")
+        XCTAssertEqual(store.snapshot?.user["model"].string, "fixture-model")
+        XCTAssertNil(store.error); XCTAssertNotNil(store.message)
+    }
+
 }
 
 
@@ -382,5 +466,42 @@ final class ProviderConnectivityHTTPTests: XCTestCase {
         do { try await client.test(provider: provider(), key: "fixture-secret"); XCTFail() }
         catch { XCTAssertEqual(error as? ProviderConnectionFailure, .inconclusive) }
         XCTAssertEqual(ProviderHTTPProtocol.state.recorded().count, 1)
+    }
+}
+
+
+@MainActor
+extension ProviderDiscoveryStoreTests {
+    func testBackgroundHeaderReloadWaitsForModelDiscovery() async throws {
+        let (location, rpc, client, store) = try fixture()
+        await store.load(location: location); store.activateWorkspace()
+        store.apiKeyInput = "fixture-header-discovery-key"
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+        await client.configure(suspend: true)
+        let refresh = Task { await store.refreshWorkspaceModels() }
+        for _ in 0..<200 {
+            if await client.calls == 1 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNotNil(store.fetchingModelsFor)
+        let reads = await rpc.readCount
+        await rpc.change("model_provider", to: .string("external-provider"))
+        store.requestConfigurationReload(location: location)
+        for _ in 0..<40 { await Task.yield() }
+        let duringReads = await rpc.readCount
+        XCTAssertEqual(duringReads, reads, "A header refresh must wait for the explicit model request")
+        XCTAssertNotNil(store.fetchingModelsFor)
+        await client.resume([DiscoveredModel(id: "fixture-model")])
+        let accepted = await refresh.value
+        XCTAssertNotNil(accepted)
+        for _ in 0..<200 {
+            if store.snapshot?.configuredProviderID == "external-provider", !store.busy { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(store.snapshot?.configuredProviderID, "external-provider")
+        XCTAssertNil(store.fetchingModelsFor)
+        XCTAssertEqual(store.workspaceModels.map(\.id), ["fixture-model"])
+        let calls = await client.calls; XCTAssertEqual(calls, 1)
+        let writes = await rpc.writeCount; XCTAssertEqual(writes, 0)
     }
 }

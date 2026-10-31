@@ -1,5 +1,13 @@
 import Foundation
 
+/// Installation absence is normal; failed reads belong to the affected source only.
+enum TaskSourceReadState: Sendable, Equatable {
+    case detecting, notFound, available, failed
+}
+
+enum LocalTaskReadFailure: Error { case databaseMissing, homeMissing }
+
+
 struct AccountSnapshot: Equatable, Sendable {
     let identity: String
     let accountID: String?
@@ -68,136 +76,16 @@ struct QuotaWindow: Identifiable, Equatable, Sendable {
         default: isPrimary ? L10n.text("Primary quota") : L10n.text("Secondary quota")
         }
     }
-
-    func rebucketed(to bucketID: String, name: String) -> QuotaWindow {
-        QuotaWindow(id: "\(bucketID):\(isPrimary ? "primary" : "secondary")", bucketID: bucketID,
-                    bucketName: name, isPrimary: isPrimary, usedPercent: usedPercent,
-                    durationMinutes: durationMinutes, resetsAt: resetsAt)
-    }
 }
-
-enum QuotaSource: String, Sendable { case local, network }
 
 struct QuotaSnapshot: Equatable, Sendable {
     let windows: [QuotaWindow]
     let fetchedAt: Date
     let accountID: String?
-    var source: QuotaSource = .network
-    var bucketDates: [String: Date] = [:]
-    var bucketSources: [String: QuotaSource] = [:]
-    /// Local snapshots only: session model that produced each bucket, used to
-    /// match buckets against online limit names during the merge.
-    var bucketModels: [String: String] = [:]
-    /// Local snapshots only: reported limit name per bucket, used to recognize a
-    /// generic account-limit record that belongs to no model family.
-    var bucketLimitNames: [String: String] = [:]
     var resetCredits: ResetCreditsSnapshot?
-    func recordedAt(for bucketID: String) -> Date { bucketDates[bucketID] ?? fetchedAt }
-    func source(for bucketID: String) -> QuotaSource { bucketSources[bucketID] ?? source }
     var menuWindow: QuotaWindow? {
         windows.first { $0.bucketID == "codex" && $0.isPrimary }
             ?? windows.first { $0.bucketID == "codex" } ?? windows.first
-    }
-
-    /// Local events describe complete individual buckets, not the whole account.
-    /// Keep untouched online buckets and their provenance until the next sync.
-    func updatingBuckets(from local: QuotaSnapshot) -> QuotaSnapshot {
-        let localIDs = Set(local.windows.map(\.bucketID)).union(local.bucketDates.keys)
-        // token_count events report the limit governing the request under a
-        // generic limit_id, so re-target each local bucket to the online bucket
-        // matching its session model; the newest record wins target collisions.
-        // A record that fits no online bucket is dropped rather than relabeled,
-        // so a model card and the account card never trade their windows.
-        var retargeted: [String: (date: Date, sourceID: String, windows: [QuotaWindow])] = [:]
-        for id in localIDs.sorted() {
-            let recordedWindows = local.windows.filter { $0.bucketID == id }
-            guard let target = bucketTargeting(localID: id, model: local.bucketModels[id],
-                                               reportedLimitName: local.bucketLimitNames[id],
-                                               windows: recordedWindows) else { continue }
-            let date = local.recordedAt(for: id)
-            guard retargeted[target].map({ date > $0.date }) ?? true else { continue }
-            retargeted[target] = (date, id, recordedWindows)
-        }
-        let newerIDs = Set(retargeted.keys.filter { retargeted[$0]!.date > recordedAt(for: $0) })
-        guard !newerIDs.isEmpty else { return self }
-        let ids = Set(windows.map(\.bucketID)).union(newerIDs).sorted {
-            if ($0 == "codex") != ($1 == "codex") { return $0 == "codex" }
-            return $0 < $1
-        }
-        var dates: [String: Date] = [:]
-        var sources: [String: QuotaSource] = [:]
-        let merged = ids.flatMap { id -> [QuotaWindow] in
-            if let replacement = retargeted[id], newerIDs.contains(id) {
-                dates[id] = replacement.date
-                sources[id] = local.source(for: replacement.sourceID)
-                guard replacement.sourceID != id else { return replacement.windows }
-                let name = bucketName(for: id) ?? replacement.windows.first?.bucketName ?? id
-                return replacement.windows.map { $0.rebucketed(to: id, name: name) }
-            }
-            dates[id] = recordedAt(for: id)
-            sources[id] = source(for: id)
-            return windows.filter { $0.bucketID == id }
-        }
-        var result = QuotaSnapshot(windows: merged, fetchedAt: dates.values.max() ?? fetchedAt,
-                                   accountID: nil, bucketDates: dates, bucketSources: sources,
-                                   resetCredits: resetCredits)
-        // The summary source follows the menu's quota; cards use their own source.
-        result.source = result.menuWindow.map { result.source(for: $0.bucketID) } ?? source
-        return result
-    }
-
-    private func bucketName(for bucketID: String) -> String? {
-        windows.first { $0.bucketID == bucketID }?.bucketName
-    }
-
-    /// Model family a bucket stands for: the model slug mirrored by its name,
-    /// falling back to its identifier for online buckets such as
-    /// "codex_bengalfox" whose response carries no limit name.
-    private func family(of bucketID: String) -> String? {
-        guard let window = windows.first(where: { $0.bucketID == bucketID }) else { return nil }
-        return Self.normalized(window.bucketName) == Self.normalized(bucketID)
-            ? Self.normalized(bucketID) : Self.normalized(window.bucketName)
-    }
-
-    /// Online bucket a local record may rewrite, or nil when the record belongs
-    /// to no bucket here. Local limit_ids do not distinguish model families, so
-    /// the session model first steers the record to the bucket of its own
-    /// family; a record whose family has no bucket may still describe the
-    /// account bucket its raw limit_id reports, but only when that bucket's
-    /// windows have the same structure, so a model-specific quota is never
-    /// written into the account card.
-    private func bucketTargeting(localID: String, model: String?, reportedLimitName: String?,
-                                 windows localWindows: [QuotaWindow]) -> String? {
-        let ids = Set(windows.map(\.bucketID)).sorted()
-        let slug = model.map(Self.normalized)
-        if let slug, !slug.isEmpty, let own = ids.first(where: { family(of: $0) == slug }) { return own }
-        if let reported = reportedLimitName.map(Self.normalized), !reported.isEmpty,
-           let named = ids.first(where: { Self.normalized(bucketName(for: $0) ?? "") == reported }) {
-            return named
-        }
-        let candidate = ids.first { $0 == localID }
-        guard let candidate, hasSameStructure(localWindows, as: candidate) else { return nil }
-        return candidate
-    }
-
-    /// A record may refresh the account bucket only when that bucket accounts
-    /// for every window the record carries: the account limit has one weekly
-    /// window, so a record with an extra 5h window describes another quota and
-    /// must not be written into the account card.
-    private func hasSameStructure(_ localWindows: [QuotaWindow], as bucketID: String) -> Bool {
-        let bucket = windows.filter { $0.bucketID == bucketID }
-        guard !bucket.isEmpty, bucket.count >= localWindows.count else { return false }
-        var available = bucket.compactMap(\.durationMinutes)
-        return localWindows.allSatisfy { window in
-            guard let duration = window.durationMinutes else { return true }
-            guard let index = available.firstIndex(of: duration) else { return false }
-            available.remove(at: index)
-            return true
-        }
-    }
-
-    static func normalized(_ value: String) -> String {
-        String(value.lowercased().filter { $0.isLetter || $0.isNumber })
     }
 
     static func parse(_ value: JSONValue, at date: Date = Date()) -> QuotaSnapshot {
@@ -285,28 +173,13 @@ struct QuotaDisplayState: Sendable {
     var account: AccountSnapshot?
     var snapshot: QuotaSnapshot?
     var error: String?
-    private(set) var localSnapshot: QuotaSnapshot?
-    private var networkSnapshot: QuotaSnapshot?
     private var networkAccount: AccountSnapshot?
-    var resetCredits: ResetCreditsSnapshot? { networkSnapshot?.resetCredits }
+    var resetCredits: ResetCreditsSnapshot? { snapshot?.resetCredits }
 
-    mutating func updateLocal(_ value: QuotaSnapshot?) {
-        localSnapshot = value
-        selectSource()
-    }
     mutating func invalidateAccount() {
-        networkSnapshot = nil; networkAccount = nil
-        account = nil; snapshot = localSnapshot
-    }
-    private mutating func selectSource() {
-        guard let networkSnapshot else {
-            snapshot = localSnapshot; account = nil
-            return
-        }
-        snapshot = localSnapshot.map { networkSnapshot.updatingBuckets(from: $0) } ?? networkSnapshot
-        // Account metadata remains independently verified until authentication changes.
-        // Local/combined quota snapshots never acquire the network account ID.
-        account = networkAccount
+        networkAccount = nil
+        account = nil
+        snapshot = nil
     }
     mutating func apply(_ result: QuotaRefresh) {
         let changedAccount = networkAccount.flatMap { previous in result.account.map { !previous.matches($0) } } ?? false
@@ -320,8 +193,8 @@ struct QuotaDisplayState: Sendable {
                 networkAccount = newAccount
             }
         }
-        if let newSnapshot = result.snapshot { networkSnapshot = newSnapshot }
-        selectSource()
+        if let newSnapshot = result.snapshot { snapshot = newSnapshot }
+        account = snapshot == nil ? nil : networkAccount
         error = result.error?.message
     }
 }
@@ -332,6 +205,26 @@ struct TokenUsage: Equatable, Sendable {
     var cachedInput: Int64?
     var reasoningOutput: Int64?
     var total: Int64?
+
+    /// Cached input is a subset of input, never an additional usage bucket.
+    var uncachedInput: Int64? {
+        guard let input, input >= 0, let cachedInput,
+              cachedInput >= 0, cachedInput <= input else { return nil }
+        return input - cachedInput
+    }
+
+    var includedReasoningOutput: Int64? {
+        guard let output, output >= 0, let reasoningOutput,
+              reasoningOutput >= 0, reasoningOutput <= output else { return nil }
+        return reasoningOutput
+    }
+
+    var hasInconsistentBreakdown: Bool {
+        guard uncachedInput != nil, let input, let output, output >= 0,
+              let total, total >= 0 else { return false }
+        let sum = input.addingReportingOverflow(output)
+        return sum.overflow || sum.partialValue != total
+    }
 
     var cachedInputPercent: Double? {
         guard let input, input > 0, let cachedInput,
@@ -393,6 +286,9 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     /// and their label comes from the backend instead. (`var`, not `let`:
     /// only variables join the memberwise initializer with a default value.)
     var backend: TaskBackend = .codex
+    var workingDirectory: String?
+    var projectID: String?
+    var projectAssignment: TaskProjectAssignment = .unavailable
     var sourceLabel: String { backend == .dsh ? "dsh" : source.label }
 }
 
@@ -400,9 +296,6 @@ struct TaskReadResult: Sendable {
     let tasks: [TaskSnapshot]
     let fetchedAt: Date
     let warning: TaskReadWarning?
-    var localQuota: QuotaSnapshot?
-    var quotaWarning: String?
-    var modelConfig: CodexModelConfig?
     var metrics = TaskReadMetrics()
     var ancestors: [TaskReference] = []
 }
@@ -417,7 +310,6 @@ enum DisplayFormat {
         return String(value)
     }
     /// Round-number size for a provider's model specification board: 1,048,576 → "1M".
-    static func compactTokens(_ value: Int) -> String { scaledTokens(value).text }
     /// "1M tokens (1,048,576)"; the exact count only appears when rounding lost precision.
     static func contextWindow(_ value: Int) -> String {
         let scaled = scaledTokens(value)

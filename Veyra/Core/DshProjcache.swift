@@ -15,6 +15,7 @@ struct DshSessionMetadata: Equatable, Sendable {
     let tokens: TokenUsage
     let model: String?
     let formatVersion: Int?
+    var workingDirectory: String?
 
     /// Recorded activity only; file timestamps are never used (a migration
     /// could refresh them without any real activity).
@@ -52,7 +53,8 @@ struct DshSessionMetadata: Equatable, Sendable {
             turnOpen: turnOpen,
             tokens: tokens.withTotal(),
             model: rows["modelSelection"]["val"]["lastUsed"]["model"].string,
-            formatVersion: value["version"].integer.map { Int($0) })
+            formatVersion: value["version"].integer.map { Int($0) },
+            workingDirectory: TaskText.nonempty(identity["cwd"].string))
     }
 
     private static func sum(_ parts: Int64?...) -> Int64? {

@@ -7,8 +7,9 @@ final class LocalizationTests: XCTestCase {
         XCTAssertTrue(bundle.localizations.contains("en"))
         XCTAssertTrue(bundle.localizations.contains("zh-Hans"))
         let english = try strings("en"), chinese = try strings("zh-Hans")
-        // English plural entries compile into .stringsdict instead of .strings.
-        XCTAssertEqual(Set(english.keys).union(["%lld resets"]), Set(chinese.keys))
+        // Plural entries compile into .stringsdict instead of .strings.
+        XCTAssertEqual(Set(english.keys).union(try pluralKeys("en")),
+                       Set(chinese.keys).union(try pluralKeys("zh-Hans")))
         let arguments = try NSRegularExpression(pattern: "%(@|lld)")
         func placeholders(_ text: String) -> [String] {
             arguments.matches(in: text, range: NSRange(text.startIndex..., in: text)).map {
@@ -73,20 +74,26 @@ final class LocalizationTests: XCTestCase {
     }
 
     @MainActor
-    func testWarningTypeControlsMenuCountInEitherLanguage() {
+    func testWarningsPreserveConfirmedMenuCountInEitherLanguage() {
         for language in ["en", "zh-Hans"] {
             L10n.$languageOverride.withValue(language) {
                 let store = MonitorStore()
+                store.isPreview = true
                 store.tasksUpdatedAt = .now
+                let base = language == "en" ? "Quota — · Running 0" : "额度 — · 运行 0"
                 store.taskWarning = .processUnverified
-                XCTAssertEqual(store.menuLabel, language == "en" ? "Quota — · Running —" : "额度 — · 运行 —")
-                store.taskWarning = .historyUnavailable
-                XCTAssertEqual(store.menuLabel, language == "en" ? "Quota — · Running 0" : "额度 — · 运行 0")
-                store.taskWarning = .sessionUnreadable
-                XCTAssertTrue(store.menuLabel.hasSuffix("0"))
+                XCTAssertTrue(store.menuLabel.hasPrefix(base))
+                XCTAssertEqual(store.menuTaskCount, "0")
                 store.taskWarning = nil
+                XCTAssertEqual(store.menuLabel, base)
                 store.taskError = "fixture error"
-                XCTAssertTrue(store.menuLabel.hasSuffix("—"))
+                XCTAssertEqual(store.menuTaskCount, "0")
+                XCTAssertTrue(store.menuLabel.contains(L10n.text("Some sources are unavailable. Running count may be incomplete.")))
+                store.taskError = nil
+                store.modelConfig = CodexModelConfig(model: "fixture", provider: "fixture-provider")
+                XCTAssertEqual(store.menuLabel, language == "en" ? "Running 0" : "运行 0")
+                store.dshWarning = "fixture warning"
+                XCTAssertEqual(store.menuTaskCount, "0")
             }
         }
     }
@@ -105,6 +112,31 @@ final class LocalizationTests: XCTestCase {
         }
     }
 
+    func testTaskDetailLabelsAndExactAccessibilityInBothLanguages() {
+        for language in ["en", "zh-Hans"] {
+            L10n.$languageOverride.withValue(language) {
+                let chinese = language == "zh-Hans"
+                XCTAssertEqual(TaskText.subagentBadge(nickname: " Schrodinger "),
+                               chinese ? "子代理：Schrodinger" : "Subagent: Schrodinger")
+                XCTAssertEqual(TaskText.subagentBadge(nickname: " "), chinese ? "子代理" : "Subagent")
+                XCTAssertEqual(TaskTokenText.count(nil), "—")
+                XCTAssertEqual(TaskTokenText.count(-1), "—")
+                XCTAssertEqual(TaskTokenText.count(1_501_590), "1,501,590")
+                let usage = TokenUsage(input: 1_493_699, output: 7_891, cachedInput: 1_397_632,
+                                       reasoningOutput: 546, total: 1_501_590)
+                XCTAssertEqual(TaskTokenText.totalHelp(usage), chinese ? "累计 1,501,590 tokens" : "1,501,590 tokens total")
+                XCTAssertEqual(TaskTokenText.outputAccessibility(usage),
+                               chinese ? "输出 7,891，其中推理 546" : "Output 7,891, including reasoning 546")
+                XCTAssertEqual(L10n.text("(\(TaskTokenText.count(546)))"), chinese ? "（546）" : "(546)")
+                XCTAssertTrue(TaskTokenText.outputAccessibility(TokenUsage(output: 7_891)).contains("—"))
+                let inconsistent = TokenUsage(input: 100, output: 20, cachedInput: 80, total: 121)
+                XCTAssertTrue(TaskTokenText.totalHelp(inconsistent).contains(chinese
+                    ? "来源总量与明细合计不一致。" : "The source total differs from the sum of the details."))
+                XCTAssertFalse(TaskTokenText.totalHelp(usage).contains("\n"))
+            }
+        }
+    }
+
     private func window(_ minutes: Int64?, primary: Bool = true) -> QuotaWindow {
         QuotaWindow(id: "fixture", bucketID: "codex", bucketName: "Codex", isPrimary: primary,
                     usedPercent: 20, durationMinutes: minutes, resetsAt: nil)
@@ -113,5 +145,12 @@ final class LocalizationTests: XCTestCase {
     private func strings(_ language: String) throws -> [String: String] {
         let url = try XCTUnwrap(L10n.resourceBundle.url(forResource: "Localizable", withExtension: "strings", subdirectory: nil, localization: language))
         return try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: String])
+    }
+
+    private func pluralKeys(_ language: String) throws -> Set<String> {
+        guard let url = L10n.resourceBundle.url(forResource: "Localizable", withExtension: "stringsdict",
+                                               subdirectory: nil, localization: language) else { return [] }
+        let entries = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any])
+        return Set(entries.keys)
     }
 }

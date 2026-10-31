@@ -17,7 +17,7 @@ enum CredentialFailure: Error, LocalizedError, Sendable {
         case .denied: L10n.text("Keychain access was denied. Allow Veyra in Keychain Access and retry.")
         case .storage: L10n.text("Unable to save the API Key in the system keychain.")
         case .invalid: L10n.text("Enter a nonempty API Key without spaces or line breaks.")
-        case .inUse: L10n.text("This Key is used by the current configuration or recovery record. Switch providers or discard Undo first.")
+        case .inUse: L10n.text("This Key is used by the current configuration or an interrupted change. Switch providers or resolve the configuration first.")
         }
     }
     static func status(_ status: OSStatus) -> Self {
@@ -45,6 +45,9 @@ protocol CredentialStore: Sendable {
 
 /// File-based login keychain, local only. The signed Veyra executable owns its default ACL.
 /// Fixture queries use a different service and explicit independent keychain; never the login keychain.
+/// SecKeychain remains necessary for selecting a file keychain, checking its lock state,
+/// and fixture ACLs. Data Protection keychains use different storage/access rules;
+/// changing this backend requires a separate migration. See docs/development.zh-CN.md.
 struct KeychainCredentialStore: CredentialStore {
     let fixtureKeychain: URL?
     init(fixtureKeychain: URL? = nil) { self.fixtureKeychain = fixtureKeychain }
@@ -57,7 +60,6 @@ struct KeychainCredentialStore: CredentialStore {
         if !interactive {
             let context = LAContext(); context.interactionNotAllowed = true
             result[kSecUseAuthenticationContext as String] = context
-            result[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         }
         var selectedKeychain: SecKeychain?
         if let fixtureKeychain {

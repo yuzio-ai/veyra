@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 
 final class CodexModelConfigurationIntegrationTests: XCTestCase {
-    func testIsolatedRealCodexApplyConflictAndUndoPreserveComments() async throws {
+    func testIsolatedRealCodexProviderReselectionAndConflictPreserveComments() async throws {
         guard let executable = CodexLocation.resolve().executable else { throw XCTSkip("Codex is not installed") }
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("veyra-real-config-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
@@ -17,9 +17,9 @@ final class CodexModelConfigurationIntegrationTests: XCTestCase {
                                        baseURL: "https://gateway.example.invalid/v1", environmentKey: "VEYRA_FIXTURE_KEY")
         var custom = try await service.apply(profile, location: location, expectedVersion: initial.snapshot.version)
         XCTAssertTrue(profile.matches(custom.snapshot))
-        let original = try await service.undo(location: location)
+        let original = try await service.restoreOpenAI(location: location, expectedVersion: custom.snapshot.version)
         XCTAssertEqual(original.snapshot.user["model"].string, "original-model")
-        XCTAssertNil(original.snapshot.user["model_providers"][profile.providerID].object)
+        XCTAssertNotNil(original.snapshot.user["model_providers"][profile.providerID].object)
         custom = try await service.apply(profile, location: location, expectedVersion: original.snapshot.version)
         // No API key is provided and no model/account endpoint is called.
         let official = try await service.apply(CodexModelProfile(name: "Official"), location: location,
@@ -27,7 +27,7 @@ final class CodexModelConfigurationIntegrationTests: XCTestCase {
         XCTAssertNil(official.snapshot.user["model"].string)
         XCTAssertNil(official.snapshot.user["model_reasoning_effort"].string)
         XCTAssertEqual(official.snapshot.user["model_provider"].string, "openai")
-        let restored = try await service.undo(location: location)
+        let restored = try await service.apply(profile, location: location, expectedVersion: official.snapshot.version)
         XCTAssertTrue(profile.matches(restored.snapshot))
         profile.model = "should-not-apply"
         do {

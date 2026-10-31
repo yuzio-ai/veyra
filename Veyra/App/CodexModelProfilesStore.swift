@@ -5,20 +5,10 @@ enum ProviderWorkspaceSelection: Equatable { case official, connection(String), 
 
 enum VeyraSettingsTab: String, CaseIterable { case general, models }
 
-/// One word per provider in the sidebar. Problems are reported separately by
-/// `CodexModelProfilesStore.providerIssue(_:)` so the list stays scannable.
-enum ProviderReadiness: Equatable, Sendable {
-    case inUse
-    case configured
-    case notConfigured
-}
-
 @MainActor @Observable
 final class CodexModelProfilesStore {
     var library = ModelProfileLibrary()
     var snapshot: CodexConfigSnapshot?
-    var draft: CodexModelProfile?
-    var selectedID: UUID?
     var tab = VeyraSettingsTab.general
     var editorRevision = 0
     var renameRequested: String?
@@ -28,16 +18,15 @@ final class CodexModelProfilesStore {
     var expandedProviders: Set<String> = []
     var replacingKey = false
     var confirmedEndpoint = false
-    var setAsDefault = false
     var showUnverifiedPrompt = false
-    var connectionTesting = false
+    var connectionTesting = false {
+        didSet { if !connectionTesting { scheduleConfigurationReload() } }
+    }
     var applyErrors: [String: String] = [:]
     var editStatus = ProviderEditStatus.clean
     private var workspaceBaseline: ProviderSettings?
     @ObservationIgnored private var connectionRequest: Task<ProviderConnectivityResult, Error>?
     @ObservationIgnored private var connectionGeneration = 0
-    var showAdvanced = false
-    var selectedPresetID = "deepseek"
     var providerDraft: ProviderSettings? {
         didSet {
             if oldValue?.id != providerDraft?.id || oldValue?.baseURL != providerDraft?.baseURL || oldValue?.authMode != providerDraft?.authMode || oldValue?.credential != providerDraft?.credential {
@@ -53,54 +42,66 @@ final class CodexModelProfilesStore {
     }
     var providerKeyAvailable: [String: Bool] = [:]
     var providerModelCaches: [String: ProviderModelCache] = [:]
-    private(set) var fetchingModelsFor: String?
+    private(set) var fetchingModelsFor: String? {
+        didSet { if fetchingModelsFor == nil { scheduleConfigurationReload() } }
+    }
     var credentialCommandsSupported = false
     var providerKeyIssues: [String: String] = [:]
-    var busy = false
-    var error: String? { didSet { if error != nil { message = nil } } }
+    var busy = false {
+        didSet { if !busy { scheduleConfigurationReload() } }
+    }
+    var error: String? {
+        didSet {
+            if error != foregroundLoadError { foregroundLoadError = nil }
+            if error != nil { message = nil }
+        }
+    }
+    private(set) var configurationReloadError: String?
     var message: String?
     var attemptedValidation = false
     var showUnsavedPrompt = false
     var isPreview = false
+    private(set) var monitoringAvailable = true
     private(set) var writesSupported = false
     private(set) var location: CodexLocation?
     @ObservationIgnored private let service: CodexModelProfileService
+    @ObservationIgnored private let configurationChanged: @MainActor () -> Void
+    @ObservationIgnored private var pendingConfigurationLocation: CodexLocation?
+    @ObservationIgnored private var configurationReloadTask: Task<Void, Never>?
+    @ObservationIgnored private var configurationReloadRevision = 0
+    @ObservationIgnored private var configurationRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var configurationRetryFailures = 0
+    @ObservationIgnored private var configurationRetryRevision = 0
+    @ObservationIgnored private var configurationRequestRevision = 0
+    @ObservationIgnored private var foregroundLoadError: String?
+    @ObservationIgnored private let configurationClock: PollingClock
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var configurationFailure: ModelProfileFailure?
     @ObservationIgnored private var pendingNavigation: (@MainActor () -> Void)?
     @ObservationIgnored private var modelRequest: Task<ProviderModelCache, Error>?
     @ObservationIgnored private var modelGeneration = 0
-    @ObservationIgnored private var providerSaveCanApply = false
 
-    init(service: CodexModelProfileService = CodexModelProfileService()) { self.service = service }
+    init(service: CodexModelProfileService = CodexModelProfileService(),
+         configurationClock: PollingClock = .continuous(),
+         configurationChanged: @escaping @MainActor () -> Void = {}) {
+        self.service = service
+        self.configurationClock = configurationClock
+        self.configurationChanged = configurationChanged
+    }
 
     var profiles: [CodexModelProfile] { library.profiles }
-    var sidebarProfiles: [CodexModelProfile] {
-        if let draft, !profiles.contains(where: { $0.id == draft.id }) { return profiles + [draft] }
-        return profiles
+    func connectionIsBlocked(_ settings: ProviderSettings) -> Bool {
+        if settings.blockingConnectionFailure != nil { return true }
+        let cache = providerModelCaches[settings.id]
+        return cache?.scope == ProviderModelScope(settings) && cache?.failure == .authentication
+    }
+    var switchableProfiles: [CodexModelProfile] {
+        library.connections.filter { !connectionIsBlocked($0) }.compactMap(\.legacyValue).filter {
+            $0.validation.isEmpty && ($0.kind != .custom || $0.authentication != .environment)
+        }
     }
     var hasUnsavedChanges: Bool {
-        if workspaceEnabled { return invalidContextInput || !apiKeyInput.isEmpty || providerDraft != workspaceBaseline }
-        if !showAdvanced {
-            guard let providerDraft, let preset = ProviderPreset.find(providerDraft.id) else { return !apiKeyInput.isEmpty }
-            return !apiKeyInput.isEmpty || providerDraft != (library.providers.first { $0.id == providerDraft.id } ?? ProviderSettings(preset: preset))
-        }
-        guard let draft else { return !apiKeyInput.isEmpty }
-        return !apiKeyInput.isEmpty || draft != profiles.first { $0.id == draft.id }
-    }
-    var fieldErrors: [String: String] {
-        guard let draft else { return [:] }
-        var result = draft.validation
-        if !apiKeyInput.isEmpty { result["credential"] = nil; do { try CredentialFailure.validate(apiKeyInput) } catch { result["credential"] = CredentialFailure.invalid.localizedDescription } }
-        if profiles.contains(where: { $0.id != draft.id && $0.name.localizedCaseInsensitiveCompare(draft.normalized().name) == .orderedSame }) {
-            result["name"] = L10n.text("A profile with this name already exists.")
-        }
-        return result
-    }
-    var defaultName: String {
-        guard let snapshot else { return L10n.text("Configuration unavailable") }
-        if let profile = profiles.first(where: { $0.matches(snapshot) }) { return profile.name }
-        return snapshot.user["model"].string ?? snapshot.user["model_provider"].string ?? L10n.text("Codex default")
+        invalidContextInput || !apiKeyInput.isEmpty || providerDraft != workspaceBaseline
     }
     var currentProviderProfileID: UUID? {
         guard let snapshot else { return nil }
@@ -119,7 +120,7 @@ final class CodexModelProfilesStore {
 
     func providerTitle(_ profile: CodexModelProfile) -> String {
         let identity = profile.providerIdentity.name
-        let sameName = sidebarProfiles.filter { $0.providerIdentity.name.localizedCaseInsensitiveCompare(identity) == .orderedSame }
+        let sameName = profiles.filter { $0.providerIdentity.name.localizedCaseInsensitiveCompare(identity) == .orderedSame }
         guard sameName.count > 1 else { return identity }
         let title = "\(identity) · \(profile.name)"
         let sameTitle = sameName.filter { $0.name.localizedCaseInsensitiveCompare(profile.name) == .orderedSame }
@@ -129,52 +130,162 @@ final class CodexModelProfilesStore {
         } ?? 32
         return sameTitle.count > 1 ? title + " · " + profile.id.uuidString.replacingOccurrences(of: "-", with: "").prefix(length) : title
     }
-    var canUndo: Bool {
-        guard writesSupported, !busy, let journal = library.journal, let snapshot else { return false }
-        return ModelProfilePatch.matches(journal.after, snapshot: snapshot)
+    /// The monitor discovers external changes without blocking local task reads.
+    func followConfiguration(of monitor: MonitorStore) {
+        setMonitoringAvailable(monitor.canUseCodexServices)
+        monitor.onConfigurationChange = { [weak self, weak monitor] location in
+            guard let self, let monitor else { return }
+            self.setMonitoringAvailable(monitor.canUseCodexServices)
+            if self.monitoringAvailable { self.requestConfigurationReload(location: location) }
+        }
     }
 
-    func load(location newLocation: CodexLocation) async {
-        guard !isPreview else { return }
+    private func setMonitoringAvailable(_ available: Bool) {
+        guard monitoringAvailable != available else { return }
+        monitoringAvailable = available
+        guard !available else { return }
+        generation += 1
+        pendingConfigurationLocation = nil
+        configurationRequestRevision += 1
+        cancelConfigurationRetry()
+        configurationReloadRevision += 1
+        configurationReloadTask?.cancel(); configurationReloadTask = nil
+        cancelModelDiscovery(); cancelConnectionTest()
+        snapshot = nil; writesSupported = false; credentialCommandsSupported = false
+        providerKeyAvailable = [:]; providerKeyIssues = [:]
+        configurationReloadError = nil; foregroundLoadError = nil; error = nil; message = nil
+        busy = false
+    }
+
+    func requestConfigurationReload(location: CodexLocation) {
+        guard !isPreview, monitoringAvailable else { return }
+        configurationRequestRevision += 1
+        cancelConfigurationRetry()
+        pendingConfigurationLocation = location
+        scheduleConfigurationReload()
+    }
+
+    private func scheduleConfigurationReload() {
+        guard canReloadConfiguration, configurationReloadTask == nil, configurationRetryTask == nil,
+              pendingConfigurationLocation != nil else { return }
+        configurationReloadRevision += 1
+        let reloadRevision = configurationReloadRevision
+        configurationReloadTask = Task { [weak self] in
+            guard let self else { return }
+            // A foreground directory change can queue a retry while an older
+            // load is suspended. Its completion must respect that waiting timer.
+            while self.canReloadConfiguration, self.configurationRetryTask == nil,
+                  let location = self.pendingConfigurationLocation {
+                self.pendingConfigurationLocation = nil
+                let request = self.configurationRequestRevision
+                let loaded = await self.load(location: location, preservingOperationStatus: true)
+                guard reloadRevision == self.configurationReloadRevision else { return }
+                if loaded {
+                    self.configurationRetryFailures = 0
+                } else if request == self.configurationRequestRevision, self.location == location {
+                    self.pendingConfigurationLocation = location
+                    if !self.busy { self.scheduleConfigurationRetry() }
+                    break
+                }
+            }
+            guard reloadRevision == self.configurationReloadRevision else { return }
+            self.configurationReloadTask = nil
+            self.scheduleConfigurationReload()
+        }
+    }
+
+    private var canReloadConfiguration: Bool { monitoringAvailable && !busy && !connectionTesting && fetchingModelsFor == nil }
+
+    private func cancelConfigurationRetry() {
+        configurationRetryRevision += 1
+        configurationRetryTask?.cancel(); configurationRetryTask = nil
+        configurationRetryFailures = 0
+    }
+
+    private func scheduleConfigurationRetry() {
+        guard configurationRetryTask == nil else { return }
+        configurationRetryFailures += 1
+        let delays = [5, 15, 30, 60]
+        let delay = delays[min(configurationRetryFailures - 1, delays.count - 1)]
+        let version = configurationRetryRevision, clock = configurationClock
+        configurationRetryTask = Task { [weak self, clock] in
+            do { try await clock.sleep(.seconds(delay)) } catch { return }
+            guard let self, !Task.isCancelled, version == self.configurationRetryRevision else { return }
+            self.configurationRetryTask = nil
+            self.scheduleConfigurationReload()
+        }
+    }
+
+    @discardableResult
+    func load(location newLocation: CodexLocation, preservingOperationStatus: Bool = false) async -> Bool {
+        guard !isPreview, monitoringAvailable else { return false }
+        let request = configurationRequestRevision
+        if !preservingOperationStatus { cancelConfigurationRetry() }
         if location != newLocation {
+            // A direct location change supersedes a queued reload of the old home.
+            if pendingConfigurationLocation != newLocation { pendingConfigurationLocation = nil }
             cancelModelDiscovery()
             generation += 1
             workspaceBaseline = nil; cancelConnectionTest()
             location = newLocation
-            library = ModelProfileLibrary(); snapshot = nil; draft = nil; selectedID = nil
+            library = ModelProfileLibrary(); snapshot = nil
             writesSupported = false; error = nil; message = nil; busy = false
+            applyErrors = [:]; showUnverifiedPrompt = false
+            pendingNavigation = nil; showUnsavedPrompt = false
+            configurationReloadError = nil
             providerDraft = nil; apiKeyInput = ""; providerKeyAvailable = [:]; providerKeyIssues = [:]; credentialCommandsSupported = false
             providerModelCaches = [:]
             configurationFailure = nil
         }
-        guard !busy else { return }
+        guard !busy else { return false }
         let version = generation
         busy = true
         defer { if generation == version { busy = false } }
         do {
             let local = try await service.library(home: newLocation.home)
-            guard version == generation else { return }
+            guard version == generation else { return false }
             library = local
             providerModelCaches = try await service.cachedModels(home: newLocation.home)
-            guard version == generation else { return }
-            if draft == nil { selectImmediately(profiles.first?.id) }
+            guard version == generation else { return false }
             let context = try await service.read(location: newLocation)
-            guard version == generation else { return }
+            guard version == generation else { return false }
             accept(context)
-            credentialCommandsSupported = await service.supportsCredentialCommands(location: newLocation)
+            let supportsCredentials = await service.supportsCredentialCommands(location: newLocation)
+            guard version == generation, monitoringAvailable else { return false }
+            credentialCommandsSupported = supportsCredentials
             await refreshProviderKeys()
-            if providerDraft == nil, let preset = ProviderPreset.find(selectedPresetID) {
-                providerDraft = library.providers.first { $0.id == selectedPresetID } ?? ProviderSettings(preset: preset)
-            }
+            guard version == generation, monitoringAvailable else { return false }
             writesSupported = context.library.pending == nil
             configurationFailure = context.recoveryIssue
-            error = context.recoveryIssue?.localizedDescription
-            if workspaceEnabled && (workspaceBaseline == nil || !hasUnsavedChanges) { chooseWorkspaceImmediately(workspaceSelection) }
+            if preservingOperationStatus {
+                configurationReloadError = context.recoveryIssue?.localizedDescription
+                if foregroundLoadError != nil { error = nil }
+                refreshCleanWorkspace()
+            } else {
+                configurationReloadError = nil
+                error = context.recoveryIssue?.localizedDescription
+                if workspaceBaseline == nil || !hasUnsavedChanges { chooseWorkspaceImmediately(workspaceSelection) }
+                if request == configurationRequestRevision, pendingConfigurationLocation == newLocation {
+                    pendingConfigurationLocation = nil
+                }
+            }
+            return true
         } catch {
-            guard version == generation else { return }
+            guard version == generation else { return false }
             writesSupported = false
             configurationFailure = (error as? ModelProfileFailure) ?? .unavailable
-            self.error = safeMessage(error)
+            if preservingOperationStatus {
+                configurationReloadError = safeMessage(error)
+            } else {
+                configurationReloadError = nil
+                foregroundLoadError = safeMessage(error)
+                self.error = foregroundLoadError
+                if request == configurationRequestRevision {
+                    pendingConfigurationLocation = newLocation
+                    scheduleConfigurationRetry()
+                }
+            }
+            return false
         }
     }
 
@@ -188,15 +299,14 @@ final class CodexModelProfilesStore {
     }
 
     func resolveNavigation(save: Bool) async {
+        let version = generation
         if save {
-            let saved = workspaceEnabled ? await saveWorkspace() : showAdvanced ? await saveDraft() : await saveProviderDraft()
+            let saved = await saveWorkspace()
+            guard version == generation else { return }
             if !saved { pendingNavigation = nil; showUnsavedPrompt = false; return }
         }
         if !save {
-            if workspaceEnabled { invalidContextInput = false; providerDraft = workspaceBaseline }
-            apiKeyInput = ""
-            if !workspaceEnabled, showAdvanced { selectImmediately(selectedID) }
-            else if !workspaceEnabled, let preset = ProviderPreset.find(selectedPresetID) { providerDraft = library.providers.first { $0.id == selectedPresetID } ?? ProviderSettings(preset: preset) }
+            invalidContextInput = false; providerDraft = workspaceBaseline; apiKeyInput = ""
         }
         let action = pendingNavigation
         pendingNavigation = nil
@@ -206,108 +316,6 @@ final class CodexModelProfilesStore {
 
     func cancelNavigation() { pendingNavigation = nil; showUnsavedPrompt = false }
 
-    func select(_ id: UUID?) { navigate { self.showAdvanced = true; self.selectImmediately(id) } }
-    private func selectImmediately(_ id: UUID?) {
-        apiKeyInput = ""
-        selectedID = id
-        draft = profiles.first { $0.id == id }
-        attemptedValidation = false
-    }
-
-    func newProfile() {
-        navigate {
-            var profile = CodexModelProfile(name: self.uniqueName(L10n.text("New provider")), kind: .custom)
-            profile.authentication = .keychain
-            self.showAdvanced = true; self.apiKeyInput = ""
-            self.draft = profile; self.selectedID = profile.id; self.attemptedValidation = false
-        }
-    }
-
-    func duplicate() {
-        guard draft != nil else { return }
-        navigate {
-            self.showAdvanced = true; self.apiKeyInput = ""
-            guard let original = self.draft else { return }
-            var copy = original
-            copy.id = UUID(); copy.name = self.uniqueName(original.name + " " + L10n.text("Copy"))
-            self.draft = copy; self.selectedID = copy.id; self.attemptedValidation = false
-        }
-    }
-
-    func importCurrent() {
-        guard let snapshot else { return }
-        navigate {
-            self.showAdvanced = true; self.apiKeyInput = ""
-            let profile = CodexModelProfile.imported(from: snapshot, name: self.uniqueName(L10n.text("Current configuration")))
-            self.draft = profile; self.selectedID = profile.id; self.attemptedValidation = false
-        }
-    }
-
-    func uniqueName(_ base: String) -> String {
-        var value = base, suffix = 2
-        while profiles.contains(where: { $0.name.localizedCaseInsensitiveCompare(value) == .orderedSame }) {
-            value = "\(base) \(suffix)"; suffix += 1
-        }
-        return value
-    }
-
-    @discardableResult
-    func saveDraft() async -> Bool {
-        attemptedValidation = true
-        guard !busy, let draft, fieldErrors.isEmpty else { return false }
-        if draft.kind == .custom, !apiKeyInput.isEmpty {
-            guard let location else { return false }
-            busy = true; defer { busy = false }
-            do {
-                if isPreview {
-                    var saved = draft.normalized(); saved.authentication = .keychain; saved.environmentKey = ""
-                    saved.credentialReference = CredentialReference(); saved.helperPath = Bundle.main.executablePath
-                    library.profiles.removeAll { $0.id == saved.id }; library.profiles.append(saved)
-                    self.draft = saved; selectedID = saved.id; apiKeyInput = ""; return true
-                }
-                library = try await service.saveLegacyKey(draft, newKey: apiKeyInput, home: location.home)
-                self.draft = library.profiles.first { $0.id == draft.id }; selectedID = draft.id; apiKeyInput = ""; return true
-            } catch { self.error = safeMessage(error); return false }
-        }
-        var profiles = profiles
-        let normalized = draft.normalized()
-        if let index = profiles.firstIndex(where: { $0.id == draft.id }) { profiles[index] = normalized }
-        else { profiles.append(normalized) }
-        guard await persist(profiles) else { return false }
-        self.draft = normalized; selectedID = normalized.id
-        return true
-    }
-
-    func deleteSelected() async {
-        guard let selectedID, !busy else { return }
-        let remaining = profiles.filter { $0.id != selectedID }
-        guard await persist(remaining) else { return }
-        selectImmediately(remaining.first?.id)
-    }
-
-    private func persist(_ profiles: [CodexModelProfile]) async -> Bool {
-        guard let location, !busy else { return false }
-        if isPreview { library.profiles = profiles; return true }
-        let version = generation
-        busy = true
-        defer { if version == generation { busy = false } }
-        do {
-            let library = try await service.saveProfiles(profiles, home: location.home)
-            guard version == generation else { return false }
-            self.library = library; error = configurationFailure?.localizedDescription
-            return true
-        } catch {
-            if version == generation { self.error = safeMessage(error) }
-            return false
-        }
-    }
-
-    func applyDraft() async {
-        guard let draft, !busy else { return }
-        if hasUnsavedChanges, !(await saveDraft()) { return }
-        await apply((self.draft ?? draft).normalized())
-    }
-
     func apply(_ profile: CodexModelProfile) async {
         guard !busy, writesSupported, let location, let snapshot else { return }
         if profile.kind == .custom && profile.authentication == .environment { error = CredentialFailure.missing.localizedDescription; return }
@@ -316,12 +324,7 @@ final class CodexModelProfilesStore {
         }
     }
 
-    func undo() async {
-        guard canUndo, let location else { return }
-        await update(location: location, undo: true) { try await self.service.undo(location: location) }
-    }
-
-    private func update(location: CodexLocation, undo: Bool = false,
+    private func update(location: CodexLocation,
                         operation: () async throws -> ModelProfileContext) async {
         let version = generation
         busy = true; error = nil; message = nil
@@ -331,8 +334,7 @@ final class CodexModelProfilesStore {
             let context = try await operation()
             guard version == generation else { return }
             accept(context)
-            message = undo ? L10n.text("Previous default configuration restored. Restart Codex to use it.")
-                : L10n.text("Set as the default provider for new sessions. Restart open Codex clients if needed.")
+            message = L10n.text("Set as the default provider for new sessions. Restart open Codex clients if needed.")
         } catch {
             guard version == generation else { return }
             self.error = safeMessage(error)
@@ -349,174 +351,45 @@ final class CodexModelProfilesStore {
     var switchablePresets: [ProviderPreset] {
         guard credentialCommandsSupported, writesSupported else { return [] }
         return ProviderPreset.all.filter { preset in
-            library.providers.contains { $0.id == preset.id && $0.validation.isEmpty && $0.credential != nil }
+            library.providers.contains { $0.id == preset.id && $0.validation.isEmpty && $0.credential != nil && !connectionIsBlocked($0) }
                 && providerKeyAvailable[preset.id] == true
                 && library.providers.first(where: { $0.id == preset.id }).map { settings in
                     providerModelCaches[preset.id].map { $0.scope == ProviderModelScope(settings) && $0.contains(settings.model) } == true
                 } == true
         }
     }
-    /// The sidebar shows one word per provider; problems live in `providerIssue`.
-    func providerReadiness(_ preset: ProviderPreset) -> ProviderReadiness {
-        if currentPresetID == preset.id { return .inUse }
-        return providerKeyAvailable[preset.id] == true ? .configured : .notConfigured
-    }
-
-    /// A single blocking reason for the detail pane, highest priority first.
-    func providerIssue(_ preset: ProviderPreset) -> String? {
-        if let issue = providerKeyIssues[preset.id] { return issue }
-        if providerKeyAvailable[preset.id] == true && (!credentialCommandsSupported || !writesSupported) {
-            return L10n.text("This Codex executable does not support Keychain credential commands. Update Codex or select its native executable in General.")
-        }
-        if currentPresetID == preset.id,
-           !ExecutablePath.matches(snapshot?.configuredProvider["auth"]["command"].string, Bundle.main.executablePath) {
-            return L10n.text("Veyra moved. Re-enable this provider to repair the credential path.")
-        }
-        if providerModelCaches[preset.id]?.failure == .authentication {
-            return L10n.text("The provider rejected the saved Key. Update it, then refresh models.")
-        }
-        return nil
-    }
-    func selectPreset(_ id: String) {
-        navigate {
-            guard let preset = ProviderPreset.find(id) else { return }
-            self.showAdvanced = false; self.selectedPresetID = id; self.apiKeyInput = ""
-            self.providerDraft = self.library.providers.first { $0.id == id } ?? ProviderSettings(preset: preset)
-        }
-    }
-    func setAdvanced(_ advanced: Bool) { navigate { self.showAdvanced = advanced; self.apiKeyInput = "" } }
     private func refreshProviderKeys() async {
-        guard !isPreview else { return }
+        guard !isPreview, monitoringAvailable else { return }
         providerKeyAvailable = [:]; providerKeyIssues = [:]
+        let version = generation
+        var available: [String: Bool] = [:], issues: [String: String] = [:]
         for settings in library.connections {
+            guard version == generation, monitoringAvailable else { return }
             guard let reference = settings.credential else { continue }
-            do { providerKeyAvailable[settings.id] = try await service.hasCredential(reference) }
-            catch { providerKeyIssues[settings.id] = safeMessage(error) }
+            do { available[settings.id] = try await service.hasCredential(reference) }
+            catch { issues[settings.id] = safeMessage(error) }
         }
+        guard version == generation, monitoringAvailable else { return }
+        providerKeyAvailable = available; providerKeyIssues = issues
     }
 
-    var selectedModelCache: ProviderModelCache? {
-        guard let draft = providerDraft, let cache = providerModelCaches[draft.id], cache.scope == ProviderModelScope(draft) else { return nil }
-        return cache
-    }
-    var discoveredModels: [DiscoveredModel] { selectedModelCache?.models ?? [] }
-    var selectedDiscoveredModel: DiscoveredModel? { discoveredModels.first { $0.id == providerDraft?.model } }
-    var canEnableProviderDraft: Bool {
-        guard let draft = providerDraft else { return false }
-        return selectedModelCache?.contains(draft.model) == true && draft.validation.isEmpty
-    }
-    var modelDiscoveryState: ModelDiscoveryState {
-        if fetchingModelsFor == selectedPresetID { return .loading }
-        guard let cache = selectedModelCache else { return .idle }
-        if cache.failure != nil { return cache.permitsEnable ? .cached : .failed }
-        guard cache.fetchedAt != nil else { return .idle }
-        return cache.models.isEmpty ? .empty : .ready
-    }
-    var canRefreshModels: Bool {
-        guard !busy, apiKeyInput.isEmpty, let draft = providerDraft,
-              let saved = library.providers.first(where: { $0.id == draft.id }) else { return false }
-        return ProviderModelScope(draft) == ProviderModelScope(saved) && saved.credential != nil
-            && providerKeyAvailable[draft.id] == true && fetchingModelsFor == nil
-    }
     func cancelModelDiscovery() {
         modelGeneration += 1; modelRequest?.cancel(); modelRequest = nil; fetchingModelsFor = nil
     }
-    @discardableResult
-    func refreshModels() async -> Bool {
-        guard canRefreshModels, let location, let settings = library.providers.first(where: { $0.id == selectedPresetID }),
-              let scope = ProviderModelScope(settings) else { return false }
-        cancelModelDiscovery()
-        let version = modelGeneration
-        let homeGeneration = generation
-        fetchingModelsFor = settings.id
-        let request = Task { [service, isPreview] in
-            if isPreview {
-                return ProviderModelCache(scope: scope, models: Self.previewModels, fetchedAt: Date())
-            }
-            return try await service.fetchProviderModels(settings.id, home: location.home)
-        }
-        modelRequest = request
-        defer { if version == modelGeneration { fetchingModelsFor = nil; modelRequest = nil } }
-        do {
-            let cache = try await request.value
-            guard version == modelGeneration, homeGeneration == generation, selectedPresetID == settings.id,
-                  ProviderModelScope(providerDraft ?? settings) == scope else { return false }
-            providerModelCaches[settings.id] = cache
-            return cache.failure == nil
-        } catch {
-            guard !(error is CancellationError), version == modelGeneration, homeGeneration == generation else { return false }
-            self.error = safeMessage(error)
-            return false
-        }
-    }
-
-    @discardableResult
-    func saveProviderDraft() async -> Bool {
-        guard !busy, let draft = providerDraft, let location else { return false }
-        cancelModelDiscovery(); providerSaveCanApply = false
-        let version = generation
-        let newKey = !apiKeyInput.isEmpty
-        attemptedValidation = true
-        guard draft.validation.isEmpty else { return false }
-        busy = true
-        do {
-            if !apiKeyInput.isEmpty { try CredentialFailure.validate(apiKeyInput) }
-            if isPreview {
-                var saved = draft; saved.credential = saved.credential ?? CredentialReference()
-                library.providers.removeAll { $0.id == saved.id }; library.providers.append(saved)
-            } else {
-                let saved = try await service.saveProvider(draft, newKey: apiKeyInput.isEmpty ? nil : apiKeyInput, home: location.home)
-                guard version == generation else { return false }
-                library = saved
-            }
-            providerDraft = library.providers.first { $0.id == draft.id }; apiKeyInput = ""
-            if isPreview { providerKeyAvailable[draft.id] = true } else { await refreshProviderKeys() }
-            guard version == generation else { return false }
-            busy = false; error = nil
-            let requiresFetch = newKey || selectedModelCache?.fetchedAt == nil
-            providerSaveCanApply = !requiresFetch
-            if requiresFetch { providerSaveCanApply = await refreshModels() }
-            return true
-        } catch {
-            if version == generation { self.error = safeMessage(error); busy = false }
-            return false
-        }
-    }
-    func saveAndApplyProvider() async {
-        guard let id = providerDraft?.id else { return }
-        guard await saveProviderDraft() else { return }
-        guard providerSaveCanApply, selectedPresetID == id, canEnableProviderDraft else { return }
-        await applyPreset(id)
-    }
     func applyPreset(_ id: String) async {
         guard !busy, writesSupported, credentialCommandsSupported, let location, let snapshot else { return }
+        let version = generation
         await update(location: location) { try await self.service.applyProvider(id, location: location, expectedVersion: snapshot.version) }
+        guard version == generation else { return }
         await refreshProviderKeys()
     }
     func restoreOpenAI() async {
         guard !busy, writesSupported, let location, let snapshot else { return }
         await update(location: location) { try await self.service.restoreOpenAI(location: location, expectedVersion: snapshot.version) }
     }
-    func removeProviderKey() async {
-        guard !busy, let location else { return }
-        busy = true; defer { busy = false }
-        do {
-            if isPreview { providerKeyAvailable[selectedPresetID] = false }
-            else { library = try await service.removeProviderKey(selectedPresetID, location: location); await refreshProviderKeys() }
-            if let preset = ProviderPreset.find(selectedPresetID) { providerDraft = library.providers.first { $0.id == preset.id } ?? ProviderSettings(preset: preset) }
-            apiKeyInput = ""; error = nil
-        } catch { self.error = safeMessage(error) }
-    }
-    func discardUndo() async {
-        guard !busy, let location else { return }
-        busy = true; defer { busy = false }
-        do {
-            if isPreview { library.journal = nil } else { library = try await service.discardUndo(home: location.home) }
-        } catch { self.error = safeMessage(error) }
-    }
-
     private func accept(_ context: ModelProfileContext) {
         library = context.library; snapshot = context.snapshot
+        configurationChanged()
         if context.library.pending != nil { writesSupported = false; configurationFailure = context.recoveryIssue ?? .changed }
     }
     private func safeMessage(_ error: Error) -> String {
@@ -527,7 +400,6 @@ final class CodexModelProfilesStore {
     }
 
     var customConnections: [ProviderDescriptor] { library.connections.filter { $0.origin == .custom } }
-    var selectedConnection: ProviderSettings? { providerDraft }
     var savedConnection: ProviderSettings? { library.connections.first { $0.id == providerDraft?.id } }
     var connectionResult: ProviderConnectivityResult? {
         guard apiKeyInput.isEmpty, let value = providerDraft, let result = savedConnection?.connectivity, result.matches(value) else { return nil }
@@ -619,7 +491,7 @@ final class CodexModelProfilesStore {
         if value.isManagedEndpoint && value.authMode == .keychain && !credentialCommandsSupported { return false }
         if !value.reasoning.isEmpty && !permittedReasoning.contains(value.reasoning) { return false }
         if value.reasoning.isEmpty, let defaultReasoning = workspaceModel?.defaultReasoning, !CodexModelProfile.supportedReasoning.contains(defaultReasoning) { return false }
-        if connectionResult?.failure == .incompatible || connectionResult?.failure == .authentication { return false }
+        if connectionResult?.failure?.blocksApply == true { return false }
         if apiKeyInput.isEmpty, let cache = providerModelCaches[value.id], cache.scope == ProviderModelScope(value), cache.failure == .authentication { return false }
         if value.origin == .builtin && value.id != "openai" {
             return !apiKeyInput.isEmpty || providerModelCaches[value.id]?.contains(value.model) == true
@@ -628,16 +500,12 @@ final class CodexModelProfilesStore {
     }
     func chooseConnectionForAction(_ id: String) { chooseWorkspaceImmediately(.connection(id)) }
     func reloadWorkspace(location: CodexLocation) async {
-        let selection = workspaceSelection
         await load(location: location)
-        chooseWorkspaceImmediately(selection)
     }
     func activateWorkspace() {
         guard !workspaceEnabled else { return }
-        let selection: ProviderWorkspaceSelection = showAdvanced && selectedID != nil
-            ? .connection("legacy:" + selectedID!.uuidString.lowercased()) : .connection(selectedPresetID)
         workspaceEnabled = true
-        chooseWorkspaceImmediately(selection)
+        chooseWorkspaceImmediately(workspaceSelection)
     }
     func chooseWorkspace(_ selection: ProviderWorkspaceSelection) {
         navigate { self.chooseWorkspaceImmediately(selection) }
@@ -646,29 +514,53 @@ final class CodexModelProfilesStore {
         cancelModelDiscovery(); cancelConnectionTest()
         editorRevision += 1
         workspaceSelection = selection; apiKeyInput = ""; replacingKey = false; confirmedEndpoint = false
-        error = nil; message = nil; attemptedValidation = false; setAsDefault = false
+        error = nil; message = nil; attemptedValidation = false
+        providerDraft = workspaceValue(for: selection)
+        workspaceBaseline = providerDraft; editStatus = .clean; invalidContextInput = false
+    }
+
+    /// A passive config refresh updates clean saved data, without navigating or
+    /// clearing editor choices, operation feedback, or unchanged active requests.
+    private func refreshCleanWorkspace() {
+        guard workspaceBaseline == nil || !hasUnsavedChanges else { return }
+        let updated = workspaceValue(for: workspaceSelection)
+        guard updated != providerDraft else { return }
+        let status = editStatus
+        if updated?.baseURL != providerDraft?.baseURL { confirmedEndpoint = false }
+        providerDraft = updated
+        workspaceBaseline = updated
+        editStatus = status
+        editorRevision += 1
+    }
+
+    private func workspaceValue(for selection: ProviderWorkspaceSelection) -> ProviderSettings? {
         switch selection {
         case .official:
-            if let saved = library.connections.first(where: { $0.id == "openai" }) { providerDraft = saved }
+            if let saved = library.connections.first(where: { $0.id == "openai" }) { return saved }
             else {
                 let model = library.openAISnapshot?.first { $0.keyPath == "model" }?.value.string
                     ?? (snapshot?.providerIdentity.isOfficial == true ? snapshot?.user["model"].string : nil) ?? ""
                 let reasoning = library.openAISnapshot?.first { $0.keyPath == "model_reasoning_effort" }?.value.string
                     ?? (snapshot?.providerIdentity.isOfficial == true ? snapshot?.user["model_reasoning_effort"].string : nil) ?? ""
-                var value = ProviderSettings(profile: CodexModelProfile(id: UUID(uuidString: "62141F01-A521-4ECC-BF32-000000000000")!, name: "OpenAI", model: model, reasoning: reasoning))
-                value.id = "openai"; providerDraft = value
+                let catalog = library.openAISnapshot?.first { $0.keyPath == "model_catalog_json" }?.value.string
+                    ?? (snapshot?.providerIdentity.isOfficial == true ? snapshot?.user["model_catalog_json"].string : nil) ?? ""
+                var value = ProviderSettings(profile: CodexModelProfile(id: UUID(uuidString: "62141F01-A521-4ECC-BF32-000000000000")!, name: "OpenAI", model: model, reasoning: reasoning, catalogPath: catalog))
+                value.id = "openai"; return value
             }
         case .connection(let id):
-            providerDraft = library.connections.first { $0.id == id }
+            return library.connections.first { $0.id == id }
                 ?? ProviderPreset.find(id).map(ProviderSettings.init(preset:))
-        case .create: providerDraft = ProviderSettings(name: "")
+        case .create: return ProviderSettings(name: "")
         }
-        workspaceBaseline = providerDraft; editStatus = .clean; invalidContextInput = false
     }
     func cancelWorkspaceEdits() {
         cancelModelDiscovery(); cancelConnectionTest(); apiKeyInput = ""; replacingKey = false; confirmedEndpoint = false
         if workspaceSelection == .create { chooseWorkspaceImmediately(.official) }
         else { invalidContextInput = false; providerDraft = workspaceBaseline; attemptedValidation = false; error = nil; message = nil; editorRevision += 1 }
+    }
+    func useResponsesProtocol() {
+        guard !busy, let value = providerDraft, value.isManagedEndpoint, value.protocolName != "responses" else { return }
+        providerDraft?.wireAPI = "responses"
     }
     @discardableResult
     func saveWorkspace() async -> Bool {
@@ -702,11 +594,17 @@ final class CodexModelProfilesStore {
         }
     }
     func requestWorkspaceApply() async {
-        guard canApplyWorkspace else { attemptedValidation = true; return }
+        guard !Task.isCancelled else { return }
+        guard canApplyWorkspace, let targetID = providerDraft?.id else { attemptedValidation = true; return }
+        let version = generation, revision = editorRevision
         if hasUnsavedChanges || savedConnection == nil { guard await saveWorkspace() else { return } }
-        guard let value = providerDraft else { return }
+        guard !Task.isCancelled, version == generation, revision == editorRevision,
+              let value = providerDraft, value.id == targetID else { return }
         if value.origin == .builtin && value.id != "openai", providerModelCaches[value.id]?.scope != ProviderModelScope(value) || providerModelCaches[value.id]?.contains(value.model) != true {
-            await refreshWorkspaceModels()
+            let requestVersion = await refreshWorkspaceModels()
+            // A cancelled refresh must not resume Apply against a newer selection or draft.
+            guard requestVersion == modelGeneration, !Task.isCancelled, version == generation, revision == editorRevision,
+                  providerDraft == value else { return }
             guard canApplyWorkspace else { error = ModelDiscoveryFailure.unavailable.localizedDescription; return }
         }
         if value.origin == .custom && value.isManagedEndpoint && (connectionResult == nil || connectionResult?.failure != nil) {
@@ -717,20 +615,26 @@ final class CodexModelProfilesStore {
     func applyWorkspace() async {
         showUnverifiedPrompt = false
         guard canApplyWorkspace, let value = providerDraft, let location, let snapshot else { return }
+        let version = generation
         await update(location: location) { try await self.service.applyProvider(value.id, location: location, expectedVersion: snapshot.version) }
+        guard version == generation else { return }
         if let error { applyErrors[value.id] = error; self.error = L10n.text("Provider saved, but applying failed.") + " " + error }
         else { applyErrors[value.id] = nil }
     }
     func repairWorkspacePath() async {
         guard let value = savedConnection, let location, let snapshot, !busy else { return }
+        let version = generation
         await update(location: location) { try await self.service.repairCredentialPath(value.id, location: location, expectedVersion: snapshot.version) }
+        guard version == generation else { return }
         if error == nil && !isPreview { message = L10n.text("Credential path repaired. Model settings were not changed.") }
     }
     func cancelConnectionTest() {
         connectionGeneration += 1; connectionRequest?.cancel(); connectionRequest = nil; connectionTesting = false
     }
-    func refreshWorkspaceModels() async {
-        guard !busy, !hasUnsavedChanges, let saved = savedConnection, let location else { return }
+    /// Returns the accepted request version, or nil for cancellation, stale results, or failure.
+    @discardableResult
+    func refreshWorkspaceModels() async -> Int? {
+        guard !Task.isCancelled, !busy, !hasUnsavedChanges, let saved = savedConnection, let location else { return nil }
         cancelModelDiscovery(); let token = modelGeneration; let version = generation
         fetchingModelsFor = saved.id
         let request = Task {
@@ -740,11 +644,19 @@ final class CodexModelProfilesStore {
         modelRequest = request
         defer { if token == modelGeneration { fetchingModelsFor = nil; modelRequest = nil } }
         do {
-            let cache = try await request.value
-            guard token == modelGeneration, version == generation, providerDraft?.id == saved.id else { return }
+            let cache = try await withTaskCancellationHandler {
+                try await request.value
+            } onCancel: {
+                request.cancel()
+            }
+            guard !Task.isCancelled, token == modelGeneration, version == generation, providerDraft?.id == saved.id else { return nil }
             providerModelCaches[saved.id] = cache
             if let failure = cache.failure { error = failure.localizedDescription } else { error = nil }
-        } catch { if !(error is CancellationError), token == modelGeneration { self.error = safeMessage(error) } }
+            return token
+        } catch {
+            if !(error is CancellationError), !Task.isCancelled, token == modelGeneration { self.error = safeMessage(error) }
+            return nil
+        }
     }
     func testWorkspaceConnection() async {
         guard !busy, !hasUnsavedChanges, let saved = savedConnection, let location,
@@ -761,7 +673,9 @@ final class CodexModelProfilesStore {
             let result = try await request.value
             guard token == connectionGeneration, version == generation, providerDraft?.id == saved.id else { return }
             if let index = library.connections.firstIndex(where: { $0.id == saved.id }) { library.connections[index].connectivity = result }
-            providerDraft?.connectivity = result; workspaceBaseline = providerDraft
+            // The test persists only connectivity; edits made while it ran remain unsaved.
+            workspaceBaseline?.connectivity = result
+            providerDraft?.connectivity = result
             if let failure = result.failure { error = failure.localizedDescription }
             else { message = L10n.text("Responses test succeeded. Full Codex tool support was not tested.") }
         } catch { if !(error is CancellationError), token == connectionGeneration { self.error = safeMessage(error) } }
@@ -776,36 +690,43 @@ final class CodexModelProfilesStore {
             self.chooseWorkspaceImmediately(.create); self.providerDraft = copy
         }
     }
-    func importWorkspace() {
-        guard let snapshot else { return }
-        navigate {
-            self.chooseWorkspaceImmediately(.create)
-            self.providerDraft = ProviderSettings(profile: .imported(from: snapshot, name: self.uniqueName(L10n.text("Current configuration"))))
-        }
-    }
     func deleteWorkspace(replacementID: String? = nil) async {
         guard let value = savedConnection, value.origin == .custom, let location, !busy else { return }
+        let version = generation
         if isDefaultConnection(value) {
             guard let replacementID else { return }
             if replacementID == "openai" { await restoreOpenAI() }
             else if let snapshot { await update(location: location) { try await self.service.applyProvider(replacementID, location: location, expectedVersion: snapshot.version) } }
-            guard error == nil else { return }
+            guard version == generation, error == nil else { return }
             if value.legacyProfile?.kind != .official, isDefaultConnection(value) { return }
         }
+        busy = true
+        defer { if version == generation { busy = false } }
         do {
             if isPreview { library.connections.removeAll { $0.id == value.id } }
-            else { library = try await service.deleteConnection(value.id, location: location) }
+            else {
+                let updated = try await service.deleteConnection(value.id, location: location)
+                guard version == generation else { return }
+                library = updated
+            }
             chooseWorkspaceImmediately(.official)
-        } catch { self.error = safeMessage(error) }
+        } catch { if version == generation { self.error = safeMessage(error) } }
     }
     func removeWorkspaceKey() async {
         guard let value = savedConnection, let location, !busy else { return }
-        busy = true; defer { busy = false }
+        let version = generation
+        busy = true; defer { if version == generation { busy = false } }
         do {
             if isPreview { providerKeyAvailable[value.id] = false; library.connections.removeAll { $0.id == value.id }; var updated = value; updated.credential = nil; library.connections.append(updated) }
-            else { library = try await service.removeProviderKey(value.id, location: location); await refreshProviderKeys() }
+            else {
+                let updated = try await service.removeProviderKey(value.id, location: location)
+                guard version == generation else { return }
+                library = updated
+                await refreshProviderKeys()
+                guard version == generation else { return }
+            }
             chooseWorkspaceImmediately(workspaceSelection)
-        } catch { self.error = safeMessage(error) }
+        } catch { if version == generation { self.error = safeMessage(error) } }
     }
 
     static func preview(_ scenario: String = "normal") -> CodexModelProfilesStore {
@@ -823,7 +744,7 @@ final class CodexModelProfilesStore {
             return store
         }
         let store = CodexModelProfilesStore()
-        store.isPreview = true; store.writesSupported = true; store.tab = .models; store.showAdvanced = true; store.credentialCommandsSupported = true
+        store.isPreview = true; store.writesSupported = true; store.tab = .models; store.credentialCommandsSupported = true
         let home = URL(fileURLWithPath: "/tmp/veyra-model-profile-preview")
         store.location = CodexLocation(home: home, executable: nil)
         let official = CodexModelProfile(name: L10n.text("Official default"), model: "coding-default")
@@ -843,14 +764,11 @@ final class CodexModelProfilesStore {
             store.library.profiles += (1...24).map { CodexModelProfile(name: "\(L10n.text("Development gateway")) \($0) — long profile name", model: "model-\($0)") }
         }
         if scenario == "empty" { store.library.profiles = [] }
+        store.workspaceSelection = .connection("legacy:" + custom.id.uuidString.lowercased())
+        if scenario == "empty" { store.workspaceSelection = .connection("deepseek") }
+        store.activateWorkspace()
         if scenario == "error" { store.error = ModelProfileFailure.unsupported.localizedDescription; store.writesSupported = false }
-        store.selectImmediately(scenario == "empty" ? nil : custom.id)
-        if scenario == "invalid" { store.draft?.baseURL = "invalid"; store.attemptedValidation = true }
-        if ["success", "undo"].contains(scenario) {
-            store.library.journal = ModelProfileJournal(
-                before: [CodexConfigEdit(keyPath: "model", value: .string("previous-model"))],
-                after: [CodexConfigEdit(keyPath: "model", value: .string(official.model))], completed: true)
-        }
+        if scenario == "invalid" { store.providerDraft?.baseURL = "invalid"; store.attemptedValidation = true }
         if scenario == "success" { store.message = L10n.text("Set as the default provider for new sessions. Restart open Codex clients if needed.") }
         if ["provider-custom", "provider-long", "provider-busy"].contains(scenario) {
             if scenario == "provider-long" {
@@ -861,7 +779,6 @@ final class CodexModelProfilesStore {
                 "model_provider": .string(custom.providerID), "model": .string("different-chat-model"),
                 "model_providers": .object([custom.providerID: custom.provider])
             ]), version: "fixture", file: home.appendingPathComponent("config.toml"))
-            store.selectImmediately(custom.id)
         }
         if scenario == "provider-unavailable" {
             store.snapshot = nil; store.writesSupported = false
@@ -870,12 +787,11 @@ final class CodexModelProfilesStore {
         if scenario == "provider-overridden" { store.snapshot?.overridden = true }
         if scenario == "provider-busy" { store.busy = true }
         if scenario.hasPrefix("preset") {
-            store.showAdvanced = false
             let preset = ProviderPreset.all[0]
             var settings = ProviderSettings(preset: preset)
             if scenario != "preset-empty" { settings.model = Self.previewModels[0].id }
             if scenario != "preset-empty" { settings.credential = CredentialReference(); store.library.providers = [settings]; store.providerKeyAvailable[preset.id] = true }
-            store.providerDraft = settings
+            store.chooseWorkspaceImmediately(.connection(preset.id))
             if let scope = ProviderModelScope(settings) {
                 store.providerModelCaches[preset.id] = ProviderModelCache(scope: scope, models: Self.previewModels, fetchedAt: Date(timeIntervalSince1970: 1793000000))
             }
@@ -887,7 +803,7 @@ final class CodexModelProfilesStore {
             if scenario == "preset-error" { store.providerKeyIssues[preset.id] = CredentialFailure.locked.localizedDescription }
             if scenario == "preset-unsupported" { store.credentialCommandsSupported = false }
             if scenario == "preset-busy" { store.busy = true }
-            if scenario == "preset-dirty" { store.apiKeyInput = "fixture-input-only" }
+            if scenario == "preset-dirty" { store.replacingKey = true; store.apiKeyInput = "fixture-input-only" }
             if scenario == "preset-loading" { store.fetchingModelsFor = preset.id }
             if scenario == "preset-no-models" { store.providerModelCaches[preset.id]?.models = []; store.providerDraft?.model = "" }
             if scenario == "preset-cached" { store.providerModelCaches[preset.id]?.failure = .network }

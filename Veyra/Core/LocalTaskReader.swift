@@ -12,6 +12,8 @@ struct ThreadMetadata: Sendable {
     var storedAgentPath: String?
     var storedAgentNickname: String?
     var storedAgentRole: String?
+    var workingDirectory: String?
+    var projectID: String?
     private var spawn: JSONValue {
         guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return .null }
         return value["subagent"]["thread_spawn"]
@@ -23,7 +25,10 @@ struct ThreadMetadata: Sendable {
     var agentNickname: String? { TaskText.nonempty(storedAgentNickname) ?? TaskText.nonempty(spawn["agent_nickname"].string) }
     var agentRole: String? { TaskText.nonempty(storedAgentRole) ?? TaskText.nonempty(spawn["agent_role"].string) }
     var displayTitle: String { TaskText.title(title, id: id, parentID: parentID, agentPath: agentPath, nickname: agentNickname) }
-    var reference: TaskReference { TaskReference(id: id, title: displayTitle, parentID: parentID) }
+    var reference: TaskReference {
+        TaskReference(id: id, title: displayTitle, parentID: parentID,
+                      workingDirectory: workingDirectory, projectID: projectID, source: taskSource)
+    }
     var isInternal: Bool {
         if model?.hasPrefix("codex-auto-review") == true { return true }
         guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return false }
@@ -85,7 +90,8 @@ enum TaskResolver {
                             startedAt: boundary?.isRunning == true ? boundary?.date : nil,
                             updatedAt: rollout.usageDate ?? metadata.updatedAt, tokens: usage, activity: activity,
                             agentPath: metadata.agentPath, agentNickname: metadata.agentNickname, agentRole: metadata.agentRole,
-                            progress: metadata.parentID == nil ? nil : rollout.display.progress(for: boundary))
+                            progress: metadata.parentID == nil ? nil : rollout.display.progress(for: boundary),
+                            workingDirectory: metadata.workingDirectory, projectID: metadata.projectID)
     }
 
     static func isExpired(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, now: Date) -> Bool {
@@ -103,7 +109,6 @@ actor LocalTaskReader {
     private var lastHome: URL?
     private let metadataCache = SQLiteReadCache<[ThreadMetadata]>()
     private let historyCache = SQLiteReadCache<[String: TurnBoundary]>()
-    private var quotaByPath: [String: [String: LocalQuotaBucket]] = [:]
     private let now: @Sendable () -> Date
     private let collectEvidence: @Sendable (URL) async -> ProcessEvidence
 
@@ -119,18 +124,33 @@ actor LocalTaskReader {
 
     func fetch(home: URL) async throws -> TaskReadResult {
         let checkedAt = now()
-        let modelConfig = CodexModelConfig.load(home: home)
         if lastHome != home {
             rollouts = RolloutReader(); lastHome = home
-            metadataCache.reset(); historyCache.reset(); quotaByPath = [:]
+            metadataCache.reset(); historyCache.reset()
         }
         var metrics = TaskReadMetrics()
-        let evidence = await collectEvidence(home)
-        metrics.processCollections = 1
+        do {
+            _ = try FileManager.default.contentsOfDirectory(at: home, includingPropertiesForKeys: nil)
+        } catch {
+            let failure = error as NSError
+            if failure.domain == NSCocoaErrorDomain,
+               [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(failure.code) {
+                throw LocalTaskReadFailure.homeMissing
+            }
+            throw error
+        }
         guard let stateURL = SQLiteReader.database(named: "state", in: home) else {
             metadataCache.reset()
-            throw MonitorFailure(L10n.text("Codex task database not found. Run Codex first or choose its data directory in Settings."))
+            // Only inspect the fallback directory when no usable database was
+            // discovered. An unrelated sqlite path must not block a root database.
+            let sqlite = home.appendingPathComponent("sqlite")
+            if FileManager.default.fileExists(atPath: sqlite.path) {
+                _ = try FileManager.default.contentsOfDirectory(at: sqlite, includingPropertiesForKeys: nil)
+            }
+            throw LocalTaskReadFailure.databaseMissing
         }
+        let evidence = await collectEvidence(home)
+        metrics.processCollections = 1
         let loaded = try metadataCache.load(url: stateURL, query: Self.readMetadata)
         let metadata = loaded.value
         metrics.metadataQueries = loaded.queried ? 1 : 0
@@ -144,14 +164,8 @@ actor LocalTaskReader {
             } catch { historyUnavailable = true }
         } else { historyCache.reset() }
 
-        // Include archived sessions for quota discovery, with a strict cold-read budget.
-        let quotaPaths = Set(metadata.sorted {
-            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-            return $0.id < $1.id
-        }.prefix(20).map(\.rolloutPath))
-        var tasks: [TaskSnapshot] = [], unreadable = false, quotaUnreadable = false
+        var tasks: [TaskSnapshot] = [], unreadable = false
         var readPaths: [String: RolloutState] = [:]
-        var expiredCompressedPaths: Set<String> = []
         let recent = checkedAt.addingTimeInterval(-TaskResolver.recentActivityWindow)
         // Task reads go first so a shared path is never tail-read and then reopened.
         for thread in metadata where !thread.archived {
@@ -163,12 +177,11 @@ actor LocalTaskReader {
                 if let cached = readPaths[thread.rolloutPath] { rollout = cached }
                 else {
                     rollout = try rollouts.read(URL(fileURLWithPath: thread.rolloutPath),
-                                                requireBoundary: stored == nil, modelHint: thread.model)
+                                                requireBoundary: stored == nil)
                     metrics.rolloutBytes += rollouts.lastReadByteCount
                     metrics.rolloutOpens += rollouts.lastOpenCount
                     readPaths[thread.rolloutPath] = rollout
                 }
-                quotaByPath[thread.rolloutPath] = rollout.quotaBuckets
             } catch {
                 rollout = RolloutState()
                 if evidence.reliable && !hasProcess,
@@ -176,7 +189,6 @@ actor LocalTaskReader {
                    Self.hasCompressedReplacement(for: thread.rolloutPath, readError: error) {
                     // Codex can compress old logs without updating rollout_path or
                     // clearing inProgress. This expired task needs no live details.
-                    expiredCompressedPaths.insert(thread.rolloutPath)
                     continue
                 }
                 unreadable = true
@@ -186,24 +198,8 @@ actor LocalTaskReader {
                 tasks.append(snapshot)
             }
         }
-        let modelByPath = Dictionary(metadata.map { ($0.rolloutPath, $0.model) }, uniquingKeysWith: { first, _ in first })
-        for path in quotaPaths where readPaths[path] == nil && !expiredCompressedPaths.contains(path) {
-            do {
-                let rollout = try rollouts.read(URL(fileURLWithPath: path), quotaOnly: true, modelHint: modelByPath[path] ?? nil)
-                metrics.rolloutBytes += rollouts.lastReadByteCount
-                metrics.rolloutOpens += rollouts.lastOpenCount
-                quotaByPath[path] = rollout.quotaBuckets
-            } catch { quotaUnreadable = true }
-        }
         let retained = Set(metadata.map(\.rolloutPath))
         rollouts.keepOnly(paths: retained)
-        quotaByPath = quotaByPath.filter { retained.contains($0.key) }
-        var buckets: [String: LocalQuotaBucket] = [:]
-        for path in quotaByPath.keys.sorted() {
-            for (id, bucket) in quotaByPath[path] ?? [:] {
-                if buckets[id].map({ $0.recordedAt < bucket.recordedAt }) ?? true { buckets[id] = bucket }
-            }
-        }
         tasks.sort {
             if $0.activity != $1.activity { return $0.activity == .running }
             if $0.startedAt != $1.startedAt { return ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
@@ -223,8 +219,7 @@ actor LocalTaskReader {
             : historyUnavailable ? .historyUnavailable
             : unreadable ? .sessionUnreadable : nil
         return TaskReadResult(tasks: tasks, fetchedAt: checkedAt, warning: warning,
-                              localQuota: LocalQuotaBucket.snapshot(buckets),
-                              quotaWarning: quotaUnreadable ? L10n.text("Some local quota records are unreadable.") : nil, modelConfig: modelConfig, metrics: metrics,
+                              metrics: metrics,
                               ancestors: ancestors.values.sorted { $0.id < $1.id })
     }
 
@@ -242,7 +237,7 @@ actor LocalTaskReader {
         guard columns.contains("id"), columns.contains("rollout_path") else {
             throw MonitorFailure(L10n.text("This Codex database version is not supported."))
         }
-        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived", "agent_path", "agent_nickname", "agent_role"]
+        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived", "agent_path", "agent_nickname", "agent_role", "cwd", "project_id"]
             .map { columns.contains($0) ? $0 : "NULL AS \($0)" }
         return try db.rows("SELECT id, rollout_path, \(optional.joined(separator: ", ")) FROM threads").compactMap { row in
             guard let id = row["id"], let path = row["rollout_path"] else { return nil }
@@ -250,7 +245,8 @@ actor LocalTaskReader {
             let item = ThreadMetadata(id: id, title: name, rolloutPath: path, model: row["model"], source: row["source"] ?? "",
                                       updatedAt: Date(timeIntervalSince1970: Double(row["updated_at"] ?? "0") ?? 0),
                                       tokens: row["tokens_used"].flatMap(Int64.init), archived: row["archived"] == "1",
-                                      storedAgentPath: row["agent_path"], storedAgentNickname: row["agent_nickname"], storedAgentRole: row["agent_role"])
+                                      storedAgentPath: row["agent_path"], storedAgentNickname: row["agent_nickname"], storedAgentRole: row["agent_role"],
+                                      workingDirectory: TaskText.nonempty(row["cwd"]), projectID: TaskText.nonempty(row["project_id"]))
             return item.isInternal ? nil : item
         }
     }

@@ -20,7 +20,6 @@ enum ProviderOrigin: String, Codable, Sendable { case builtin, custom }
 enum ProviderConfigurationStatus: Sendable { case unconfigured, configured, invalid }
 enum ProviderApplyStatus: Equatable, Sendable { case notApplied, applied, needsRepair, failed }
 enum ProviderEditStatus: Equatable, Sendable { case clean, modified, saving, failed }
-typealias ProviderID = String
 typealias ProviderDescriptor = ProviderSettings
 
 struct ProviderSettings: Codable, Equatable, Identifiable, Sendable {

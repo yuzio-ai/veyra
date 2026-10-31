@@ -1,6 +1,6 @@
 # 五家供应商预置来源（历史）
 
-以下记录对应此前内置目录版本。实时模型版本已移除这些资源和固定默认模型；当前行为见 [实时模型验证](provider-model-discovery-validation.md)。
+以下记录对应此前内置目录版本。实时模型版本已移除这些资源和固定默认模型；当前操作见 [使用指南](user-guide.zh-CN.md#codex-供应商)，此前模型发现行为见 [历史验证](provider-model-discovery-validation.md)。
 
 核对日期：2026-10-26。目录版本：`2026-10-26.1`。仅预置普通 API，不包含 Coding Plan。
 

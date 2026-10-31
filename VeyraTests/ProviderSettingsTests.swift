@@ -27,7 +27,7 @@ final class ProviderSettingsTests: XCTestCase {
         XCTAssertFalse(try String(contentsOf: file, encoding: .utf8).contains("fixture-canary-secret"))
         XCTAssertEqual(value.schemaVersion, 3)
     }
-    func testApplySwitchAndOfficialRestoreAndUndoPreserveUnrelatedSettings() async throws {
+    func testApplySwitchAndOfficialRestorePreserveUnrelatedSettings() async throws {
         let (home, location, transport, _, service) = try fixture()
         for preset in ProviderPreset.all {
             _ = try await service.saveDiscoveredProvider(ProviderSettings(preset: preset), newKey: "fixture-key-" + preset.id, home: home)
@@ -48,7 +48,7 @@ final class ProviderSettingsTests: XCTestCase {
         context = try await service.restoreOpenAI(location: location, expectedVersion: context.snapshot.version)
         XCTAssertEqual(context.snapshot.user["model"].string, "official-original")
         XCTAssertEqual(context.snapshot.user["service_tier"].string, "fast")
-        context = try await service.undo(location: location)
+        context = try await service.applyProvider("mimo", location: location, expectedVersion: context.snapshot.version)
         XCTAssertEqual(context.snapshot.user["model_provider"].string, "veyra_preset_mimo")
         let writes = await transport.writeCount; XCTAssertEqual(writes, 7)
     }
@@ -59,7 +59,7 @@ final class ProviderSettingsTests: XCTestCase {
         _ = try await service.applyProvider("deepseek", location: location, expectedVersion: first.snapshot.version)
         let writes = await transport.writeCount; XCTAssertEqual(writes, 1)
     }
-    func testRotationKeepsOldKeyAndUndoRestoresItsReference() async throws {
+    func testRotationKeepsOldKeyUntilExplicitInactiveCleanup() async throws {
         let (home, location, _, keys, service) = try fixture()
         var lib = try await service.saveDiscoveredProvider(ProviderSettings(preset: ProviderPreset.all[0]), newKey: "old-fixture-key", home: home)
         let old = try XCTUnwrap(lib.providers[0].credential)
@@ -70,10 +70,11 @@ final class ProviderSettingsTests: XCTestCase {
         let current = try await service.applyProvider("deepseek", location: location, expectedVersion: first.snapshot.version)
         XCTAssertTrue(try keys.contains(old)); XCTAssertTrue(try keys.contains(new))
         XCTAssertEqual(current.snapshot.configuredProvider["auth"]["args"].array?.last?.string, new.argument)
-        let undo = try await service.undo(location: location)
-        XCTAssertEqual(undo.snapshot.configuredProvider["auth"]["args"].array?.last?.string, old.argument)
+        _ = try await service.restoreOpenAI(location: location, expectedVersion: current.snapshot.version)
+        _ = try await service.removeProviderKey("deepseek", location: location)
+        XCTAssertFalse(try keys.contains(old)); XCTAssertFalse(try keys.contains(new))
     }
-    func testRemovalProtectsCurrentAndUndoDependenciesThenAllowsInactiveCleanup() async throws {
+    func testRemovalProtectsCurrentConfigurationAndAllowsInactiveCleanupWithoutUndo() async throws {
         let (home, location, _, keys, service) = try fixture()
         let lib = try await service.saveDiscoveredProvider(ProviderSettings(preset: ProviderPreset.all[0]), newKey: "fixture-key", home: home)
         let ref = try XCTUnwrap(lib.providers[0].credential)
@@ -81,11 +82,40 @@ final class ProviderSettingsTests: XCTestCase {
         do { _ = try await service.removeProviderKey("deepseek", location: location); XCTFail() }
         catch { XCTAssertEqual(error as? CredentialFailure, .inUse) }
         _ = try await service.restoreOpenAI(location: location, expectedVersion: active.snapshot.version)
-        do { _ = try await service.removeProviderKey("deepseek", location: location); XCTFail() }
-        catch { XCTAssertEqual(error as? CredentialFailure, .inUse) }
-        _ = try await service.discardUndo(home: home)
         let cleared = try await service.removeProviderKey("deepseek", location: location)
         XCTAssertNil(cleared.providers[0].credential); XCTAssertFalse(try keys.contains(ref))
+    }
+    func testLegacyCompletedUndoHistoryDoesNotBlockInactiveKeyRemoval() async throws {
+        let (home, location, _, keys, service) = try fixture()
+        let saved = try await service.saveDiscoveredProvider(ProviderSettings(preset: ProviderPreset.all[0]), newKey: "fixture-key", home: home)
+        let reference = try XCTUnwrap(saved.providers[0].credential)
+        let active = try await service.applyProvider("deepseek", location: location, expectedVersion: "0")
+        _ = try await service.restoreOpenAI(location: location, expectedVersion: active.snapshot.version)
+        let file = await service.libraryURL(home: home)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        legacy["journal"] = ["before": [["keyPath": "model_provider", "value": "veyra_preset_deepseek"]],
+                             "after": [["keyPath": "model_provider", "value": "openai"]],
+                             "completed": true, "isUndo": false]
+        try JSONSerialization.data(withJSONObject: legacy).write(to: file)
+        let cleared = try await service.removeProviderKey("deepseek", location: location)
+        XCTAssertNil(cleared.providers[0].credential)
+        XCTAssertFalse(try keys.contains(reference))
+        let persisted = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        XCTAssertNil(persisted["journal"])
+    }
+    func testInterruptedChangeStillProtectsItsCredentialDependencies() async throws {
+        let (home, location, transport, keys, service) = try fixture()
+        let saved = try await service.saveDiscoveredProvider(ProviderSettings(preset: ProviderPreset.all[0]), newKey: "fixture-key", home: home)
+        let reference = try XCTUnwrap(saved.providers[0].credential)
+        let active = try await service.applyProvider("deepseek", location: location, expectedVersion: "0")
+        await transport.configure(.partialAndExternal)
+        do { _ = try await service.restoreOpenAI(location: location, expectedVersion: active.snapshot.version); XCTFail() }
+        catch { XCTAssertEqual(error as? ModelProfileFailure, .conflict) }
+        let interrupted = try await service.library(home: home)
+        XCTAssertNotNil(interrupted.pending)
+        do { _ = try await service.removeProviderKey("deepseek", location: location); XCTFail() }
+        catch { XCTAssertEqual(error as? CredentialFailure, .inUse) }
+        XCTAssertTrue(try keys.contains(reference))
     }
     func testAddressChangeRequiresNewKeyAndDoesNotModifySavedConnection() async throws {
         let (home, _, _, keys, service) = try fixture()
@@ -103,7 +133,7 @@ final class ProviderSettingsTests: XCTestCase {
         catch { XCTAssertEqual(error as? ModelProfileFailure, .unsupported) }
         let writes = await transport.writeCount; XCTAssertEqual(writes, 0)
     }
-    func testStaleCodexVersionAndFailedWriteDoNotLoseKeyOrPreviousUndo() async throws {
+    func testStaleCodexVersionAndFailedWritePreserveCurrentConfigurationAndKey() async throws {
         let (home, location, transport, keys, service) = try fixture()
         let saved = try await service.saveDiscoveredProvider(ProviderSettings(preset: ProviderPreset.all[0]), newKey: "fixture-key", home: home)
         let first = try await service.applyProvider("deepseek", location: location, expectedVersion: "0")
@@ -113,7 +143,9 @@ final class ProviderSettingsTests: XCTestCase {
         do { _ = try await service.restoreOpenAI(location: location, expectedVersion: first.snapshot.version); XCTFail() }
         catch { XCTAssertEqual(error as? ModelProfileFailure, .invalid) }
         let retained = try await service.library(home: home)
-        XCTAssertEqual(retained.journal, first.library.journal)
+        XCTAssertNil(retained.pending)
+        let after = try await transport.readConfiguration(location: location)
+        XCTAssertEqual(after, first.snapshot)
         XCTAssertTrue(try keys.contains(saved.providers[0].credential!))
     }
     func testSchemaOneMigrationPreservesProfilesAndDoesNotApply() async throws {
@@ -152,45 +184,47 @@ final class ProviderSettingsStoreTests: XCTestCase {
     }
     func testSaveKeyDoesNotSwitchAndSwitchingPresetProtectsInput() async throws {
         let (location, transport, store) = try fixture()
-        await store.load(location: location)
-        XCTAssertFalse(store.showAdvanced)
+        await store.load(location: location); store.activateWorkspace()
         store.apiKeyInput = "fixture-key"
-        let saved = await store.saveProviderDraft(); XCTAssertTrue(saved)
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
         XCTAssertTrue(store.apiKeyInput.isEmpty)
         XCTAssertTrue(store.switchablePresets.isEmpty)
-        XCTAssertEqual(store.discoveredModels.map(\.id), ["fixture-model"])
+        XCTAssertTrue(store.workspaceModels.isEmpty)
+        await store.refreshWorkspaceModels()
+        XCTAssertEqual(store.workspaceModels.map(\.id), ["fixture-model"])
         XCTAssertEqual(store.providerDraft?.model, "")
         let writes = await transport.writeCount; XCTAssertEqual(writes, 0)
         store.apiKeyInput = "replacement-fixture-key"
-        store.selectPreset("kimi")
-        XCTAssertTrue(store.showUnsavedPrompt); XCTAssertEqual(store.selectedPresetID, "deepseek")
+        store.chooseWorkspace(.connection("kimi"))
+        XCTAssertTrue(store.showUnsavedPrompt); XCTAssertEqual(store.workspaceSelection, .connection("deepseek"))
         store.cancelNavigation(); XCTAssertFalse(store.apiKeyInput.isEmpty)
-        store.selectPreset("kimi"); await store.resolveNavigation(save: false)
-        XCTAssertEqual(store.selectedPresetID, "kimi"); XCTAssertTrue(store.apiKeyInput.isEmpty)
+        store.chooseWorkspace(.connection("kimi")); await store.resolveNavigation(save: false)
+        XCTAssertEqual(store.workspaceSelection, .connection("kimi")); XCTAssertTrue(store.apiKeyInput.isEmpty)
     }
-    func testSaveAndEnableClearsInputAndRestoresOfficial() async throws {
+    func testSaveAndApplyClearsInputAndRestoresOfficial() async throws {
         let (location, _, store) = try fixture()
-        await store.load(location: location)
+        await store.load(location: location); store.activateWorkspace()
         store.apiKeyInput = "fixture-key"
-        let saved = await store.saveProviderDraft(); XCTAssertTrue(saved)
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+        await store.refreshWorkspaceModels()
         store.providerDraft?.model = "fixture-model"
-        await store.saveAndApplyProvider()
+        await store.requestWorkspaceApply()
         XCTAssertNil(store.error)
         XCTAssertEqual(store.currentPresetID, "deepseek")
-        XCTAssertTrue(store.apiKeyInput.isEmpty)
-        XCTAssertTrue(store.canUndo)
+        XCTAssertTrue(store.apiKeyInput.isEmpty); XCTAssertNil(store.library.pending)
         await store.restoreOpenAI()
         XCTAssertNil(store.currentPresetID)
         XCTAssertTrue(store.defaultProviderIdentity.isOfficial)
     }
     func testInvalidKeyNeverEntersSavedSettings() async throws {
         let (location, transport, store) = try fixture()
-        await store.load(location: location)
+        await store.load(location: location); store.activateWorkspace()
         store.apiKeyInput = "invalid key\n"
-        let saved = await store.saveProviderDraft()
-        XCTAssertFalse(saved); XCTAssertTrue(store.library.providers.isEmpty)
+        let saved = await store.saveWorkspace()
+        XCTAssertFalse(saved); XCTAssertTrue(store.library.connections.isEmpty)
         let writes = await transport.writeCount; XCTAssertEqual(writes, 0)
     }
+
 }
 
 private final class MetadataFailureCredentialStore: CredentialStore, @unchecked Sendable {
@@ -225,8 +259,8 @@ final class ProviderCredentialFailureTests: XCTestCase {
         XCTAssertEqual(keys.memory.count, 0)
         let writes = await transport.writeCount; XCTAssertEqual(writes, 0)
     }
-    func testUndoRefusesToRestoreMissingKey() async throws {
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent("veyra-key-undo-missing-" + UUID().uuidString)
+    func testSwitchRefusesMissingProviderKey() async throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("veyra-key-switch-missing-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         let transport = ModelConfigurationFixture(home: home)
@@ -236,9 +270,9 @@ final class ProviderCredentialFailureTests: XCTestCase {
             helperExecutable: URL(fileURLWithPath: "/Applications/Veyra.app/Contents/MacOS/Veyra"), capability: { _ in true }, modelClient: ProviderModelFixture())
         let saved = try await service.saveDiscoveredProvider(ProviderSettings(preset: ProviderPreset.all[0]), newKey: "fixture-key", home: home)
         let active = try await service.applyProvider("deepseek", location: location, expectedVersion: "0")
-        _ = try await service.restoreOpenAI(location: location, expectedVersion: active.snapshot.version)
+        let official = try await service.restoreOpenAI(location: location, expectedVersion: active.snapshot.version)
         try keys.remove(saved.providers[0].credential!)
-        do { _ = try await service.undo(location: location); XCTFail() }
+        do { _ = try await service.applyProvider("deepseek", location: location, expectedVersion: official.snapshot.version); XCTFail() }
         catch { XCTAssertEqual(error as? CredentialFailure, .missing) }
         let writes = await transport.writeCount; XCTAssertEqual(writes, 2)
     }
@@ -262,7 +296,8 @@ final class ProviderCredentialFailureTests: XCTestCase {
         do { _ = try await service.applyProvider("deepseek", location: location, expectedVersion: "0"); XCTFail() }
         catch { XCTAssertEqual(error as? ModelProfileFailure, .unavailable) }
         let recovered = try await service.read(location: location)
-        XCTAssertNil(recovered.library.pending); XCTAssertNotNil(recovered.library.journal)
+        XCTAssertNil(recovered.library.pending)
+        XCTAssertEqual(recovered.snapshot.configuredProviderID, "veyra_preset_deepseek")
         let oneWrite = await transport.writeCount; XCTAssertEqual(oneWrite, 1)
     }
 }

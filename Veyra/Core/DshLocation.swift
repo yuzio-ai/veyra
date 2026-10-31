@@ -5,9 +5,11 @@ import Foundation
 struct DshLocation: Equatable, Sendable {
     let home: URL
 
-    static func resolve(environment: [String: String] = ProcessInfo.processInfo.environment) -> DshLocation {
+    static func resolve(homePath: String = "", environment: [String: String] = ProcessInfo.processInfo.environment) -> DshLocation {
         let fallback = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dsh").path
-        let path = environment["DSH_HOME"]?.isEmpty == false ? environment["DSH_HOME"]! : fallback
+        let override = homePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inherited = environment["DSH_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let path = !override.isEmpty ? override : (!inherited.isEmpty ? inherited : fallback)
         return DshLocation(home: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
     }
 }

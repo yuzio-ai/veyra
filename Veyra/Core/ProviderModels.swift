@@ -65,10 +65,6 @@ struct ProviderModelCache: Codable, Equatable, Sendable {
     func contains(_ id: String) -> Bool { permitsEnable && models.contains { $0.id == id } }
 }
 
-enum ModelDiscoveryState: Equatable, Sendable {
-    case idle, loading, ready, empty, cached, failed
-}
-
 protocol ProviderModelClient: Sendable {
     func models(preset: ProviderPreset, baseURL: String, key: String) async throws -> [DiscoveredModel]
     func models(provider: ProviderSettings, key: String?) async throws -> [DiscoveredModel]

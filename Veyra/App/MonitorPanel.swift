@@ -8,7 +8,6 @@ struct MonitorPanel: View {
     var screenOverride: PanelScreenMetrics?
     var onSizingChange: ((PanelSizing) -> Void)?
     var openSettings: (() -> Void)?
-    var openDashboard: (() -> Void)?
     var profiles: CodexModelProfilesStore?
     var openModelProfiles: (() -> Void)?
     var closeMenu: (() -> Void)?
@@ -23,7 +22,7 @@ struct MonitorPanel: View {
 
     init(store: MonitorStore, updates: UpdateStore? = nil, screenOverride: PanelScreenMetrics? = nil,
          initiallyExpandedTaskIDs: Set<String> = [], initiallyShowUnknown: Bool = false,
-         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil, openDashboard: (() -> Void)? = nil,
+         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil,
          profiles: CodexModelProfilesStore? = nil, openModelProfiles: (() -> Void)? = nil,
          closeMenu: (() -> Void)? = nil) {
         self.store = store
@@ -31,7 +30,6 @@ struct MonitorPanel: View {
         self.screenOverride = screenOverride
         self.onSizingChange = onSizingChange
         self.openSettings = openSettings
-        self.openDashboard = openDashboard
         self.profiles = profiles
         self.openModelProfiles = openModelProfiles
         self.closeMenu = closeMenu
@@ -41,13 +39,10 @@ struct MonitorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                header
-                if let profiles {
-                    ModelProfileQuickSwitch(profiles: profiles, manage: { openModelProfiles?() }, closeMenu: { closeMenu?() })
-                        .padding(.horizontal, 16).padding(.bottom, 8)
-                }
-            }
+            MonitorPanelHeader(hasTaskError: store.hasSourceWarning, detecting: store.noSourcesFound || (!store.hasTaskSnapshot && !store.sourceDetectionFinished),
+                               profiles: store.canUseCodexServices ? profiles : nil,
+                               openSettings: { openSettings?() }, openModelProfiles: { openModelProfiles?() },
+                               closeMenu: { closeMenu?() })
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self, of: { ceil($0.size.height) }) { headerHeight = $0 }
                 .accessibilityIdentifier("monitor.header")
@@ -55,8 +50,8 @@ struct MonitorPanel: View {
                 // Eager layout is intentional: measure the one real content tree,
                 // including offscreen rows and disclosures, not a lazy estimate.
                 VStack(alignment: .leading, spacing: 16) {
+                    if store.showsQuota { quotaSection }
                     tasksSection
-                    quotaSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -86,7 +81,7 @@ struct MonitorPanel: View {
                 store.setPanelVisible(visible)
                 if visible, !store.isPreview {
                     Task { await updates?.checkAutomatically() }
-                    Task { await profiles?.load(location: store.location) }
+                    if store.canUseCodexServices { Task { await profiles?.load(location: store.location) } }
                 }
             })
                 .allowsHitTesting(false)
@@ -97,7 +92,12 @@ struct MonitorPanel: View {
         .onChange(of: store.tasks.map(\.id)) { _, ids in
             expandedTaskIDs.formIntersection(ids)
         }
-        .task(id: store.location) { if !store.isPreview { await profiles?.load(location: store.location) } }
+        .task(id: store.canUseCodexServices) {
+            if !store.isPreview, store.canUseCodexServices { await profiles?.load(location: store.location) }
+        }
+        .task(id: store.location) {
+            if !store.isPreview, store.canUseCodexServices { await profiles?.load(location: store.location) }
+        }
     }
 
     private var sizing: PanelSizing {
@@ -111,117 +111,86 @@ struct MonitorPanel: View {
         })
     }
 
-    private var header: some View {
-        HStack(spacing: 11) {
-            VeyraIcon(size: 28)
-            VeyraWordmark(width: 56)
-            Spacer()
-            HStack(spacing: 5) {
-                Circle().fill(store.taskError == nil ? monitorAccent : .orange).frame(width: 5, height: 5)
-                Text("Local activity").font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-    }
-
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let config = store.modelConfig, let provider = config.customProvider {
-                sectionTitle("Quota")
-                customModelCard(name: config.model ?? provider)
-            } else {
-                HStack(spacing: 7) {
-                    sectionTitle("Quota")
-                    if store.quotaBusy {
-                        ProgressView().controlSize(.small).scaleEffect(0.8)
-                            .frame(width: 14, height: 14)
-                            .accessibilityLabel("Syncing quota online")
-                            .accessibilityIdentifier("monitor.quotaProgress")
-                    }
-                    Spacer()
-                    if let plan = store.quota.account?.planDisplayName {
-                        Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .tracking(0.5).lineLimit(1).help(plan)
-                            .padding(.horizontal, 7).padding(.vertical, 4)
-                            .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
-                    }
-                    MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
-                        HStack(spacing: 7) {
-                            if let next = store.nextCalibrationAt, next > now {
-                                Text(L10n.text("Sync after \(next.formatted(date: .omitted, time: .standard))"))
-                                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                            }
-                            Button { Task { await store.calibrateQuota() } } label: {
-                                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.primary).frame(width: 18, height: 18)
-                            }
-                            .modifier(MonitorActionStyle())
-                            .help("Sync quota online")
-                            .accessibilityLabel("Sync quota")
-                            .accessibilityIdentifier("monitor.calibrate")
-                            .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
+            HStack(spacing: 7) {
+                sectionTitle("Account quota")
+                    .help(store.runningTasks.isEmpty ? L10n.text("Auto sync every hour while idle") : L10n.text("Auto sync every minute while tasks run"))
+                if let plan = store.quota.account?.planDisplayName {
+                    Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .tracking(0.5).lineLimit(1).help(plan)
+                        .padding(.horizontal, 7).padding(.vertical, 4)
+                        .background(.primary.opacity(0.08), in: Capsule()).foregroundStyle(.secondary)
+                }
+                if store.quotaBusy {
+                    ProgressView().controlSize(.small).scaleEffect(0.8)
+                        .frame(width: 14, height: 14)
+                        .accessibilityLabel("Syncing quota online")
+                        .accessibilityIdentifier("monitor.quotaProgress")
+                }
+                Spacer()
+                MonitorTimeline(interval: 1, enabled: store.nextCalibrationAt != nil, deadline: store.nextCalibrationAt) { now in
+                    HStack(spacing: 7) {
+                        if let next = store.nextCalibrationAt, next > now {
+                            Text(L10n.text("Sync after \(next.formatted(date: .omitted, time: .standard))"))
+                                .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
                         }
+                        MonitorActionButton(systemName: "arrow.clockwise", label: L10n.text("Sync quota"),
+                                            help: L10n.text("Sync quota online"), identifier: "monitor.calibrate") {
+                            Task { await store.calibrateQuota() }
+                        }
+                        .disabled(store.quotaBusy || store.nextCalibrationAt.map { now < $0 } == true)
                     }
                 }
-                ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
-                if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
-                    let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
-                        if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
-                    }
-                    ForEach(bucketIDs, id: \.self) { id in
-                        let windows = snapshot.windows.filter { $0.bucketID == id }
-                        VStack(alignment: .leading, spacing: 10) {
+            }
+            ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
+            if let snapshot = store.quota.snapshot, !snapshot.windows.isEmpty {
+                let bucketIDs = snapshot.windows.reduce(into: [String]()) { ids, window in
+                    if !ids.contains(window.bucketID) { ids.append(window.bucketID) }
+                }
+                ForEach(bucketIDs, id: \.self) { id in
+                    let windows = snapshot.windows.filter { $0.bucketID == id }
+                    VStack(alignment: .leading, spacing: 10) {
+                        if id != "codex" {
                             Text(windows.first?.bucketName ?? id)
                                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
-                            VStack(spacing: 12) {
-                                ForEach(windows) { window in
-                                    if window.id != windows.first?.id {
-                                        Divider().accessibilityHidden(true)
-                                    }
-                                    QuotaWindowView(window: window)
-                                }
-                            }
-                            Text(L10n.text("\(snapshot.source(for: id) == .local ? L10n.text("Local snapshot") : L10n.text("Online sync")) · \(snapshot.recordedAt(for: id).formatted(date: .abbreviated, time: .standard))"))
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
                         }
-                        .padding(14).monitorCard()
+                        VStack(spacing: 12) {
+                            ForEach(windows) { window in
+                                if window.id != windows.first?.id {
+                                    Divider().accessibilityHidden(true)
+                                }
+                                QuotaWindowView(window: window)
+                            }
+                        }
                     }
-                } else if store.quotaBusy {
-                    HStack(spacing: 9) {
-                        ProgressView().controlSize(.small)
-                        Text("Syncing quota online…").font(.system(size: 12)).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, minHeight: 56).monitorCard()
-                } else {
-                    Text("No local quota records").font(.system(size: 12)).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
+                    .padding(14).monitorCard()
                 }
-                if let warning = store.localQuotaWarning { notice(warning) }
-                if let error = store.quota.error { notice(error) }
+            } else if store.quotaBusy {
+                HStack(spacing: 9) {
+                    ProgressView().controlSize(.small)
+                    Text("Syncing quota online…").font(.system(size: 12)).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, minHeight: 56).monitorCard()
+            } else {
+                Text("No online quota data").font(.system(size: 12)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
             }
+            if let error = store.quota.error { notice(error) }
         }
-    }
-
-    private func customModelCard(name: String) -> some View {
-        Label(L10n.text("Custom model \(name) in use. ChatGPT quotas and reset credits do not apply."), systemImage: "info.circle")
-            .font(.system(size: 12)).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 14).monitorCard()
     }
 
     private var tasksSection: some View {
         let groups = TaskGroup.make(tasks: store.tasks, ancestors: store.taskAncestors)
-        let tasksByID = Dictionary(store.tasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let runningGroups = groups.filter(\.isRunning)
         let unknownGroups = groups.filter { !$0.isRunning }
-        // Source labels appear only when both backends are visible, so the
-        // single-backend layout is pixel-identical to before.
-        let splitByBackend = Set(groups.map { $0.backend(tasksByID: tasksByID) }).count > 1
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 sectionTitle("Running tasks")
+                    .help(L10n.text("Checks every \(store.pollingSeconds) seconds"))
+                    .accessibilityValue(L10n.text("Checks every \(store.pollingSeconds) seconds"))
                 Text("\(store.runningTasks.count)")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
                     .foregroundStyle(.primary).padding(.horizontal, 7).padding(.vertical, 3)
                     .background(.primary.opacity(0.08), in: Capsule())
                 if store.tasksBusy {
@@ -231,65 +200,56 @@ struct MonitorPanel: View {
                         .accessibilityIdentifier("monitor.tasksProgress")
                 }
                 Spacer()
-                PollingInfoView(seconds: store.pollingSeconds)
-                Button { Task { await store.refreshAll() } } label: {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary).frame(width: 18, height: 18)
+                MonitorActionButton(systemName: "arrow.clockwise", label: L10n.text("Refresh"),
+                                    help: L10n.text("Refresh local tasks"), identifier: "monitor.refresh") {
+                    Task { await store.refreshAll() }
                 }
-                .modifier(MonitorActionStyle())
-                .help("Refresh local tasks and quota snapshots")
-                .accessibilityLabel("Refresh")
-                .accessibilityIdentifier("monitor.refresh")
                 .disabled(store.tasksBusy)
             }
             .zIndex(1)
             if store.runningTasks.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: !store.hasTaskSnapshot ? "ellipsis" : "checkmark.circle")
+                    Image(systemName: !store.sourceDetectionFinished ? "ellipsis" : "checkmark.circle")
                         .font(.system(size: 20, weight: .light)).foregroundStyle(.tertiary)
-                    Text(!store.hasTaskSnapshot && store.taskError == nil ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks"))
+                    Text(store.noSourcesFound
+                         ? L10n.text("No local Codex or dsh data found. Choose a data directory in Settings.")
+                         : (!store.sourceDetectionFinished && !store.hasSourceWarning ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks")))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
-            } else if splitByBackend {
-                backendCards("Codex", backend: .codex, groups: runningGroups, tasksByID: tasksByID)
-                backendCards("dsh", backend: .dsh, groups: runningGroups, tasksByID: tasksByID)
             } else {
-                ForEach(runningGroups) { group in
-                    TaskGroupCard(group: group, expansion: expandedBinding)
-                }
+                projectCards(groups: runningGroups, unknown: false)
             }
             if !unknownGroups.isEmpty {
                 DisclosureGroup(isExpanded: $showUnknown) {
                     VStack(spacing: 10) {
                         Text("These sessions have not ended, but no running process could be confirmed. They are excluded from the running count.")
                             .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                        if splitByBackend {
-                            backendCards("Codex", backend: .codex, groups: unknownGroups, tasksByID: tasksByID)
-                            backendCards("dsh", backend: .dsh, groups: unknownGroups, tasksByID: tasksByID)
-                        } else {
-                            ForEach(unknownGroups) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
-                        }
+                        projectCards(groups: unknownGroups, unknown: true)
                     }.padding(.top, 10)
                 } label: {
                     Label(L10n.text("Unconfirmed status · \(unknownGroups.reduce(0) { $0 + $1.unknownCount })"), systemImage: "questionmark.circle")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
                 }
             }
+            if store.codexHasNoTaskData {
+                Text("Codex has no task data yet.").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            if let warning = store.codexServiceWarning { notice(warning) }
             if let error = store.taskError { notice(error) }
             if let warning = store.taskWarning { notice(warning.message) }
             if let warning = store.dshWarning { notice(warning) }
         }
     }
 
-    @ViewBuilder
-    private func backendCards(_ title: String, backend: TaskBackend, groups: [TaskGroup],
-                              tasksByID: [String: TaskSnapshot]) -> some View {
-        let filtered = groups.filter { $0.backend(tasksByID: tasksByID) == backend }
-        if !filtered.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                VStack(spacing: 12) {
-                    ForEach(filtered) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
+    private func projectCards(groups: [TaskGroup], unknown: Bool) -> some View {
+        let projects = TaskProjectGroup.make(groups: groups)
+        return VStack(alignment: .leading, spacing: 20) {
+            ForEach(projects) { project in
+                VStack(alignment: .leading, spacing: 8) {
+                    TaskProjectHeader(project: project, unknown: unknown)
+                    VStack(spacing: 12) {
+                        ForEach(project.groups) { group in TaskGroupCard(group: group, expansion: expandedBinding) }
+                    }
                 }
             }
         }
@@ -300,50 +260,14 @@ struct MonitorPanel: View {
             if let release = updates?.availableRelease {
                 HStack(spacing: 8) {
                     Text(L10n.text("New version available: \(release.version)"))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 11, weight: .medium)).monospacedDigit()
                     Spacer(minLength: 4)
                     UpdateDownloadLink(release: release).font(.system(size: 11))
                 }
                 .padding(.horizontal, 16).padding(.vertical, 10)
                 .accessibilityIdentifier("updates.banner")
-                Divider()
             }
-            footerActions
         }
-    }
-
-    private var footerActions: some View {
-        HStack(spacing: 8) {
-            Label("Local tasks · Quota snapshots", systemImage: "desktopcomputer")
-                .font(.system(size: 11)).lineLimit(1)
-            Spacer(minLength: 0)
-            MonitorGlassGroup {
-                HStack(spacing: 8) {
-                    Button { openDashboard?() } label: {
-                        Image(systemName: "chart.bar").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.primary).frame(width: 18, height: 18)
-                    }
-                    .modifier(MonitorActionStyle())
-                    .help("Task statistics").accessibilityLabel("Task statistics")
-                    .accessibilityIdentifier("monitor.dashboard")
-                    Button { openSettings?() } label: {
-                        Image(systemName: "gearshape").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.primary).frame(width: 18, height: 18)
-                    }
-                    .modifier(MonitorActionStyle())
-                    .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
-                    .help("Settings").accessibilityLabel("Settings")
-                    .accessibilityIdentifier("monitor.settings")
-                    Button { NSApplication.shared.terminate(nil) } label: {
-                        Image(systemName: "power").font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.primary).frame(width: 18, height: 18)
-                    }
-                    .modifier(MonitorActionStyle())
-                    .help("Quit Veyra").accessibilityLabel("Quit")
-                    .accessibilityIdentifier("monitor.quit")
-                }
-            }
-        }.foregroundStyle(.secondary).padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     private func sectionTitle(_ title: LocalizedStringKey) -> some View {
@@ -355,57 +279,107 @@ struct MonitorPanel: View {
     }
 }
 
-private struct PollingInfoView: View {
-    let seconds: Int
-    @State private var isHovered = false
-    @Environment(\.monitorPanelActive) private var panelActive
-
-    private var tooltip: String { L10n.text("Checks every \(seconds) seconds") }
+private struct TaskProjectHeader: View {
+    let project: TaskProjectGroup
+    let unknown: Bool
 
     var body: some View {
-        Image(systemName: "info.circle")
-            .font(.system(size: 13)).foregroundStyle(.secondary)
-            .frame(width: 22, height: 22)
-            .contentShape(Rectangle())
-            .onHover { isHovered = $0 }
-            .accessibilityLabel("Automatic check interval")
-            .accessibilityValue(tooltip)
-            .accessibilityIdentifier("monitor.pollingInfo")
-            .overlay(alignment: .topTrailing) {
-                if isHovered {
-                    Text(tooltip)
-                        .font(.system(size: 11)).foregroundStyle(.primary)
-                        .padding(.horizontal, 8).padding(.vertical, 5)
-                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 5)
-                                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
-                        }
-                        .fixedSize()
-                        .offset(y: 26)
-                        .allowsHitTesting(false)
-                        .accessibilityIdentifier("monitor.pollingTooltip")
+        let summary = project.counts(for: unknown ? .unknown : .running).summary
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(verbatim: project.title)
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
+                .lineLimit(1).truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .trailing, spacing: 2) {
+                if unknown { Text("Unconfirmed") }
+                Text(verbatim: summary).monospacedDigit()
+            }
+            .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
+        }
+        .help(([project.title] + (project.project?.roots ?? [])).joined(separator: "\n"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(unknown
+            ? L10n.text("\(project.title) · \(project.unknownCount) unconfirmed tasks")
+            : L10n.text("\(project.title) · \(project.runningCount) running tasks"))
+        .accessibilityValue(summary)
+        .accessibilityIdentifier("monitor.project.\(project.id).\(unknown ? "unknown" : "running")")
+    }
+}
+
+private struct MonitorPanelHeader: View {
+    let hasTaskError: Bool
+    var detecting = false
+    var profiles: CodexModelProfilesStore?
+    let openSettings: () -> Void
+    let openModelProfiles: () -> Void
+    let closeMenu: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 11) {
+                VeyraIcon(size: 28)
+                VeyraWordmark(width: 56)
+                Spacer()
+                MonitorPanelActions(openSettings: openSettings)
+            }
+            HStack(spacing: 12) {
+                HStack(spacing: 5) {
+                    Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Circle().fill(hasTaskError ? .orange : (detecting ? .secondary : monitorAccent)).frame(width: 5, height: 5)
+                        .accessibilityHidden(true)
+                    Text("Local activity").foregroundStyle(.secondary)
+                }
+                .font(.system(size: 11)).fixedSize()
+                if let profiles {
+                    ModelProfileQuickSwitch(profiles: profiles, manage: openModelProfiles,
+                                            closeMenu: closeMenu, showsNotice: false)
+                } else {
+                    Spacer(minLength: 0)
                 }
             }
-            .onChange(of: panelActive) { _, active in
-                if !active { isHovered = false }
+            .frame(minHeight: 32)
+            if let profiles, profiles.error != nil || profiles.configurationReloadError != nil || profiles.message != nil || profiles.snapshot?.overridden == true {
+                ModelProfilesNotice(profiles: profiles)
             }
-            .onDisappear { isHovered = false }
+        }
+        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
+    }
+}
+
+private struct MonitorPanelActions: View {
+    let openSettings: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            MonitorActionButton(systemName: "gearshape", label: L10n.text("Settings"),
+                                help: L10n.text("Settings"), identifier: "monitor.settings") {
+                NSApp.activate(ignoringOtherApps: true)
+                openSettings()
+            }
+            MonitorActionButton(systemName: "power", label: L10n.text("Quit Veyra"),
+                                help: L10n.text("Quit Veyra"), identifier: "monitor.quit") {
+                NSApplication.shared.terminate(nil)
+            }
+        }
+        .foregroundStyle(.secondary)
     }
 }
 
 private struct QuotaWindowView: View {
     let window: QuotaWindow
+    @Environment(\.locale) private var locale
     @Environment(\.monitorReferenceDate) private var referenceDate
 
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(window.durationTitle)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: .medium)).monospacedDigit()
                 resetLabel
             }
             .fixedSize(horizontal: false, vertical: true)
+            .frame(minHeight: 56, alignment: .top)
             Spacer(minLength: 0)
             QuotaRingView(remainingPercent: window.remainingPercent)
         }
@@ -417,13 +391,13 @@ private struct QuotaWindowView: View {
         Group {
             if let reset = window.resetsAt {
                 MonitorTimeline(interval: 30) { now in
-                    Text(reset > (referenceDate ?? now) ? L10n.text("Resets \(reset.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))") : L10n.text("Reset due · Awaiting update"))
+                    Text(reset > (referenceDate ?? now) ? L10n.text("Resets \(reset.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(locale)))") : L10n.text("Reset due · Awaiting update"))
                 }
             } else {
                 Text("Reset time unavailable")
             }
         }
-        .font(.system(size: 11)).foregroundStyle(.secondary)
+        .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
     }
 }
 
@@ -469,7 +443,8 @@ private struct TaskGroupCard: View {
                 }
                 Group {
                     if let task = row.task {
-                        TaskRow(task: task, parentTitle: row.parentTitle, expanded: expansion(task.id))
+                        TaskRow(task: task, isSubagent: row.isSubagent,
+                                expanded: expansion(task.id))
                     } else {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(row.reference.title).font(.system(size: 13, weight: .semibold))
@@ -483,6 +458,7 @@ private struct TaskGroupCard: View {
                 }
                 .padding(14).padding(.leading, indent)
                 .accessibilityElement(children: .contain)
+                .accessibilityLabel(row.parentTitle.map { L10n.text("\(row.reference.title), from \($0)") } ?? row.reference.title)
                 .accessibilityIdentifier("monitor.task.\(row.id)")
             }
         }
@@ -494,128 +470,300 @@ private struct TaskGroupCard: View {
 
 private struct TaskRow: View {
     let task: TaskSnapshot
-    let parentTitle: String?
+    let isSubagent: Bool
     @Binding var expanded: Bool
-    @Environment(\.monitorReferenceDate) private var referenceDate
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            TaskIdentityHeader(title: task.title, path: task.agentPath,
+                               source: isSubagent ? TaskText.subagentBadge(nickname: task.agentNickname) : task.sourceLabel,
+                               sourceIcon: isSubagent ? "arrow.triangle.branch" : task.source.iconName,
+                               model: task.model, activity: task.activity, startedAt: task.startedAt)
+            if let progress = task.progress { TaskProgressSection(progress: progress) }
+            if expanded, let role = TaskText.nonempty(task.agentRole) {
+                Text(L10n.text("\(L10n.text("Role")): \(role)"))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+            TaskTokenSummary(taskID: task.id, title: task.title, tokens: task.tokens,
+                             isSubagent: isSubagent, expanded: $expanded)
+                .padding(.top, 4)
+            if expanded {
+                TaskTokenDetails(taskID: task.id, tokens: task.tokens)
+                    .padding(.top, 4)
+            }
+        }
+    }
+}
+
+private struct TaskIdentityHeader: View {
+    let title: String
+    let path: String?
+    let source: String
+    let sourceIcon: String
+    let model: String?
+    let activity: TaskActivity
+    let startedAt: Date?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true).help(task.title)
-                    HStack(spacing: 6) {
-                        TaskBadge(task.sourceLabel, systemImage: task.source.iconName).fixedSize()
-                        TaskBadge(task.model ?? L10n.text("Unknown model"), systemImage: "sparkles")
-                            .lineLimit(1).help(task.model ?? "")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true).help(title)
+                    if let path = TaskText.nonempty(path) {
+                        Text(path).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle).help(path)
+                            .accessibilityLabel(L10n.text("Task path: \(path)"))
                     }
                 }
-                Spacer(minLength: 0)
-                Circle().fill(task.activity == .running ? monitorAccent : .orange).frame(width: 6, height: 6).padding(.top, 5)
-                    .accessibilityLabel(task.activity == .running ? L10n.text("Running") : L10n.text("Unconfirmed status"))
-            }
-            if let progress = task.progress {
-                Text(L10n.text("\(progress.label): \(progress.text)"))
-                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true).help(L10n.text("\(progress.label): \(progress.text)"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Circle().fill(activity == .running ? monitorAccent : .orange)
+                    .frame(width: 6, height: 6).padding(.top, 5)
+                    .accessibilityLabel(activity == .running ? L10n.text("Running") : L10n.text("Unconfirmed status"))
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
-                    activitySummary.fixedSize()
-                    Spacer(minLength: 4)
-                    tokenButton.fixedSize()
+                    TaskIdentityBadges(source: source, sourceIcon: sourceIcon, model: model).fixedSize()
+                    Spacer(minLength: 0)
+                    TaskElapsedTime(activity: activity, startedAt: startedAt).fixedSize()
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    activitySummary
-                    tokenButton.frame(maxWidth: .infinity, alignment: .trailing)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if expanded {
-                Divider()
-                if parentTitle != nil || task.agentPath != nil || task.agentNickname != nil || task.agentRole != nil {
-                    VStack(alignment: .leading, spacing: 4) {
-                        contextLine(L10n.text("From"), value: parentTitle)
-                        contextLine(L10n.text("Task path"), value: task.agentPath)
-                        contextLine(L10n.text("Agent"), value: task.agentNickname)
-                        contextLine(L10n.text("Role"), value: task.agentRole)
-                    }
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Divider()
-                }
-                VStack(spacing: 6) {
-                    tokenLine("Input", value: task.tokens.input)
-                    tokenLine("Cached input (included)", value: task.tokens.cachedInput,
-                              percent: task.tokens.cachedInputPercent)
-                    tokenLine("Output", value: task.tokens.output)
-                    tokenLine("Reasoning output (included)", value: task.tokens.reasoningOutput)
-                    tokenLine("Total usage", value: task.tokens.total)
-                    Text("Cached input and reasoning output are included in the totals.")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 5) {
+                    TaskIdentityBadges(source: source, sourceIcon: sourceIcon, model: model)
+                    TaskElapsedTime(activity: activity, startedAt: startedAt)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
         }
     }
+}
 
-    @ViewBuilder private func contextLine(_ label: String, value: String?) -> some View {
-        if let value {
-            Text(L10n.text("\(label): \(value)")).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+private struct TaskIdentityBadges: View {
+    let source: String
+    let sourceIcon: String
+    let model: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TaskBadge(source, systemImage: sourceIcon)
+                .lineLimit(1).truncationMode(.tail).help(source)
+                .accessibilityLabel(source)
+            TaskBadge(model ?? L10n.text("Unknown model"), systemImage: "sparkles")
+                .lineLimit(1).truncationMode(.tail).help(model ?? L10n.text("Unknown model"))
         }
     }
+}
 
-    private var activitySummary: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            elapsedTime
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) { inputTokens; outputTokens }
-                VStack(alignment: .leading, spacing: 3) { inputTokens; outputTokens }
-            }
-            .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
-        }
-    }
+private struct TaskElapsedTime: View {
+    let activity: TaskActivity
+    let startedAt: Date?
+    @Environment(\.monitorReferenceDate) private var referenceDate
 
-    private var inputTokens: some View { Text(L10n.text("Input \(DisplayFormat.tokens(task.tokens.input))")) }
-    private var outputTokens: some View { Text(L10n.text("Output \(DisplayFormat.tokens(task.tokens.output))")) }
-
-    private var elapsedTime: some View {
+    var body: some View {
         Group {
-            if task.activity == .running {
+            if activity == .running {
                 MonitorTimeline(interval: 1) { now in
-                    Label(DisplayFormat.duration(since: task.startedAt, now: referenceDate ?? now), systemImage: "clock")
+                    Label(DisplayFormat.duration(since: startedAt, now: referenceDate ?? now), systemImage: "clock")
                 }
             } else { Label("Unknown status", systemImage: "clock") }
-        }.font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+        }
+        .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+    }
+}
+
+private struct TaskProgressSection: View {
+    let progress: TaskProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(progress.label).font(.system(size: 11, weight: .medium))
+            Text(progress.text).font(.system(size: 11)).foregroundStyle(.secondary)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(progress.text)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("\(progress.label): \(progress.text)"))
+    }
+}
+
+private struct TaskTokenSummary: View {
+    let taskID: String
+    let title: String
+    let tokens: TokenUsage
+    let isSubagent: Bool
+    @Binding var expanded: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "cylinder")
+            Text(isSubagent ? L10n.text("Subtask tokens") : L10n.text("Task tokens"))
+                .font(.system(size: 11, weight: .medium))
+            Spacer(minLength: 4)
+            Text(DisplayFormat.tokens(tokens.total.flatMap { $0 >= 0 ? $0 : nil }))
+                .font(.system(size: 14, weight: .medium)).monospacedDigit().fixedSize()
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 22)
+        .accessibilityHidden(true)
+        .overlay {
+            TaskTokenDisclosure(identifier: "monitor.tokens.\(taskID)",
+                label: L10n.text("\(title), total token breakdown"),
+                value: L10n.text("\(TaskTokenText.totalHelp(tokens)), \(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))"),
+                help: TaskTokenText.totalHelp(tokens)) { expanded.toggle() }
+        }
+    }
+}
+
+/// Use the same SwiftUI-label/native-focus pattern as the provider menu entry.
+private struct TaskTokenDisclosure: NSViewRepresentable {
+    let identifier: String
+    let label: String
+    let value: String
+    let help: String
+    var action: @MainActor () -> Void
+
+    @MainActor final class Coordinator: NSObject {
+        var action: @MainActor () -> Void
+        init(action: @escaping @MainActor () -> Void) { self.action = action }
+        @objc func invoke() { action() }
     }
 
-    private var tokenButton: some View {
-        Button { expanded.toggle() } label: {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("Total tokens").font(.system(size: 11)).foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(DisplayFormat.tokens(task.tokens.total))
-                        .font(.system(size: 20, weight: .semibold, design: .rounded)).monospacedDigit()
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+    func makeNSView(context: Context) -> TaskTokenNativeButton {
+        let button = TaskTokenNativeButton(title: "", target: context.coordinator, action: #selector(Coordinator.invoke))
+        button.isBordered = false
+        button.isTransparent = true
+        button.focusRingType = .exterior
+        return button
+    }
+    func updateNSView(_ button: TaskTokenNativeButton, context: Context) {
+        context.coordinator.action = action
+        button.setAccessibilityIdentifier(identifier)
+        button.setAccessibilityLabel(label)
+        button.spokenValue = value
+        button.toolTip = help
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: TaskTokenNativeButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? PanelSizing.width - 60, height: proposal.height ?? 22)
+    }
+}
+
+private final class TaskTokenNativeButton: NSButton {
+    var spokenValue = ""
+    override var acceptsFirstResponder: Bool { true }
+    override func accessibilityValue() -> Any? { spokenValue }
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 49 || event.keyCode == 36 {
+            if !event.isARepeat { performClick(nil) }
+        } else { super.keyDown(with: event) }
+    }
+}
+
+private struct TaskTokenDetails: View {
+    let taskID: String
+    let tokens: TokenUsage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TaskCacheShare(percent: tokens.cachedInputPercent)
+            VStack(spacing: 6) {
+                TaskTokenDetailLine(label: "Cache read", value: tokens.cachedInput)
+                TaskTokenDetailLine(label: "Uncached input", value: tokens.uncachedInput)
+                TaskOutputDetailLine(tokens: tokens)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("monitor.token-details.\(taskID)")
+    }
+}
+
+private struct TaskCacheShare: View {
+    let percent: Double?
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.monitorPreviewContrast) private var previewContrast
+
+    private var value: String {
+        percent.map { $0.formatted(.number.precision(.fractionLength(1))) + "%" } ?? "—"
+    }
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack {
+                Text("Input cache share").foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Text(value).monospacedDigit()
+            }
+            .font(.system(size: 11))
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.primary.opacity(0.08))
+                    if let percent, percent > 0 {
+                        Capsule().fill(Color(nsColor: .systemBlue))
+                            .frame(width: geometry.size.width * min(100, max(0, percent)) / 100)
+                    }
+                }
+                .overlay {
+                    if (previewContrast ?? contrast) == .increased {
+                        Capsule().strokeBorder(.secondary, lineWidth: 1)
+                    }
                 }
             }
-            .contentShape(Rectangle())
-        }.buttonStyle(.plain).help("View total token breakdown")
-        .accessibilityLabel(L10n.text("\(task.title), total token breakdown"))
-        .accessibilityValue(tokenAccessibilityValue)
-        .accessibilityIdentifier("monitor.tokens.\(task.id)")
+            .frame(height: 4)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("Input cache share"))
+        .accessibilityValue(value)
     }
+}
 
-    private var tokenAccessibilityValue: String {
-        let usage = task.tokens.total.map { L10n.text("\(DisplayFormat.tokens($0)) tokens total") } ?? L10n.text("Total usage unavailable")
-        return L10n.text("\(usage), \(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))")
-    }
+private struct TaskTokenDetailLine: View {
+    let label: LocalizedStringKey
+    let value: Int64?
 
-    private func tokenLine(_ label: LocalizedStringKey, value: Int64?, percent: Double? = nil) -> some View {
-        let suffix = percent.map { " (\($0.formatted(.number.precision(.fractionLength(1))))%)" } ?? ""
-        return HStack {
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(label).foregroundStyle(.secondary)
-            Spacer()
-            Text((value.map { $0.formatted() } ?? "—") + suffix).monospacedDigit()
-        }.font(.system(size: 11))
+            Spacer(minLength: 0)
+            Text(TaskTokenText.count(value)).monospacedDigit().fixedSize()
+        }
+        .font(.system(size: 11))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct TaskOutputDetailLine: View {
+    let tokens: TokenUsage
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("Output (reasoning)").foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            TaskOutputNumbers(output: TaskTokenText.count(tokens.output),
+                              reasoning: L10n.text("(\(TaskTokenText.count(tokens.includedReasoningOutput)))"))
+        }
+        .font(.system(size: 11))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(TaskTokenText.outputAccessibility(tokens))
+    }
+}
+
+private struct TaskOutputNumbers: View {
+    let output: String
+    let reasoning: String
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 3) {
+                Text(output).monospacedDigit()
+                Text(reasoning).foregroundStyle(.secondary).monospacedDigit()
+            }.fixedSize()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(output).monospacedDigit().fixedSize()
+                Text(reasoning).foregroundStyle(.secondary).monospacedDigit().fixedSize()
+            }
+        }
     }
 }
 
@@ -659,6 +807,7 @@ private extension View {
 private struct ResetCreditsCard: View {
     let snapshot: ResetCreditsSnapshot?
     let isLoading: Bool
+    @Environment(\.locale) private var locale
 
     var body: some View {
         MonitorTimeline(interval: 1, enabled: snapshot?.credits.contains { $0.expiresAt != nil } == true) { now in
@@ -677,6 +826,7 @@ private struct ResetCreditsCard: View {
                             Text(L10n.resetCount(Int64(group.count))).monospacedDigit().fixedSize()
                             Spacer(minLength: 0)
                             expiryLabel(group, at: now)
+                                .monospacedDigit()
                                 .multilineTextAlignment(.trailing)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -688,7 +838,6 @@ private struct ResetCreditsCard: View {
                     } else if snapshot.hasIncompleteDetails {
                         detail(L10n.text("Some expiry details are unavailable"))
                     }
-                    detail(L10n.text("Last online sync · \(snapshot.fetchedAt.formatted(date: .abbreviated, time: .standard))"))
                 } else {
                     detail(isLoading ? L10n.text("Syncing online…") : L10n.text("Sync quota to view"))
                 }
@@ -702,8 +851,8 @@ private struct ResetCreditsCard: View {
     @ViewBuilder
     private func expiryLabel(_ group: ResetCreditsSnapshot.ExpiryGroup, at now: Date) -> some View {
         if let expiry = group.expiresAt {
-            Text(group.isExpired(at: now) ? L10n.text("Expired · Sync needed") : L10n.text("Expires \(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute()))"))
-                .help(L10n.text("Expires: \(expiry.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute().second()))"))
+            Text(group.isExpired(at: now) ? L10n.text("Expired · Sync needed") : L10n.text("Expires \(expiry.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(locale)))"))
+                .help(L10n.text("Expires: \(expiry.formatted(Date.FormatStyle(date: .abbreviated, time: .standard).locale(locale)))"))
         } else {
             Text("Unknown expiry")
         }

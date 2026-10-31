@@ -3,6 +3,7 @@ import Foundation
 /// No server response bodies or credentials are persisted in test results.
 enum ProviderConnectionFailure: String, Codable, Error, LocalizedError, Sendable {
     case authentication, network, timeout, rateLimited, server, incompatible, inconclusive
+    var blocksApply: Bool { self == .authentication || self == .incompatible }
     var errorDescription: String? {
         switch self {
         case .authentication: L10n.text("Authentication failed. Check the saved Key.")
@@ -13,6 +14,15 @@ enum ProviderConnectionFailure: String, Codable, Error, LocalizedError, Sendable
         case .incompatible: L10n.text("This endpoint does not support the Responses protocol required by Codex.")
         case .inconclusive: L10n.text("Responses compatibility could not be confirmed. Check the provider documentation.")
         }
+    }
+}
+
+extension ProviderSettings {
+    var blockingConnectionFailure: ProviderConnectionFailure? {
+        guard protocolName == "responses" else { return .incompatible }
+        guard let connectivity, connectivity.matches(self),
+              let failure = connectivity.failure, failure.blocksApply else { return nil }
+        return failure
     }
 }
 

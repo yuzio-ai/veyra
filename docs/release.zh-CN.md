@@ -19,7 +19,7 @@
 | commit、push、创建并推送标签 | Codex，也可由我执行 | 明确授权这些动作，并给出目标分支及标签名 |
 | GitHub 创建草稿、上传附件、发布 Release | 我默认手动执行 | 如果交给 Codex，明确仓库、标签、附件，以及只存草稿还是正式发布 |
 
-一次请求可以授权多个连续动作，例如“清理签名配置、commit、push main，并创建推送 v1.1.0 标签”。Codex 在完成检查后执行，不需要每一步再次确认。仅要求写文档、检查或打包，不代表授权推送或公开发布；创建草稿也不等于授权发布。
+一次请求可以授权多个连续动作，例如“清理签名配置、commit、push main，并创建推送 v1.4.0 标签”。Codex 在完成检查后执行，不需要每一步再次确认。仅要求写文档、检查或打包，不代表授权推送或公开发布；创建草稿也不等于授权发布。
 
 本机工具若出现文件访问、网络或钥匙串权限弹窗，这是执行环境的权限要求。若被自动审批拦截，Codex 应说明被拦截的具体操作和原因，并继续完成未受阻的工作。
 
@@ -45,8 +45,8 @@
 
 ### 3.1 我先确定发布信息
 
-- 确定版本，例如 `1.1.0`，对应新标签 `v1.1.0`。
-- 确定构建号，例如 `2`；重新发布修正版时递增构建号，不覆盖已经公开的旧版本。
+- 确定版本，例如 `1.4.0`，对应新标签 `v1.4.0`。
+- 确定构建号，在当前构建号基础上递增；不覆盖已经公开的旧版本。
 - 确定本次发布包含哪些改动，完成基本界面验收。
 - 确认 Apple Developer Program 会员资格有效，本机 Xcode 可访问团队，以及带有匹配私钥的 Developer ID Application 证书。账号配置通常只需首次或证书更新时处理。
 
@@ -56,14 +56,26 @@
 
 更新 target build settings 中的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`（General 标签页或直接编辑 `project.pbxproj`）；标准 Info.plist key 由 Xcode 生成，`Info.plist` 只保留特殊 key，不再写入版本号。版本必须在 Archive 前确定。
 
-在尚未配置本次本机签名身份时运行检查：
+在创建发布标签前生成并填写双语发布说明，将其与发布源码一同提交。以下 `1.4.0` 为示例版本；删除未使用的小节和所有写作提示后运行检查器：
 
 ```sh
-VEYRA_DERIVED_DATA_PATH=/tmp/veyra-release-tests ./scripts/test.sh
-./scripts/build.sh
+scripts/render-release-notes.sh 1.4.0
+# 编辑 docs/releases/v1.4.0.md
+scripts/check-release-notes.sh docs/releases/v1.4.0.md
 ```
 
-测试脚本运行 XCTest 和诊断集成检查。检查实际菜单栏在中英文、深浅色、辅助显示选项及滚动场景下的表现，具体命令见[开发检查](development.zh-CN.md#开发检查)。普通 Release 构建用于验证源码；最终上传的是后续从 Organizer 导出的公证 App。
+正文格式及附件名遵循[发布说明规范](release-notes-convention.md)，不另写独立模板。
+
+尚未配置本机签名身份时，先执行无签名源码验证：
+
+```sh
+VEYRA_DERIVED_DATA_PATH=/tmp/veyra-release-tests ./scripts/test.sh --unsigned
+./scripts/build.sh --unsigned
+```
+
+Codex 自动化会话使用[固定验证入口](development.zh-CN.md#codex-固定验证入口)的 `test` 和 `release-build`，它们同样采用无签名构建。需要本机签名验证时，先在未入库的 `Local.xcconfig` 配置开发团队，再运行不带 `--unsigned` 的构建；独立钥匙串验收必须使用稳定签名产物。
+
+测试脚本运行 XCTest 和诊断集成检查。检查实际菜单栏在中英文、深浅色、辅助显示选项及滚动场景下的表现，具体命令见[开发检查](development.zh-CN.md#开发检查)。无签名 Release 仅用于源码与产物结构验证；最终上传的是后续从 Organizer 导出的公证 App。
 
 尽量在 Archive 前提交已确认的功能和版本改动，形成可追溯的源码基线；这一步由我执行，或明确授权 Codex commit。若当次仍有待提交源码，应记录归档时的差异，冻结功能、资源和版本，直到完成发布。
 
@@ -79,7 +91,7 @@ Bundle ID 是公开的应用标识，不是密码。更换它可能影响偏好�
 
 1. 打开 `Veyra.xcodeproj`，选择 `Veyra` scheme。
 2. 在 **Xcode → Settings → Accounts** 登录 Apple 开发者账号；已有有效登录时无需重复。
-3. 打开 **Veyra target → Signing & Capabilities**，核对 Team 与正式 Bundle ID（Team 通常已由 `Local.xcconfig` 提供）。可以让 Xcode 自动管理签名，按提示完成证书与钥匙串授权。若所选 Team 与 `Local.xcconfig` 不同，`DEVELOPMENT_TEAM` 会写回 `project.pbxproj`，发布完成后按第 6 节清理。
+3. 打开 **Veyra target → Signing & Capabilities**，只核对 Team 与正式 Bundle ID。Team 由未入库的 `Local.xcconfig` 提供；需要更换时修改该文件，不在 Signing 面板切换 Team，以免将 `DEVELOPMENT_TEAM` 写入 `project.pbxproj` 并覆盖 xcconfig。保留自动管理签名，按提示完成证书与钥匙串授权。
 4. 核对 App 的 Hardened Runtime 已开启、App Sandbox 关闭；不把发布签名要求套到 VeyraTests。
 5. 在 scheme 的 **Archive** 设置中确认使用 **Release** 配置，选择可用于 Mac 归档的运行目标。若提供 **Any Mac**，可选择它；最终是否为通用二进制仍以导出后架构检查为准。
 
@@ -103,7 +115,7 @@ Direct Distribution 用于 macOS App Store 外的 Developer ID 应用公证。[A
 | `Ready to distribute` | 本次分发已准备就绪，继续导出公证后的 App |
 | 失败或被拒绝 | 查看该次公证日志，修正原因并重新归档、提交 |
 
-在 Organizer 中使用 **Export Notarized App** 或当前 Xcode 提供的对应导出入口，保存到仓库外的独立目录，或被忽略的 `build/releases/v1.1.0/`。按钮名称可能随 Xcode 版本变化。等待时间不固定；该状态不表示已上传 GitHub，也不表示上架 App Store。
+在 Organizer 中使用 **Export Notarized App** 或当前 Xcode 提供的对应导出入口，保存到仓库外的独立目录，或被忽略的 `build/releases/v1.4.0/`。按钮名称可能随 Xcode 版本变化。等待时间不固定；该状态不表示已上传 GitHub，也不表示上架 App Store。
 
 保留 `.xcarchive`、dSYM 和导出记录用于本机排错。交给 Codex 的是最终导出的 `Veyra.app` 路径。后续清理源码文件不会改变已有归档或导出 App。
 
@@ -112,7 +124,7 @@ Direct Distribution 用于 macOS App Store 外的 Developer ID 应用公证。[A
 这一步我可以手动运行，也可以提供路径让 Codex 完成。上述检查已封装为 [`scripts/verify_release_app.sh`](../scripts/verify_release_app.sh)：
 
 ```sh
-./scripts/verify_release_app.sh /absolute/path/to/export/Veyra.app --zip build/releases/v1.1.0/Veyra-v1.1.0-macos-universal.zip
+./scripts/verify_release_app.sh /absolute/path/to/export/Veyra.app --zip build/releases/v1.4.0/Veyra.zip
 ```
 
 脚本核对版本、构建号、Bundle ID、类别、菜单栏模式、通用二进制、Developer ID 签名、Hardened Runtime、Gatekeeper 评估与公证票据；版本和构建号默认取自 `project.pbxproj`，可用 `--version`、`--build`、`--bundle-id` 显式指定。`--zip` 会在全部通过后打包并输出 SHA-256，校验失败时不打包。将下面路径替换成 Organizer 实际导出的位置：
@@ -134,18 +146,18 @@ xcrun stapler validate "$release_app"
 确认结果：
 
 - 版本、构建号和 Bundle ID 与本次发布计划一致，类别为 `public.app-category.developer-tools`。
-- 架构包含 `arm64` 和 `x86_64`，才使用 `macos-universal` 附件名称。
+- 架构包含 `arm64` 和 `x86_64`；公开附件统一命名为 `Veyra.zip`，版本保留在目录与 Release 标签中。
 - 签名验证成功；签名详情显示 `Developer ID Application`、预期团队和 `runtime` 标志。
 - Gatekeeper 评估通过，通常显示 `accepted` 与 `Notarized Developer ID`。
 - stapler 验证通过，表明 App 带有可供离线验证的公证票据。
 
 若票据缺失，先确认选择了公证成功的导出产物；必要时对该 App 执行 `xcrun stapler staple "$release_app"`，随后重新验证、打包。签名或公证失败时先排查，不能用关闭 Gatekeeper 的办法作为发布验收。[Apple：自定义公证工作流](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
 
-打包前运行导出的 App 检查菜单栏基本行为，并退出测试实例。确认没有把仍在运行的旧版本误认为新版本。
+打包前运行导出的 App 检查菜单栏基本行为，并退出测试实例。确认没有把仍在运行的旧版本误认为新版本。若未使用前述 `--zip` 选项，可在验证通过后手动打包；两种方式择一执行。
 
 ```sh
-mkdir -p build/releases/v1.1.0
-release_zip="$PWD/build/releases/v1.1.0/Veyra-v1.1.0-macos-universal.zip"
+mkdir -p build/releases/v1.4.0
+release_zip="$PWD/build/releases/v1.4.0/Veyra.zip"
 ditto -c -k --sequesterRsrc --keepParent "$release_app" "$release_zip"
 shasum -a 256 "$release_zip"
 ```
@@ -179,7 +191,7 @@ Codex 应按以下顺序处理：
 
 我可以一次授权：
 
-> 请检查并清理本机签名配置，保留本次发布的有效源码变更，commit、push 到 origin/main，并为确认后的发布提交创建和推送 v1.1.0 标签。不要创建或发布 GitHub Release。
+> 请检查并清理本机签名配置，保留本次发布的有效源码变更，commit、push 到 origin/main，并为确认后的发布提交创建和推送 v1.4.0 标签。不要创建或发布 GitHub Release。
 
 Codex 先检查远端和待推送提交，报告实际提交范围。已有明确授权时完成检查后继续执行；发现版本不一致、远端冲突或标签重名时先解决具体问题，不覆盖已发布的旧标签。
 
@@ -195,14 +207,14 @@ git log --oneline HEAD..origin/main
 git add -- REVIEWED_FILE
 git diff --cached --check
 git diff --cached
-git commit -m "fix: prepare v1.1.0 release"
+git commit -m "fix: prepare v1.4.0 release"
 git rev-parse HEAD
 
 git push origin main
-git tag -a v1.1.0 RELEASE_COMMIT_SHA -m "Veyra v1.1.0"
-git push origin v1.1.0
-git rev-parse 'v1.1.0^{commit}'
-git ls-remote origin refs/tags/v1.1.0 'refs/tags/v1.1.0^{}'
+git tag -a v1.4.0 RELEASE_COMMIT_SHA -m "Veyra v1.4.0"
+git push origin v1.4.0
+git rev-parse 'v1.4.0^{commit}'
+git ls-remote origin refs/tags/v1.4.0 'refs/tags/v1.4.0^{}'
 ```
 
 以上假定当前分支是已核对的 `main`，且远端不存在未整合提交。若前面已经提交完所有发布源码，不需要空提交。比较本地标签解析出的提交 SHA 与远端附注标签的 `^{}` 值，确认一致；分支 push 失败时不要继续发标签。
@@ -213,32 +225,18 @@ git ls-remote origin refs/tags/v1.1.0 'refs/tags/v1.1.0^{}'
 
 1. 打开 [Veyra Releases](https://github.com/yuzio-ai/veyra/releases)，点击 **Draft a new release**。
 2. 在 **Choose a tag** 选择第 7 节已经推送的新标签，核对对应提交。
-3. 填写标题，例如 `Veyra v1.1.0`，写明更新内容、macOS 14+、支持架构及安装方式。
+3. 标题与标签完全一致，例如 `v1.4.0`；正文使用第 3 节已生成并检查通过的 `docs/releases/v1.4.0.md`。
 4. 在二进制附件区域上传第 5 节验证过的 ZIP，等待上传完成；GitHub 自动生成的 **Source code** 压缩包是源码，不能代替 App 附件。
 5. 先保存草稿并检查附件、标签及说明；正式稳定版不勾选 **This is a pre-release**，需要时设置为最新版本。
 6. 确认无误后点击 **Publish release**。启用不可变 Release 的仓库应在发布前上传齐所有附件，因为发布后附件和标签会受到锁定保护。[GitHub：管理 Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)
 
-发布说明可用以下模板，检查通过后再声称已完成签名与公证：
-
-```markdown
-## Changes
-- 本次变更说明
-
-## Install
-Requires macOS 14 or later. Supports Apple Silicon and Intel Macs.
-Download Veyra-v1.1.0-macos-universal.zip, unzip it, and move Veyra.app
-to Applications. Veyra runs in the menu bar.
-
-Signed with Developer ID and notarized by Apple.
-
-SHA-256: 填写最终上传的 ZIP 校验值
-```
+发布说明以 [.github/RELEASE_NOTES_TEMPLATE.md](../.github/RELEASE_NOTES_TEMPLATE.md) 为唯一模板，附件名由 [.github/release-notes.conf](../.github/release-notes.conf) 的 `ASSET_NAME` 规定。保留双语结构，发布前运行 `scripts/check-release-notes.sh docs/releases/v1.4.0.md`。签名、公证和校验值只填写已经验证的事实。完整规则见[发布说明规范](release-notes-convention.md)。
 
 如果改由 Codex 操作，应给出完整授权，例如：
 
-> 请把已验证的 `/absolute/path/to/Veyra-v1.1.0-macos-universal.zip` 上传到 yuzio-ai/veyra 的 v1.1.0 Release，使用已确认的发布说明，保存为草稿，不要发布。
+> 请把已验证的 `/absolute/path/to/Veyra.zip` 上传到 yuzio-ai/veyra 的 v1.4.0 Release，使用已确认的发布说明，保存为草稿，不要发布。
 
-检查草稿后再说“发布这个 v1.1.0 草稿”，或在前一条请求中明确授权正式发布。已有完整发布授权时，不需要额外重复确认。
+检查草稿后再说“发布这个 v1.4.0 草稿”，或在前一条请求中明确授权正式发布。已有完整发布授权时，不需要额外重复确认。
 
 ## 9. 发布后的确认与信息边界
 

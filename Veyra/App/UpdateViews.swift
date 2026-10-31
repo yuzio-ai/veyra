@@ -53,7 +53,7 @@ private struct UpdateStatusRow: View {
                             ProgressView().controlSize(.small).accessibilityHidden(true)
                         }
                         Text(updates.settingsStatus)
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("updates.status")
                         Spacer(minLength: SettingsLayout.labelSpacing)
@@ -63,7 +63,7 @@ private struct UpdateStatusRow: View {
                     }
                     if !updates.isChecking, let next = updates.nextManualCheckAt, next > date {
                         Text(L10n.text("Check again after \(next.formatted(date: .omitted, time: .standard))"))
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
             }
@@ -71,7 +71,7 @@ private struct UpdateStatusRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: SettingsLayout.labelSpacing) {
                     VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
                         Text(L10n.text("New version available: \(release.version)"))
-                            .font(.subheadline.weight(.medium))
+                            .font(.subheadline.weight(.medium)).monospacedDigit()
                         Text("Download and install the new version manually.")
                             .font(.subheadline).foregroundStyle(.secondary)
                     }

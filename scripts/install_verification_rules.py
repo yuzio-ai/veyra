@@ -22,9 +22,10 @@ def main():
         parser.error('codex is required for rule matching checks')
     cases = [
         (ENTRY + ['test'], 'allow'),
-        (ENTRY + ['test', '--only-testing', 'VeyraTests/HistoryIndexTests'], 'allow'),
+        (ENTRY + ['test', '--only-testing', 'VeyraTests/MonitorStoreTests'], 'allow'),
         (ENTRY + ['release-build'], 'allow'),
-        (ENTRY + ['previews', 'dashboard'], 'allow'),
+        (ENTRY + ['previews', 'menu'], 'allow'),
+        (ENTRY + ['previews', 'settings'], 'allow'),
         (ENTRY + ['launch'], 'prompt'),
         (ENTRY + ['ax-read', '123'], 'prompt'),
         (ENTRY + ['install-rules'], None),

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CodexModelProfilesView: View {
@@ -68,16 +69,6 @@ struct ProviderSidebarView: View {
                     .accessibilityIdentifier("providers.add")
                 }.padding(12)
             }
-            Divider()
-            Menu {
-                Button("Import current configuration") { profiles.importWorkspace() }.disabled(profiles.snapshot == nil)
-                Button("Reload configuration") {
-                    profiles.navigate { if let location = profiles.location { Task { await profiles.reloadWorkspace(location: location) } } }
-                }
-                if profiles.canUndo { Button("Undo last switch") { Task { await profiles.undo() } } }
-                Button("Discard Undo") { Task { await profiles.discardUndo() } }.disabled(!profiles.canUndo)
-            } label: { Label("Manage", systemImage: "ellipsis.circle").frame(maxWidth: .infinity, alignment: .leading) }
-                .menuStyle(.borderlessButton).padding(18)
         }
         .frame(width: 248)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
@@ -110,7 +101,7 @@ struct ProviderDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 30) {
                     header
-                    if profiles.workspaceIssue != nil || profiles.error != nil || profiles.message != nil || profiles.canUndo || profiles.snapshot?.overridden == true {
+                    if profiles.workspaceIssue != nil || profiles.configurationReloadError != nil || profiles.error != nil || profiles.message != nil || profiles.snapshot?.overridden == true {
                         ProviderStatusBanner(profiles: profiles)
                     }
                     if settings.origin == .custom { ProviderEditorView(profiles: profiles) }
@@ -178,13 +169,14 @@ struct ProviderEditorView: View {
             }
             if value.wrappedValue.isManagedEndpoint {
                 ProviderFormRow("Protocol") {
-                    Picker("Protocol", selection: Binding(get: { value.wrappedValue.protocolName }, set: { value.wrappedValue.wireAPI = $0 })) {
-                        Text("Responses API").tag("responses")
-                        Text("Chat Completions — incompatible").tag("chat")
-                    }.labelsHidden()
+                    if value.wrappedValue.protocolName == "responses" { Text("Responses API") }
+                    else { Text("Unsupported protocol").foregroundStyle(.orange) }
                 }
                 if value.wrappedValue.protocolName != "responses" {
                     Text("Codex requires Responses. Chat Completions compatibility is insufficient.").font(.caption).foregroundStyle(.orange)
+                    ModelProfileActionButton(title: L10n.text("Use Responses API"), identifier: "providers.useResponses", key: "", enabled: !profiles.busy, style: .inline) {
+                        profiles.useResponsesProtocol()
+                    }
                 }
                 ProviderFormRow("Base URL") {
                     TextField("https://api.example.com/v1", text: value.baseURL)
@@ -290,7 +282,7 @@ struct ProviderModelSection: View {
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
             if let cache = profiles.providerModelCaches[settings.id], cache.scope == ProviderModelScope(settings), let date = cache.fetchedAt {
                 Text(L10n.text("Provider metadata") + " · " + date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).monospacedDigit().foregroundStyle(.secondary)
                 if cache.failure != nil { Text("Showing the last successful model list.").font(.caption).foregroundStyle(.secondary) }
             } else { Text("Model capabilities are unknown until supplied by a trusted catalog.").font(.caption).foregroundStyle(.secondary) }
             if settings.isManagedEndpoint && settings.authMode != .environment {
@@ -302,7 +294,7 @@ struct ProviderModelSection: View {
                     else if let result = profiles.connectionResult {
                         Image(systemName: result.failure == nil ? "checkmark.circle" : "exclamationmark.triangle")
                         Text(result.failure == nil ? L10n.text("Responses verified") : L10n.text("Test failed")).font(.caption)
-                        Text(result.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                        Text(result.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
                     } else { Text("Not tested").font(.caption).foregroundStyle(.secondary) }
                 }
                 Text("Save first. Testing makes a small model request and may incur API charges.").font(.caption).foregroundStyle(.secondary)
@@ -310,12 +302,12 @@ struct ProviderModelSection: View {
         }
     }
     @ViewBuilder private var specifications: some View {
-        specification("Context window", profiles.workspaceModel?.contextWindow.map { $0.formatted() + " tokens" } ?? L10n.text("Unknown"))
+        specification("Context window", profiles.workspaceModel?.contextWindow.map { $0.formatted() + " tokens" } ?? L10n.text("Unknown"), valueFont: .callout.monospacedDigit())
         specification("Default reasoning", profiles.workspaceModel?.defaultReasoning ?? L10n.text("Unknown"))
         specification("Supported reasoning", profiles.workspaceModel?.reasoningLevels?.joined(separator: " / ") ?? L10n.text("Unknown"))
     }
-    private func specification(_ title: LocalizedStringKey, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 7) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.callout).textSelection(.enabled) }
+    private func specification(_ title: LocalizedStringKey, _ value: String, valueFont: Font = .callout) -> some View {
+        VStack(alignment: .leading, spacing: 7) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(valueFont).textSelection(.enabled) }
     }
 }
 
@@ -343,6 +335,7 @@ struct ProviderAdvancedSection: View {
                 }
                 ProviderFormRow("Context override") {
                     TextField("Automatic", text: $contextInput)
+                        .monospacedDigit()
                         .accessibilityIdentifier("providers.context")
                         .onChange(of: contextInput) { _, text in
                             let trimmed = text.trimmingCharacters(in: .whitespaces)
@@ -353,14 +346,6 @@ struct ProviderAdvancedSection: View {
                 }
                 if contextInvalid { Text("Enter a positive context window.").font(.caption).foregroundStyle(.red) }
                 Text("Leave empty to inherit the model context. A manual limit affects Codex context management.").font(.caption).foregroundStyle(.secondary)
-                if settings.origin == .custom {
-                    ProviderFormRow("Local ID") { Text(settings.id).font(.caption.monospaced()).textSelection(.enabled) }
-                }
-                if settings.legacyProfile != nil {
-                    ProviderFormRow("Model catalog") {
-                        TextField("Absolute catalog path", text: Binding(get: { profiles.providerDraft?.legacyProfile?.catalogPath ?? "" }, set: { profiles.providerDraft?.legacyProfile?.catalogPath = $0 }))
-                    }
-                }
                 Divider()
                 HStack {
                     Text("Responses API · API billing").font(.caption).foregroundStyle(.secondary)
@@ -369,8 +354,61 @@ struct ProviderAdvancedSection: View {
                 }
             }.padding(.top, 18)
         }
+        .disclosureGroupStyle(ProviderAdvancedDisclosureStyle())
         .onAppear { contextInput = settings.contextWindowOverride.map(String.init) ?? "" }
         .onChange(of: settings.id) { _, _ in contextInput = settings.contextWindowOverride.map(String.init) ?? ""; contextInvalid = false; profiles.invalidContextInput = false }
+    }
+}
+
+private struct ProviderAdvancedDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .frame(width: 10)
+                configuration.label
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 28)
+            .accessibilityHidden(true)
+            .overlay {
+                ProviderAdvancedHeader(expanded: configuration.isExpanded) { configuration.isExpanded.toggle() }
+            }
+            if configuration.isExpanded { configuration.content }
+        }
+    }
+}
+
+/// Match the menu's native-focus/SwiftUI-label pattern so the entire header is one control.
+private struct ProviderAdvancedHeader: NSViewRepresentable {
+    @Environment(\.isEnabled) private var isEnabled
+    var expanded: Bool
+    var action: @MainActor () -> Void
+
+    @MainActor final class Coordinator: NSObject {
+        var action: @MainActor () -> Void
+        init(action: @escaping @MainActor () -> Void) { self.action = action }
+        @objc func invoke() { action() }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: "", target: context.coordinator, action: #selector(Coordinator.invoke))
+        button.isBordered = false
+        button.isTransparent = true
+        button.focusRingType = .exterior
+        button.setAccessibilityIdentifier("providers.advanced")
+        button.setAccessibilityLabel(L10n.text("Advanced options"))
+        return button
+    }
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.action = action
+        button.isEnabled = isEnabled
+        button.setAccessibilityValue(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.fittingSize.width, height: proposal.height ?? 28)
     }
 }
 
@@ -382,27 +420,28 @@ struct ProviderActionBar: View {
             VStack(alignment: .leading, spacing: 5) {
                 if profiles.isDefaultConnection(settings) {
                     Text("Default for new sessions").font(.caption.weight(.medium))
-                } else { Toggle("Set as Codex default", isOn: $profiles.setAsDefault).toggleStyle(.checkbox).font(.caption) }
+                }
                 Text(profiles.hasUnsavedChanges ? L10n.text("Unsaved changes") : applyLabel).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
             Button("Cancel") { profiles.cancelWorkspaceEdits() }.disabled(!profiles.hasUnsavedChanges && profiles.workspaceSelection != .create)
-            if profiles.workspaceSelection == .create {
-                ModelProfileActionButton(title: profiles.setAsDefault ? L10n.text("Save and apply") : L10n.text("Save"), identifier: "providers.save", key: "s", enabled: profiles.hasUnsavedChanges && !profiles.busy && (!profiles.setAsDefault || profiles.canApplyWorkspace), primary: true) {
-                    Task { if profiles.setAsDefault { await profiles.requestWorkspaceApply() } else { await profiles.saveWorkspace() } }
-                }
-            } else {
-                ModelProfileActionButton(title: L10n.text("Save"), identifier: "providers.save", key: "s", enabled: profiles.hasUnsavedChanges && !profiles.busy) {
-                    Task { await profiles.saveWorkspace() }
-                }
-                ModelProfileActionButton(title: profiles.hasUnsavedChanges ? L10n.text("Save and apply") : L10n.text("Apply"), identifier: "providers.apply", key: "\r", enabled: profiles.canApplyWorkspace && (profiles.setAsDefault || profiles.isDefaultConnection(settings)), primary: true) {
-                    Task { await profiles.requestWorkspaceApply() }
-                }
+            ModelProfileActionButton(title: L10n.text("Save"), identifier: "providers.save", key: "s", enabled: profiles.hasUnsavedChanges && !profiles.busy) {
+                Task { await profiles.saveWorkspace() }
+            }
+            ModelProfileActionButton(title: defaultActionTitle, identifier: "providers.apply", key: "\r", enabled: profiles.canApplyWorkspace, primary: true) {
+                Task { await profiles.requestWorkspaceApply() }
             }
         }
         .padding(.horizontal, 24).padding(.vertical, 16)
         .background(Color(nsColor: .windowBackgroundColor))
         .accessibilityIdentifier("providers.actionBar")
+    }
+    private var defaultActionTitle: String {
+        if profiles.isDefaultConnection(settings) {
+            return profiles.hasUnsavedChanges ? L10n.text("Save and apply") : L10n.text("Apply")
+        }
+        return profiles.hasUnsavedChanges || profiles.savedConnection == nil
+            ? L10n.text("Save and set as default") : L10n.text("Set as default")
     }
     private var applyLabel: String {
         switch profiles.workspaceApplyStatus {

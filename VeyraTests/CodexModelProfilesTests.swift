@@ -6,13 +6,16 @@ actor ModelConfigurationFixture: CodexModelConfigurationTransport {
     var snapshot: CodexConfigSnapshot
     var mode = Mode.normal
     var writeCount = 0
+    var readCount = 0
     var failedReads = 0
     var delay = Duration.zero
     init(home: URL, user: JSONValue = .object(["model": .string("original")])) {
         snapshot = CodexConfigSnapshot(user: user, version: "0", file: home.appendingPathComponent("config.toml"))
     }
     func configure(_ mode: Mode, delay: Duration = .zero) { self.mode = mode; self.delay = delay }
+    func configureReadFailures(_ count: Int) { failedReads = count }
     func readConfiguration(location: CodexLocation) async throws -> CodexConfigSnapshot {
+        readCount += 1
         if failedReads > 0 { failedReads -= 1; throw ModelProfileFailure.unavailable }
         return snapshot
     }
@@ -140,35 +143,23 @@ final class CodexModelProfilesTests: XCTestCase {
         let snapshot = CodexConfigSnapshot(user: .object([:]), effective: effective, version: "0",
                                            file: URL(fileURLWithPath: "/tmp/config.toml"))
         XCTAssertEqual(snapshot.providerIdentity.name, "Inherited gateway")
-        let profile = CodexModelProfile.imported(from: snapshot, name: "Imported")
+        var profile = CodexModelProfile(name: "Saved reference", kind: .reference, providerName: "Inherited gateway")
+        profile.referencedProvider = "gateway"
         XCTAssertTrue(profile.matchesProvider(snapshot))
         XCTAssertEqual(profile.providerIdentity.name, "Inherited gateway")
         XCTAssertFalse(profile.providerIdentity.isOfficial)
     }
 
-    func testImportsUnknownAuthenticationByReferenceWithoutCopyingSecrets() throws {
-        let snapshot = CodexConfigSnapshot(user: .object([
-            "model": .string("external-model"), "model_provider": .string("external"),
-            "model_providers": .object(["external": .object(["name": .string("External"),
-                "base_url": .string("https://example.invalid/v1"), "experimental_bearer_token": .string("NEVER_COPY_SECRET")])])
-        ]), version: "0", file: URL(fileURLWithPath: "/tmp/config.toml"))
-        let profile = CodexModelProfile.imported(from: snapshot, name: "Imported")
-        XCTAssertEqual(profile.kind, .reference)
-        XCTAssertEqual(profile.referencedProvider, "external")
-        XCTAssertFalse(String(decoding: try JSONEncoder().encode(profile), as: UTF8.self).contains("NEVER_COPY_SECRET"))
-        XCTAssertTrue(profile.matches(snapshot))
-    }
-
-    func testSupportedProviderImportAndDefaultMatchAreIndependentOfSelectionOrName() {
+    func testSavedProviderDefaultMatchIsIndependentOfSelectionOrName() {
         let profile = custom()
         var user: [String: JSONValue] = ["model": .string(profile.model), "model_provider": .string("external"),
             "model_reasoning_effort": .string(profile.reasoning), "model_providers": .object(["external": profile.provider])]
         let snapshot = CodexConfigSnapshot(user: .object(user), version: "0", file: URL(fileURLWithPath: "/tmp/config.toml"))
-        let imported = CodexModelProfile.imported(from: snapshot, name: "Imported")
-        XCTAssertEqual(imported.kind, .custom)
-        XCTAssertTrue(imported.matches(snapshot))
+        var saved = profile
+        saved.name = "Renamed connection"
+        XCTAssertTrue(saved.matches(snapshot))
         user["model"] = .string("different")
-        XCTAssertFalse(imported.matches(CodexConfigSnapshot(user: .object(user), version: "1", file: snapshot.file)))
+        XCTAssertFalse(saved.matches(CodexConfigSnapshot(user: .object(user), version: "1", file: snapshot.file)))
     }
 
     func testOfficialPatchClearsRedirectAndOverridesWithoutTouchingOtherSettings() throws {
@@ -207,7 +198,6 @@ final class CodexModelProfilesTests: XCTestCase {
         effective["model_providers"] = .object([profile.providerID: .object(provider)])
         let snapshot = CodexConfigSnapshot(user: user, effective: .object(effective), version: "0", file: URL(fileURLWithPath: "/tmp/config.toml"))
         XCTAssertTrue(profile.matches(snapshot))
-        XCTAssertEqual(CodexModelProfile.imported(from: snapshot, name: "Imported").kind, .custom)
     }
 
     func testExternalProviderAuthenticationIsNotOverwrittenOrBackedUp() throws {
@@ -246,24 +236,25 @@ final class CodexModelProfilesTests: XCTestCase {
         XCTAssertEqual(writes, 0)
     }
 
-    func testApplyUndoRetainsUnrelatedExternalChangesAndSurvivesRelaunch() async throws {
+    func testProviderReselectionRetainsUnrelatedExternalChangesAndSurvivesRelaunch() async throws {
         let home = try temporary(), location = CodexLocation(home: home, executable: nil)
         let fixture = ModelConfigurationFixture(home: home)
         let root = home.appendingPathComponent("library")
         let service = CodexModelProfileService(transport: fixture, root: root)
         let original = try await service.read(location: location)
         let applied = try await service.apply(custom(), location: location, expectedVersion: original.snapshot.version)
-        XCTAssertNotNil(applied.library.journal)
+        XCTAssertNil(applied.library.pending)
         await fixture.change("unrelated", to: .string("preserve"))
         let reopened = CodexModelProfileService(transport: fixture, root: root)
-        let restored = try await reopened.undo(location: location)
+        let current = try await reopened.read(location: location)
+        let restored = try await reopened.restoreOpenAI(location: location, expectedVersion: current.snapshot.version)
         XCTAssertEqual(restored.snapshot.user["model"].string, "original")
         XCTAssertEqual(restored.snapshot.user["unrelated"].string, "preserve")
         XCTAssertNil(restored.snapshot.user["model_provider"].string)
-        XCTAssertNil(restored.library.journal)
+        XCTAssertNil(restored.library.pending)
     }
 
-    func testStaleApplyAndChangedUndoNeverOverwriteExternalFields() async throws {
+    func testStaleApplyNeverOverwritesExternalFields() async throws {
         let home = try temporary(), location = CodexLocation(home: home, executable: nil)
         let fixture = ModelConfigurationFixture(home: home)
         let service = CodexModelProfileService(transport: fixture, root: home.appendingPathComponent("library"))
@@ -271,10 +262,10 @@ final class CodexModelProfilesTests: XCTestCase {
         do { _ = try await service.apply(custom(), location: location, expectedVersion: "0"); XCTFail("expected conflict") }
         catch { XCTAssertEqual(error as? ModelProfileFailure, .conflict) }
         let read = try await service.read(location: location)
-        _ = try await service.apply(custom(), location: location, expectedVersion: read.snapshot.version)
+        let applied = try await service.apply(custom(), location: location, expectedVersion: read.snapshot.version)
         await fixture.change("model", to: .string("external-again"))
-        do { _ = try await service.undo(location: location); XCTFail("expected conflict") }
-        catch { XCTAssertEqual(error as? ModelProfileFailure, .changed) }
+        do { _ = try await service.restoreOpenAI(location: location, expectedVersion: applied.snapshot.version); XCTFail("expected conflict") }
+        catch { XCTAssertEqual(error as? ModelProfileFailure, .conflict) }
         let after = try await fixture.readConfiguration(location: location)
         XCTAssertEqual(after.user["model"].string, "external-again")
         let writes = await fixture.writeCount
@@ -287,7 +278,7 @@ final class CodexModelProfilesTests: XCTestCase {
         await fixture.configure(.commitThenThrow)
         let service = CodexModelProfileService(transport: fixture, root: home.appendingPathComponent("library"))
         let context = try await service.apply(custom(), location: location, expectedVersion: "0")
-        XCTAssertNotNil(context.library.journal)
+        XCTAssertEqual(context.snapshot.user["model"].string, "coding-model")
         XCTAssertNil(context.library.pending)
         let writes = await fixture.writeCount
         XCTAssertEqual(writes, 1)
@@ -306,12 +297,33 @@ final class CodexModelProfilesTests: XCTestCase {
         let reopened = CodexModelProfileService(transport: fixture, root: root)
         let recovered = try await reopened.read(location: location)
         XCTAssertNil(recovered.library.pending)
-        XCTAssertNotNil(recovered.library.journal)
+        XCTAssertEqual(recovered.snapshot.user["model"].string, "coding-model")
         let writes = await fixture.writeCount
         XCTAssertEqual(writes, 1)
     }
 
-    func testRejectedWriteRetainsPreviousUndo() async throws {
+    func testLegacyPendingInverseTransactionIsRecoveredAfterRelaunch() async throws {
+        let home = try temporary(), location = CodexLocation(home: home, executable: nil)
+        let fixture = ModelConfigurationFixture(home: home)
+        let root = home.appendingPathComponent("library")
+        let service = CodexModelProfileService(transport: fixture, root: root)
+        let file = await service.libraryURL(home: home)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Older builds marked automatic inverse writes as isUndo. They must
+        // remain recoverable even though manual Undo is no longer supported.
+        let legacy: [String: Any] = ["schemaVersion": 3, "connections": [],
+            "pending": ["before": [["keyPath": "model", "value": "partial"]],
+                        "after": [["keyPath": "model", "value": "original"]],
+                        "completed": false, "isUndo": true]]
+        try JSONSerialization.data(withJSONObject: legacy).write(to: file)
+        let recovered = try await service.read(location: location)
+        XCTAssertNil(recovered.library.pending)
+        XCTAssertEqual(recovered.snapshot.user["model"].string, "original")
+        let writes = await fixture.writeCount
+        XCTAssertEqual(writes, 0)
+    }
+
+    func testRejectedWriteRetainsCurrentConfiguration() async throws {
         let home = try temporary(), location = CodexLocation(home: home, executable: nil)
         let fixture = ModelConfigurationFixture(home: home)
         let service = CodexModelProfileService(transport: fixture, root: home.appendingPathComponent("library"))
@@ -320,7 +332,8 @@ final class CodexModelProfilesTests: XCTestCase {
         do { _ = try await service.apply(CodexModelProfile(name: "Official"), location: location, expectedVersion: first.snapshot.version); XCTFail() }
         catch { XCTAssertEqual(error as? ModelProfileFailure, .invalid) }
         let retained = try await service.library(home: home)
-        XCTAssertEqual(retained.journal, first.library.journal)
+        let current = try await fixture.readConfiguration(location: location)
+        XCTAssertEqual(current, first.snapshot)
         XCTAssertNil(retained.pending)
     }
 

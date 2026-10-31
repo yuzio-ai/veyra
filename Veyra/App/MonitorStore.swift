@@ -18,9 +18,8 @@ final class MonitorStore {
     var taskWarning: TaskReadWarning? { didSet { updateMenuLabel() } }
     /// dsh degrades silently by design: failures surface only here and never
     /// touch the Codex error/warning state.
-    var dshWarning: String?
-    var localQuotaWarning: String?
-    var modelConfig: CodexModelConfig?
+    var dshWarning: String? { didSet { updateMenuLabel() } }
+    var modelConfig: CodexModelConfig? { didSet { updateMenuLabel() } }
     var quotaBusy = false
     var tasksBusy = false
     var panelVisible = false
@@ -31,18 +30,40 @@ final class MonitorStore {
     private(set) var configurationState: CodexConfigurationState = .detecting
     private(set) var configurationLocation: CodexLocation?
     var hasManualPaths: Bool { !homePath.isEmpty || !executablePath.isEmpty }
-    var isPreview = false
+    private(set) var codexServiceWarning: String? { didSet { updateMenuLabel() } }
+    @ObservationIgnored private var previouslyHadCodexServices = false
+    var dshHomePath: String
+    var codexReadState: TaskSourceReadState = .detecting { didSet { updateMenuLabel() } }
+    var dshReadState: TaskSourceReadState = .detecting { didSet { updateMenuLabel() } }
+    private(set) var codexServicesAvailable = false { didSet { updateMenuLabel() } }
+    var isPreview = false { didSet { updateMenuLabel() } }
+    @ObservationIgnored private var codexReadAt: Date?
+    @ObservationIgnored private var dshReadAt: Date?
+    @ObservationIgnored private var dshRevision = 0
+    @ObservationIgnored private var dshPathRequest = 0
+    private(set) var dshPathResetRevision = 0
+    @ObservationIgnored private let resolveLocation: @Sendable (String, String) -> CodexLocation
+    @ObservationIgnored private let inspectServices: @Sendable (CodexLocation) -> Bool
+
     private(set) var menuLabel = L10n.text("Quota — · Running —")
 
     @ObservationIgnored private var quotaState = QuotaDisplayState()
     @ObservationIgnored private var calibrationPolicy = QuotaCalibrationPolicy()
     @ObservationIgnored private var calibrationTask: Task<Void, Never>?
+    @ObservationIgnored private var quotaPollingTask: Task<Void, Never>?
+    @ObservationIgnored private var quotaWakeAt: Date?
+    @ObservationIgnored private var lastQuotaAttemptAt: Date?
+    @ObservationIgnored private var automaticQuotaEnabled = false
+    @ObservationIgnored private var providerRevision = 0
+    @ObservationIgnored var onConfigurationChange: (@MainActor (CodexLocation) -> Void)?
     @ObservationIgnored private var revision = 0
+    @ObservationIgnored private var lifecycleRevision = 0
     @ObservationIgnored private var detectionRevision = 0
     @ObservationIgnored private var pathRevisions: [CodexPathField: Int] = [:]
     @ObservationIgnored private let inspectConfiguration: @Sendable (String, String) async -> CodexConfigurationReport
     @ObservationIgnored private let validatePath: @Sendable (String, CodexPathField) async -> CodexPathError?
     @ObservationIgnored private var authStamp: String?
+    @ObservationIgnored private var configurationFileStamp: String?
     @ObservationIgnored private var suspended = false
     @ObservationIgnored private var attemptedLocalRead = false
     /// Reader outputs stay separated so one backend's failure never rewrites
@@ -51,6 +72,7 @@ final class MonitorStore {
     @ObservationIgnored private var dshTasks: [TaskSnapshot] = []
     @ObservationIgnored private let readLocal: @Sendable (URL) async throws -> TaskReadResult
     @ObservationIgnored private let readDsh: @Sendable (URL) async -> DshTaskRead
+    @ObservationIgnored private let resolveProjects: @Sendable ([TaskSnapshot], [TaskReference], URL) async -> TaskProjectResolution
     @ObservationIgnored private let fetchQuota: @Sendable (CodexLocation) async -> QuotaRefresh
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let clock: PollingClock
@@ -61,17 +83,24 @@ final class MonitorStore {
 
     init(readLocal: (@Sendable (URL) async throws -> TaskReadResult)? = nil,
          readDsh: (@Sendable (URL) async -> DshTaskRead)? = nil,
+         resolveProjects: (@Sendable ([TaskSnapshot], [TaskReference], URL) async -> TaskProjectResolution)? = nil,
          fetchQuota: (@Sendable (CodexLocation) async -> QuotaRefresh)? = nil,
          clock: PollingClock = .continuous(), now: @escaping @MainActor () -> Date = Date.init,
          defaults: UserDefaults = .standard,
          inspectConfiguration: @escaping @Sendable (String, String) async -> CodexConfigurationReport = CodexConfiguration.inspect,
-         validatePath: @escaping @Sendable (String, CodexPathField) async -> CodexPathError? = CodexConfiguration.validate) {
+         validatePath: @escaping @Sendable (String, CodexPathField) async -> CodexPathError? = CodexConfiguration.validate,
+         inspectServices: @escaping @Sendable (CodexLocation) -> Bool = CodexConfiguration.servicesAvailable,
+         resolveLocation: @escaping @Sendable (String, String) -> CodexLocation = { .resolve(homePath: $0, executablePath: $1) }) {
+        self.resolveLocation = resolveLocation
+        self.inspectServices = inspectServices
         self.inspectConfiguration = inspectConfiguration
         self.validatePath = validatePath
         let reader = LocalTaskReader()
         self.readLocal = readLocal ?? { try await reader.fetch(home: $0) }
         let dshReader = DshTaskReader()
         self.readDsh = readDsh ?? { await dshReader.fetch(home: $0) }
+        let projectResolver = TaskProjectResolver()
+        self.resolveProjects = resolveProjects ?? { await projectResolver.resolve(tasks: $0, ancestors: $1, home: $2) }
         self.fetchQuota = fetchQuota ?? { location in
             let client = AppServerClient()
             let result = await client.fetch(location: location)
@@ -81,46 +110,66 @@ final class MonitorStore {
         self.clock = clock; self.now = now; self.defaults = defaults
         homePath = defaults.string(forKey: "codexHome") ?? ""
         executablePath = defaults.string(forKey: "codexExecutable") ?? ""
+        dshHomePath = defaults.string(forKey: "dshHome") ?? ""
+        codexServicesAvailable = inspectServices(resolveLocation(homePath, executablePath))
+        previouslyHadCodexServices = codexServicesAvailable
+        updateMenuLabel()
     }
-    var location: CodexLocation { .resolve(homePath: homePath, executablePath: executablePath) }
+    var location: CodexLocation { resolveLocation(homePath, executablePath) }
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
-    var unknownTasks: [TaskSnapshot] { tasks.filter { $0.activity == .unknown } }
+    var dshLocation: DshLocation { .resolve(homePath: dshHomePath) }
+    var canUseCodexServices: Bool { isPreview ? previewCodexServicesAvailable : codexServicesAvailable }
+    var previewCodexServicesAvailable = true { didSet { updateMenuLabel() } }
+    var showsQuota: Bool { canUseCodexServices && modelConfig?.usesCustomProvider != true }
+    var hasSourceWarning: Bool { taskError != nil || taskWarning != nil || dshWarning != nil || codexServiceWarning != nil }
+    var sourceDetectionFinished: Bool { codexReadState != .detecting && dshReadState != .detecting }
+    var noSourcesFound: Bool { codexReadState == .notFound && dshReadState == .notFound && !canUseCodexServices }
+    var codexHasNoTaskData: Bool { codexReadState == .notFound && canUseCodexServices }
+    var menuQuotaPercent: Double? { showsQuota ? quota.snapshot?.menuWindow?.remainingPercent : nil }
+    var menuTaskCount: String {
+        hasTaskSnapshot || (codexReadState == .notFound && dshReadState == .notFound) ? String(runningTasks.count) : "—"
+    }
     var pollingSeconds: Int {
         Int(TaskPollingPolicy.interval(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty).components.seconds)
     }
 
     var menuAccessibilityLabel: String {
-        quota.snapshot?.source == .local
-            ? L10n.text("Veyra, local quota snapshot, \(menuLabel)")
-            : L10n.text("Veyra, \(menuLabel)")
+        L10n.text("Veyra, \(menuLabel)")
     }
 
     private func updateMenuLabel() {
         let quotaLabel: String
-        if let window = quota.snapshot?.menuWindow {
-            let marker = quota.snapshot?.source == .local ? "~" : (quota.error == nil ? "" : "*")
+        if showsQuota, let window = quota.snapshot?.menuWindow {
+            let marker = quota.error == nil ? "" : "*"
             quotaLabel = "\(window.durationLabel) \(DisplayFormat.percent(window.remainingPercent))\(marker)"
         } else { quotaLabel = L10n.text("Quota —") }
-        let count = tasksUpdatedAt == nil || taskError != nil || taskWarning == .processUnverified ? "—" : String(runningTasks.count)
-        let label = L10n.text("\(quotaLabel) · Running \(count)")
-        if menuLabel != label { menuLabel = label }
+        let label = showsQuota ? L10n.text("\(quotaLabel) · Running \(menuTaskCount)") : L10n.text("Running \(menuTaskCount)")
+        let status = hasSourceWarning ? label + " · " + L10n.text("Some sources are unavailable. Running count may be incomplete.") : label
+        if menuLabel != status { menuLabel = status }
     }
     func start() {
         guard !isPreview else { return }
+        lifecycleRevision += 1
         suspended = false
+        automaticQuotaEnabled = true
         scheduler.start()
     }
-    func stop() { scheduler.stop() }
+    func stop() {
+        lifecycleRevision += 1
+        automaticQuotaEnabled = false
+        quotaPollingTask?.cancel(); quotaPollingTask = nil; quotaWakeAt = nil
+        scheduler.stop()
+    }
     func setPanelVisible(_ visible: Bool) {
         guard panelVisible != visible else { return }
         panelVisible = visible
         guard !isPreview else { return }
         scheduler.update(panelVisible: visible, hasRunningTasks: !runningTasks.isEmpty)
     }
-    func sleep() { suspended = true; scheduler.stop() }
-    func wake() { guard !isPreview else { return }; suspended = false; scheduler.start() }
+    func sleep() { suspended = true; stop() }
+    func wake() { start() }
 
-    /// Ordinary refresh is strictly local; only calibrateQuota may reach the account API.
+    /// Refresh local activity; the independent quota schedule never blocks task reads.
     func refreshAll() async {
         guard !isPreview, !suspended else { return }
         tasksBusy = true
@@ -130,53 +179,69 @@ final class MonitorStore {
     func calibrateQuota() async {
         guard !isPreview, !suspended else { return }
         let location = location
+        configurationDidChange()
+        guard showsQuota else { return }
         let initialAuth = checkAuthentication(at: location.home)
         if let calibrationTask { await calibrationTask.value; return }
         guard calibrationPolicy.allowsRequest(at: now()) else { return }
-        let version = revision, started = now()
+        let version = revision, providerVersion = providerRevision, started = now()
+        lastQuotaAttemptAt = started
         calibrationPolicy.began(at: started)
         nextCalibrationAt = calibrationPolicy.nextAllowedAt
         quotaBusy = true
         let task = Task { [weak self, fetchQuota] in
             let result = await fetchQuota(location)
             guard let self, version == self.revision else { return }
+            self.configurationDidChange()
+            // Limits belong to the account/home, even if this response's provider
+            // is no longer visible. Never let a provider round trip bypass them.
             self.calibrationPolicy.finished(result, startedAt: started, now: self.now())
             self.nextCalibrationAt = self.calibrationPolicy.nextAllowedAt
             let currentAuth = AppServerClient.authenticationStamp(at: location.home)
-            if currentAuth != initialAuth {
-                self.quotaState.invalidateAccount()
-                self.quotaState.error = L10n.text("Your sign-in has changed. Sync quota again.")
-            } else { self.quotaState.apply(result) }
+            if providerVersion == self.providerRevision, self.showsQuota {
+                if currentAuth != initialAuth {
+                    self.quotaState.invalidateAccount()
+                    self.quotaState.error = L10n.text("Your sign-in has changed. Sync quota again.")
+                } else { self.quotaState.apply(result) }
+                self.publishQuota()
+            }
             self.authStamp = currentAuth
-            self.publishQuota()
             self.quotaBusy = false
             self.calibrationTask = nil
+            self.scheduleQuotaRefresh()
         }
         calibrationTask = task
         await task.value
     }
     private func refreshLocal() async {
-        let version = revision, location = location
+        let version = revision, dshVersion = dshRevision, location = location
+        var ancestors = taskAncestors
+        guard !suspended else { return }
+        configurationDidChange()
         if !attemptedLocalRead { tasksBusy = true; attemptedLocalRead = true }
         checkAuthentication(at: location.home)
         // dsh reads never throw: failures arrive as a warning plus empty tasks.
-        async let dshRead = readDsh(DshLocation.resolve().home)
+        async let dshRead = readDsh(dshLocation.home)
         do {
             let result = try await readLocal(location.home)
             guard version == revision else { return }
             codexTasks = result.tasks
-            if taskAncestors != result.ancestors { taskAncestors = result.ancestors }
-            tasksUpdatedAt = result.fetchedAt
+            ancestors = result.ancestors
+            codexReadAt = result.fetchedAt
+            codexReadState = .available
             if taskWarning != result.warning { taskWarning = result.warning }
             if taskError != nil { taskError = nil }
-            if localQuotaWarning != result.quotaWarning { localQuotaWarning = result.quotaWarning }
-            if modelConfig != result.modelConfig { modelConfig = result.modelConfig }
-            quotaState.updateLocal(result.localQuota)
-            publishQuota()
         } catch {
             guard version == revision else { return }
-            let message = L10n.text("Unable to read local task records. Check the data directory.")
+            let missing = error is LocalTaskReadFailure
+            let homeMissing: Bool
+            if case LocalTaskReadFailure.homeMissing = error { homeMissing = true } else { homeMissing = false }
+            let expected = codexReadAt != nil || (homeMissing && hasManualPaths)
+            let message: String? = missing && !expected ? nil
+                : L10n.text("Unable to read Codex task records. Check its data directory.")
+            codexReadState = missing && !expected ? .notFound : .failed
             if taskError != message { taskError = message }
+            taskWarning = nil
             codexTasks = codexTasks.map { task in
                 var copy = task; copy.activity = .unknown
                 return copy
@@ -184,17 +249,81 @@ final class MonitorStore {
         }
         let dsh = await dshRead
         guard version == revision else { return }
-        dshTasks = dsh.tasks
-        if dshWarning != dsh.warning { dshWarning = dsh.warning }
-        mergeTasks()
+        if dshVersion == dshRevision {
+            let missingExpected = dsh.state == .notFound && (!dshHomePath.isEmpty || dshReadAt != nil)
+            dshReadState = missingExpected ? .failed : dsh.state
+            dshTasks = dsh.tasks
+            let warning = missingExpected ? L10n.text("Unable to read dsh session records. Check its data directory.") : dsh.warning
+            if dshWarning != warning { dshWarning = warning }
+            if dsh.state == .available { dshReadAt = dsh.fetchedAt }
+        }
+        tasksUpdatedAt = [codexReadAt, dshReadAt].compactMap { $0 }.max()
+        let resolved = await resolveProjects(codexTasks + dshTasks, ancestors, location.home)
+        guard version == revision, dshVersion == dshRevision else { return }
+        if taskAncestors != resolved.ancestors { taskAncestors = resolved.ancestors }
+        if tasks != resolved.tasks { tasks = resolved.tasks }
         if tasksBusy { tasksBusy = false }
         scheduler.update(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty)
+        scheduleQuotaRefresh()
     }
 
-    private func mergeTasks() {
-        let merged = codexTasks + dshTasks
-        if tasks != merged { tasks = merged }
+    /// Re-read the small config even when the task database is unavailable.
+    /// Called immediately after Veyra applies a provider change too.
+    func configurationDidChange() {
+        let available = inspectServices(location)
+        let expectsServices = !executablePath.isEmpty || previouslyHadCodexServices
+            || (!homePath.isEmpty && location.executable != nil)
+        codexServiceWarning = !available && expectsServices
+            ? L10n.text("Codex quota and provider settings are unavailable. Check its paths in Settings.") : nil
+        if available { previouslyHadCodexServices = true }
+        let availabilityChanged = available != codexServicesAvailable
+        if availabilityChanged {
+            codexServicesAvailable = available
+            providerRevision += 1
+            quotaState = QuotaDisplayState(); publishQuota()
+            quotaPollingTask?.cancel(); quotaPollingTask = nil; quotaWakeAt = nil
+        }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: location.home.appendingPathComponent("config.toml").path)
+        let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let stamp = "\(attributes?[.systemFileNumber] ?? "missing"):\(modified):\(attributes?[.size] ?? 0)"
+        let config = CodexModelConfig.load(home: location.home)
+        guard config != modelConfig || stamp != configurationFileStamp || availabilityChanged else { return }
+        configurationFileStamp = stamp
+        let changedProvider = (config?.provider ?? "openai") != (modelConfig?.provider ?? "openai")
+            || config?.openAIBaseURL != modelConfig?.openAIBaseURL
+        if modelConfig != config { modelConfig = config }
+        onConfigurationChange?(location)
+        guard changedProvider || availabilityChanged else { return }
+        providerRevision += 1
+        // Keep an in-flight account request coalesced until it returns; its data
+        // will be discarded, but its cooldown/Retry-After still applies.
+        quotaState = QuotaDisplayState(); publishQuota()
+        lastQuotaAttemptAt = nil
+        quotaPollingTask?.cancel(); quotaPollingTask = nil; quotaWakeAt = nil
+        scheduleQuotaRefresh()
     }
+
+    private func scheduleQuotaRefresh() {
+        guard automaticQuotaEnabled, !suspended, !isPreview, showsQuota, !quotaBusy else {
+            quotaPollingTask?.cancel(); quotaPollingTask = nil; quotaWakeAt = nil
+            return
+        }
+        let interval: TimeInterval = runningTasks.isEmpty ? 3600 : 60
+        let due = max(lastQuotaAttemptAt?.addingTimeInterval(interval) ?? now(),
+                      calibrationPolicy.nextAllowedAt ?? .distantPast)
+        guard quotaWakeAt != due || quotaPollingTask == nil else { return }
+        quotaPollingTask?.cancel()
+        quotaWakeAt = due
+        quotaPollingTask = Task { [weak self, clock] in
+            guard let self else { return }
+            let delay = due.timeIntervalSince(self.now())
+            do { if delay > 0 { try await clock.sleep(.seconds(delay)) } } catch { return }
+            guard !Task.isCancelled, self.automaticQuotaEnabled, !self.suspended else { return }
+            self.quotaPollingTask = nil; self.quotaWakeAt = nil
+            await self.calibrateQuota()
+        }
+    }
+
     @discardableResult
     private func checkAuthentication(at home: URL) -> String {
         let stamp = AppServerClient.authenticationStamp(at: home)
@@ -253,6 +382,46 @@ final class MonitorStore {
         await detectConfiguration()
     }
 
+    /// Reserve at the UI event, before an unstructured Task can be reordered.
+    func beginDshPathSubmission() -> Int {
+        dshPathRequest += 1
+        return dshPathRequest
+    }
+
+    func commitDshPath(_ text: String, restoringAutomatic: Bool = false,
+                       resetVersion: Int? = nil, submissionVersion: Int? = nil) async -> CodexPathCommitResult {
+        guard resetVersion == nil || resetVersion == dshPathResetRevision else { return .superseded }
+        if let submissionVersion, submissionVersion != dshPathRequest { return .superseded }
+        let request = submissionVersion ?? beginDshPathSubmission()
+        if restoringAutomatic { dshPathResetRevision += 1 }
+        let reset = dshPathResetRevision
+        let path = CodexConfiguration.normalized(text)
+        // Even an unchanged submission supersedes older asynchronous validation.
+        // Keep auto detection when the user submits its currently displayed path.
+        if !restoringAutomatic, path == dshLocation.home.path {
+            await refreshAll()
+            return request == dshPathRequest && reset == dshPathResetRevision ? .unchanged : .superseded
+        }
+        let error = await validatePath(path, .home)
+        guard request == dshPathRequest, reset == dshPathResetRevision, !Task.isCancelled else { return .superseded }
+        if let error { return .rejected(error) }
+        guard path != dshHomePath else {
+            await refreshAll()
+            return .unchanged
+        }
+        dshRevision += 1
+        let version = dshRevision
+        dshHomePath = path
+        defaults.set(path, forKey: "dshHome")
+        dshTasks = []; dshReadAt = nil; dshWarning = nil; dshReadState = .detecting
+        tasks = tasks.filter { $0.backend == .codex }
+        tasksUpdatedAt = codexReadAt
+        await scheduler.drain()
+        guard version == dshRevision else { return .superseded }
+        await refreshAll()
+        return .applied
+    }
+
     func saveSettings(home: String, executable: String) {
         stop()
         revision += 1
@@ -265,18 +434,23 @@ final class MonitorStore {
         defaults.set(executablePath, forKey: "codexExecutable")
         quotaState = QuotaDisplayState(); quota = quotaState
         calibrationPolicy = QuotaCalibrationPolicy(); nextCalibrationAt = nil; authStamp = nil
-        tasks = []; tasksUpdatedAt = nil; taskError = nil; taskWarning = nil
-        codexTasks = []; dshTasks = []; dshWarning = nil
+        configurationFileStamp = nil
+        lastQuotaAttemptAt = nil; providerRevision += 1
+        tasks = tasks.filter { $0.backend == .dsh }
+        codexReadAt = nil; tasksUpdatedAt = dshReadAt
+        taskError = nil; taskWarning = nil; codexReadState = .detecting
+        codexTasks = []
         taskAncestors = []
-        localQuotaWarning = nil; quotaBusy = false; tasksBusy = false
+        quotaBusy = false; tasksBusy = false
         modelConfig = nil
+        configurationDidChange()
         attemptedLocalRead = false
         // Join any old local read, then immediately read the new location once it has drained.
-        let version = revision
+        let version = revision, lifecycle = lifecycleRevision
         Task { [weak self] in
             guard let self else { return }
             await self.scheduler.drain()
-            guard version == self.revision else { return }
+            guard version == self.revision, lifecycle == self.lifecycleRevision, !self.suspended else { return }
             self.start()
         }
     }

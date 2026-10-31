@@ -41,17 +41,15 @@ struct ModelProfileActionButton: NSViewRepresentable {
 
 struct ModelProfilesNotice: View {
     var profiles: CodexModelProfilesStore
-    var showUndo = true
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
+            if let error = profiles.configurationReloadError, error != profiles.error {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+            }
             if let error = profiles.error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
             if let message = profiles.message { Label(message, systemImage: "checkmark.circle") }
             if profiles.snapshot?.overridden == true {
                 Label("A higher-priority policy overrides this user configuration.", systemImage: "info.circle")
-            }
-            if showUndo, profiles.canUndo {
-                Button("Undo last switch") { Task { await profiles.undo() } }
-                    .buttonStyle(.link).accessibilityIdentifier("models.undo")
             }
         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
     }
@@ -61,29 +59,30 @@ struct ModelProfileQuickSwitch: View {
     @Bindable var profiles: CodexModelProfilesStore
     var manage: () -> Void
     var closeMenu: () -> Void = {}
+    var showsNotice = true
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             menu
-            if profiles.error != nil || profiles.message != nil || profiles.snapshot?.overridden == true {
-                ModelProfilesNotice(profiles: profiles, showUndo: false)
+            if showsNotice && (profiles.error != nil || profiles.configurationReloadError != nil || profiles.message != nil || profiles.snapshot?.overridden == true) {
+                ModelProfilesNotice(profiles: profiles)
             }
         }
     }
 
     private var menu: some View {
-        HStack(spacing: 8) {
-            Text("Default provider").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
-            Spacer(minLength: 8)
-            ProviderIcon(identity: profiles.defaultProviderIdentity, size: 20)
+        HStack(spacing: 6) {
+            Text("Current provider").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
+            ProviderIcon(identity: profiles.defaultProviderIdentity, size: 16)
             Text(profiles.defaultProviderIdentity.name)
                 .font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.tail)
             if profiles.busy { ProgressView().controlSize(.mini) }
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 32)
+        .frame(minHeight: 32)
         .contentShape(Rectangle())
         .accessibilityHidden(true)
         .overlay { ProviderQuickSwitchButton(profiles: profiles, manage: manage, closeMenu: closeMenu) }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -108,8 +107,8 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
         context.coordinator.profiles = profiles
         context.coordinator.manage = manage
         button.closeMenu = closeMenu
-        button.toolTip = profiles.defaultProviderIdentity.name
-        button.setAccessibilityLabel(L10n.text("Default provider: \(profiles.defaultProviderIdentity.name)"))
+        button.toolTip = L10n.text("Current provider for new sessions: \(profiles.defaultProviderIdentity.name). Running tasks may use other providers.")
+        button.setAccessibilityLabel(L10n.text("Current provider: \(profiles.defaultProviderIdentity.name)"))
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ProviderMenuNativeButton, context: Context) -> CGSize? {
         CGSize(width: proposal.width ?? PanelSizing.width - 32, height: proposal.height ?? 32)
@@ -125,7 +124,7 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
         func makeMenu() -> NSMenu {
             let menu = NSMenu()
             menu.autoenablesItems = false
-            for profile in profiles.profiles where profile.validation.isEmpty && (profile.kind != .custom || profile.authentication != .environment) {
+            for profile in profiles.switchableProfiles {
                 let item = NSMenuItem(title: profiles.providerTitle(profile), action: #selector(selectProvider(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = profile.id.uuidString
@@ -142,7 +141,7 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
                 item.isEnabled = !profiles.busy && profiles.writesSupported && profiles.credentialCommandsSupported && profiles.currentPresetID != preset.id
                 menu.addItem(item)
             }
-            for connection in profiles.customConnections where connection.legacyProfile == nil && connection.validation.isEmpty && !connection.model.isEmpty {
+            for connection in profiles.customConnections where connection.legacyProfile == nil && connection.validation.isEmpty && !connection.model.isEmpty && !profiles.connectionIsBlocked(connection) {
                 let item = NSMenuItem(title: connection.displayName, action: #selector(selectConnection(_:)), keyEquivalent: "")
                 item.target = self; item.representedObject = "connection:" + connection.id
                 item.image = ProviderIcon.menuImage(for: CodexProviderIdentity(name: connection.displayName))
@@ -165,10 +164,9 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
             }
             return menu
         }
-        @objc func openMenu(_ button: NSButton) {
+        @objc func openMenu(_ button: ProviderMenuNativeButton) {
             let menu = makeMenu()
-            menu.popUp(positioning: nil,
-                       at: NSPoint(x: 0, y: button.isFlipped ? button.bounds.maxY + 4 : button.bounds.minY - 4), in: button)
+            menu.popUp(positioning: nil, at: button.popupOrigin(for: menu), in: button)
         }
         @objc func selectPreset(_ item: NSMenuItem) {
             guard let value = item.representedObject as? String, value.hasPrefix("preset:"), !profiles.busy,
@@ -181,7 +179,8 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
         @objc func selectConnection(_ item: NSMenuItem) {
             guard let value = item.representedObject as? String, value.hasPrefix("connection:"), !profiles.busy else { return }
             let id = String(value.dropFirst(11))
-            guard profiles.customConnections.contains(where: { $0.id == id }) else { return }
+            guard let connection = profiles.customConnections.first(where: { $0.id == id }),
+                  !profiles.connectionIsBlocked(connection) else { return }
             manage()
             profiles.navigate {
                 self.profiles.workspaceEnabled = true; self.profiles.chooseConnectionForAction(id)
@@ -196,7 +195,7 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
         @objc func selectProvider(_ item: NSMenuItem) {
             guard !profiles.busy, profiles.writesSupported,
                   let value = item.representedObject as? String, let id = UUID(uuidString: value),
-                  let profile = profiles.profiles.first(where: { $0.id == id }),
+                  let profile = profiles.switchableProfiles.first(where: { $0.id == id }),
                   profile.validation.isEmpty, profiles.currentProviderProfileID != id else { return }
             if profiles.hasUnsavedChanges { manage() }
             profiles.navigate { Task { await self.profiles.apply(profile) } }
@@ -206,6 +205,11 @@ struct ProviderQuickSwitchButton: NSViewRepresentable {
 
 final class ProviderMenuNativeButton: NSButton {
     var closeMenu: () -> Void = {}
+    /// NSMenu positions its top-left content corner at this point in the button's coordinates.
+    func popupOrigin(for menu: NSMenu) -> NSPoint {
+        NSPoint(x: bounds.maxX - menu.size.width,
+                y: isFlipped ? bounds.maxY + 4 : bounds.minY - 4)
+    }
     override var acceptsFirstResponder: Bool { true }
     override func cancelOperation(_ sender: Any?) { closeMenu() }
     override func keyDown(with event: NSEvent) {

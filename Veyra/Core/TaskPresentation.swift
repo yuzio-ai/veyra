@@ -12,6 +12,10 @@ struct TaskReference: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let parentID: String?
+    var workingDirectory: String?
+    var projectID: String?
+    var projectAssignment: TaskProjectAssignment = .unavailable
+    var source: TaskSource = .desktop
 }
 
 struct TaskGroupRow: Identifiable, Equatable, Sendable {
@@ -20,6 +24,10 @@ struct TaskGroupRow: Identifiable, Equatable, Sendable {
     let parentTitle: String?
     let depth: Int
     var id: String { reference.id }
+    var isSubagent: Bool {
+        guard let task else { return false }
+        return task.backend == .codex && (depth > 0 || task.source == .subtask)
+    }
 }
 
 struct TaskGroup: Identifiable, Equatable, Sendable {
@@ -42,7 +50,9 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
         for reference in ancestors { references[reference.id] = reference }
         for task in tasks where snapshots[task.id] == nil {
             snapshots[task.id] = task
-            references[task.id] = TaskReference(id: task.id, title: task.title, parentID: task.parentID)
+            references[task.id] = TaskReference(id: task.id, title: task.title, parentID: task.parentID,
+                workingDirectory: task.workingDirectory, projectID: task.projectID,
+                projectAssignment: task.projectAssignment, source: task.source)
         }
         var included: Set<String> = [], priority: [String: Int] = [:]
         for (rank, task) in tasks.enumerated() {
@@ -96,17 +106,13 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
 }
 
 enum TaskText {
+    static func subagentBadge(nickname: String?) -> String {
+        nonempty(nickname).map { L10n.text("Subagent: \($0)") } ?? L10n.text("Subagent")
+    }
+
     static func nonempty(_ value: String?) -> String? {
         guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
         return text
-    }
-
-    static func historyTitle(name: String?, title: String?) -> String {
-        guard let text = nonempty(name) ?? nonempty(title) else { return L10n.text("Untitled task") }
-        // Legacy Codex titles can contain the entire first prompt. Keep only a bounded label.
-        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
-        let label = String(line.prefix(240))
-        return line.count > 240 || line.count < text.count ? label + "…" : label
     }
 
     static func title(_ title: String?, id: String, parentID: String?, agentPath: String?, nickname: String?) -> String {
@@ -116,5 +122,24 @@ enum TaskText {
         }
         if let nickname = nonempty(nickname) { return nickname }
         return parentID == nil ? L10n.text("Untitled task") : L10n.text("Subtask · \(String(id.prefix(8)))")
+    }
+}
+
+/// Exact, localized counts are shared by detail rows, help and accessibility.
+enum TaskTokenText {
+    static func count(_ value: Int64?) -> String {
+        guard let value, value >= 0 else { return "—" }
+        return value.formatted(.number.locale(L10n.languageOverride.map(Locale.init(identifier:)) ?? .current))
+    }
+
+    static func totalHelp(_ usage: TokenUsage) -> String {
+        let total = usage.total.flatMap { $0 >= 0 ? $0 : nil }
+        let text = total.map { L10n.text("\(count($0)) tokens total") } ?? L10n.text("Total usage unavailable")
+        guard usage.hasInconsistentBreakdown else { return text }
+        return text + "\n" + L10n.text("The source total differs from the sum of the details.")
+    }
+
+    static func outputAccessibility(_ usage: TokenUsage) -> String {
+        L10n.text("Output \(count(usage.output)), including reasoning \(count(usage.includedReasoningOutput))")
     }
 }

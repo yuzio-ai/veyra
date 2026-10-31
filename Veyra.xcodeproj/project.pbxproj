@@ -16,7 +16,6 @@
 		8D39F405223D10FF6202BF69 /* Exceptions for "Veyra" folder in "VeyraTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				App/DashboardStore.swift,
 				App/MonitorStore.swift,
 				App/CodexModelProfilesStore.swift,
 				App/UpdateStore.swift,
@@ -35,12 +34,6 @@
 				Core/DshLocation.swift,
 				Core/DshProjcache.swift,
 				Core/DshTaskReader.swift,
-				Core/DashboardModels.swift,
-				Core/DashboardStatistics.swift,
-				Core/DashboardWorkspace.swift,
-				Core/DashboardExport.swift,
-				Core/HistoryParser.swift,
-				Core/HistoryIndex.swift,
 				Core/GlobalShortcut.swift,
 				Core/JSONValue.swift,
 				Core/Localization.swift,
@@ -55,6 +48,8 @@
 				Core/RolloutReader.swift,
 				Core/SQLiteReader.swift,
 				Core/TaskPresentation.swift,
+				Core/TaskProjectContext.swift,
+				Core/TaskProjects.swift,
 				Resources/Localizable.xcstrings,
 			);
 			target = 279DDEE9C1A8F87AE4AC93D5 /* VeyraTests */;

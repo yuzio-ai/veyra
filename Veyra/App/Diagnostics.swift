@@ -5,6 +5,39 @@ import AppKit
 enum Diagnostics {
     static var menuWindow: (() -> NSWindow?)?
     static var toggleMenu: (() -> Void)?
+
+    /// The fixed LaunchServices runner revokes this lease on timeout/interruption.
+    /// Record identity before checking it, so even a delayed launch cannot outlive the runner.
+    static func validatePreviewLease() throws {
+        let arguments = CommandLine.arguments
+        guard let index = arguments.firstIndex(of: "--preview-lease") else {
+            if arguments.contains("--preview-focus-host") { throw MenuCheckError.invalidLease }
+            return
+        }
+        guard arguments.indices.contains(index + 1), UUID(uuidString: arguments[index + 1]) != nil else {
+            throw MenuCheckError.invalidLease
+        }
+        let destination: Int
+        if let host = arguments.firstIndex(of: "--preview-focus-host") {
+            destination = host
+        } else if let render = arguments.firstIndex(of: "--render-previews"), PreviewSupport.menuScenario == nil {
+            destination = render
+        } else if let exercise = arguments.firstIndex(of: "--exercise-menu-to"),
+                  PreviewSupport.menuScenario != nil, arguments.contains("--exit-after-menu-checks"),
+                  !arguments.contains("--render-previews") {
+            destination = exercise
+        } else { throw MenuCheckError.invalidLease }
+        guard arguments.indices.contains(destination + 1) else { throw MenuCheckError.invalidLease }
+        let directory = URL(fileURLWithPath: arguments[destination + 1], isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let token = arguments[index + 1]
+        let receipt: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier, "group": getpgrp(), "token": token]
+        try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
+            .write(to: directory.appendingPathComponent("process.json"), options: [.atomic])
+        guard try String(contentsOf: directory.appendingPathComponent("active-lease"), encoding: .utf8) == token else {
+            throw MenuCheckError.invalidLease
+        }
+    }
     /// Opt-in interaction smoke test against the actual menu window, not a substitute window.
     /// Images remain layout-only; this never requests screen recording permission.
     static func exerciseNextMenu(to directory: URL) {
@@ -63,31 +96,79 @@ enum Diagnostics {
                     // Exercise the same controller used by the registered hotkey and status button.
                     toggleMenu?()
                     guard await waitFor({ !closing.isVisible }) else { throw MenuCheckError.didNotClose }
+                    let previousApplication = try await prepareBackgroundMenu(in: directory)
                     toggleMenu?()
                     guard await waitFor({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
                     guard let reopened = menuWindow?(), reopened.isVisible else { throw MenuCheckError.didNotOpen }
-                    // Shell-launched fixtures may not activate over the user's foreground app.
-                    // Focus the real control and dispatch through its native window rather than
-                    // NSApplication's global key-window routing. This is synthetic input evidence.
+                    // LaunchServices brings the fixed fixture to the foreground. Require a real
+                    // key window before dispatching a synthetic event through its responder chain.
+                    guard await waitFor({ NSApp.isActive && reopened.isKeyWindow }) else {
+                        print("Keyboard focus unavailable: app=\(ProcessInfo.processInfo.processIdentifier), front=\(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1), active=\(NSApp.isActive), policy=\(NSApp.activationPolicy().rawValue), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), visible=\(reopened.isVisible), appKey=\(NSApp.keyWindow?.windowNumber ?? -1), popover=\(reopened.windowNumber)")
+                        throw MenuCheckError.keyboardFocusUnavailable
+                    }
                     let provider = reopened.contentView.flatMap { providerButton(in: $0) }
                     let focused = provider.map { reopened.makeFirstResponder($0) } ?? false
                     let keyboardAppWasActive = NSApp.isActive
+                    let keyboardWindowWasKey = reopened.isKeyWindow
                     print("Keyboard fixture: active=\(NSApp.isActive), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), provider=\(provider != nil), focused=\(focused)")
                     guard provider != nil, focused else {
                         throw MenuCheckError.keyboardFocusUnavailable
                     }
-                    print("Escape check: key=\(reopened.isKeyWindow), firstResponder=\(String(describing: reopened.firstResponder.map { type(of: $0) })), appKey=\(String(describing: NSApp.keyWindow?.windowNumber)), target=\(reopened.windowNumber)")
                     if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: reopened.windowNumber, context: nil,
                         characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
                         reopened.sendEvent(escape)
                     }
                     guard await waitFor({ !reopened.isVisible }) else { throw MenuCheckError.escapeDidNotClose }
-                    toggleMenu?()
+                    guard await waitFor({ NSWorkspace.shared.frontmostApplication?.processIdentifier == previousApplication }) else {
+                        throw MenuCheckError.focusNotRestored
+                    }
                     records.append(["position": "controls", "toggleAndEscapePassed": true,
                                     "keyboardDispatch": "native-window", "keyboardFirstResponder": "provider-button",
                                     "appWasActive": keyboardAppWasActive,
+                                    "windowWasKey": keyboardWindowWasKey,
+                                    "openedFromBackground": true, "previousApplicationRestored": true,
                                     "restoredVisibilityBeforeToggle": restoredVisibilityBeforeToggle])
+                    // Pure dsh uses the same native popover, with no Codex provider control.
+                    PreviewSupport.configure(MonitorStore.shared, scenario: .dshOnly)
+                    try await Task.sleep(for: .milliseconds(700))
+                    let dshPreviousApplication = try await prepareBackgroundMenu(in: directory)
+                    toggleMenu?()
+                    guard await waitFor({ menuWindow?()?.isVisible == true }),
+                          let dshWindow = menuWindow?(), let dshView = dshWindow.contentView,
+                          providerButton(in: dshView) == nil,
+                          !MonitorStore.shared.showsQuota, MonitorStore.shared.menuTaskCount == "2" else {
+                        throw MenuCheckError.invalidDshState
+                    }
+                    dshView.layoutSubtreeIfNeeded()
+                    try PreviewSupport.saveBitmap(dshView, to: directory.appendingPathComponent("dsh-only-layout.png"))
+                    guard await waitFor({ NSApp.isActive && dshWindow.isKeyWindow }) else {
+                        print("dsh keyboard focus unavailable: active=\(NSApp.isActive), canKey=\(dshWindow.canBecomeKey), key=\(dshWindow.isKeyWindow), visible=\(dshWindow.isVisible)")
+                        throw MenuCheckError.keyboardFocusUnavailable
+                    }
+                    let dshAppWasActive = NSApp.isActive, dshWindowWasKey = dshWindow.isKeyWindow
+                    if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: dshWindow.windowNumber, context: nil,
+                        characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
+                        dshWindow.sendEvent(escape)
+                    }
+                    guard await waitFor({ !dshWindow.isVisible }) else { throw MenuCheckError.escapeDidNotClose }
+                    guard await waitFor({ NSWorkspace.shared.frontmostApplication?.processIdentifier == dshPreviousApplication }) else {
+                        throw MenuCheckError.focusNotRestored
+                    }
+                    records.append(["position": "dsh-only", "providerHidden": true, "quotaHidden": true,
+                                    "runningCount": "2", "escapePassed": true,
+                                    "openedFromBackground": true, "previousApplicationRestored": true,
+                                    "appWasActive": dshAppWasActive, "windowWasKey": dshWindowWasKey])
+                    PreviewSupport.configure(MonitorStore.shared, scenario: .noSources)
+                    toggleMenu?()
+                    try await Task.sleep(for: .milliseconds(700))
+                    guard let emptyView = menuWindow?()?.contentView, MonitorStore.shared.noSourcesFound,
+                          MonitorStore.shared.menuTaskCount == "0", !MonitorStore.shared.hasSourceWarning else {
+                        throw MenuCheckError.invalidDshState
+                    }
+                    try PreviewSupport.saveBitmap(emptyView, to: directory.appendingPathComponent("no-sources-layout.png"))
+                    records.append(["position": "no-sources", "runningCount": "0", "warning": false])
                     try JSONSerialization.data(withJSONObject: records, options: [.prettyPrinted, .sortedKeys])
                         .write(to: directory.appendingPathComponent("menu-check.json"))
                     print("Menu checks passed: top, middle, bottom, rapid scrolling, live shrink. Window \(window.windowNumber)")
@@ -122,10 +203,38 @@ enum Diagnostics {
         return condition()
     }
 
+    /// Exercise the actual background-open path instead of inheriting focus
+    /// from LaunchServices or a settings preview that ran earlier.
+    private static func prepareBackgroundMenu(in directory: URL) async throws -> pid_t {
+        let hostReceipt = directory.appendingPathComponent("focus-host/process.json")
+        guard let data = try? Data(contentsOf: hostReceipt),
+              let receipt = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawPID = receipt["pid"] as? Int,
+              let host = NSRunningApplication(processIdentifier: pid_t(rawPID)),
+              host.bundleIdentifier?.hasSuffix(".keyboard-focus-host") == true else {
+            throw MenuCheckError.backgroundSetupFailed
+        }
+        let request = UUID().uuidString
+        let pid = host.processIdentifier
+        print("Keyboard host request: appActive=\(NSApp.isActive), hostActive=\(host.isActive), host=\(pid)")
+        try request.write(to: directory.appendingPathComponent("focus-request"), atomically: true, encoding: .utf8)
+        NSApp.yieldActivation(to: host)
+        host.activate(options: [])
+        guard await waitFor({
+            !NSApp.isActive && host.isActive
+                && (try? String(contentsOf: directory.appendingPathComponent("focus-ready"), encoding: .utf8)) == request
+        }) else {
+            print("Keyboard host timeout: appActive=\(NSApp.isActive), hostActive=\(host.isActive), ready=\(FileManager.default.fileExists(atPath: directory.appendingPathComponent("focus-ready").path))")
+            throw MenuCheckError.backgroundSetupFailed
+        }
+        print("Keyboard background fixture: active=\(NSApp.isActive), previous=\(pid), cooperativeYield=true")
+        return pid
+    }
+
     private enum MenuCheckError: Error {
         case missingScrollView, expectedOverflow, unstableHeight, didNotShrink, timedOut
         case didNotClose, didNotOpen, escapeDidNotClose
-        case keyboardFocusUnavailable
+        case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidDshState, invalidLease
     }
 
     /// Capture our own real popover, avoiding a fixed preview window that
@@ -167,14 +276,15 @@ enum Diagnostics {
                 let incremental = try await reader.fetch(home: location.home)
                 let secondDuration = secondStart.duration(to: clock.now)
                 let quota = CommandLine.arguments.contains("--network")
-                    ? await client.fetch(location: location) : QuotaRefresh(snapshot: incremental.localQuota)
+                    ? await client.fetch(location: location) : QuotaRefresh()
                 let result: [String: JSONValue] = [
+                    "energyBenchmarkIsolation": .bool(CommandLine.arguments.contains("--energy-benchmark")),
                     "quotaError": quota.error.map { .string($0.message) } ?? .null,
                     "quotaErrorCode": quota.error.map { .string($0.rawValue) } ?? .null,
                     "taskWarning": initial.warning.map { .string($0.message) } ?? .null,
                     "initialRead": .string(String(describing: firstDuration)),
                     "incrementalRead": .string(String(describing: secondDuration)),
-                    "quotaSource": quota.snapshot.map { .string($0.source.rawValue) } ?? .null,
+                    "quotaSource": quota.snapshot.map { _ in .string("network") } ?? .null,
                     "metadataQueries": .number(Double(incremental.metrics.metadataQueries)),
                     "historyQueries": .number(Double(incremental.metrics.historyQueries)),
                     "rolloutBytes": .number(Double(incremental.metrics.rolloutBytes)),

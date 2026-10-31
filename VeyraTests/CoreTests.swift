@@ -12,7 +12,7 @@ final class CoreTests: XCTestCase {
     }
 
     func testMultiBucketPrecedenceDynamicWindowsAndClamping() throws {
-        let result = QuotaSnapshot.parse(try json(#"{"rateLimits":{"primary":{"usedPercent":99}},"rateLimitsByLimitId":{"spark":{"limitName":"Spark","primary":{"usedPercent":-5,"windowDurationMins":300},"secondary":{"usedPercent":150,"windowDurationMins":10080}},"codex":{"primary":{"usedPercent":48,"windowDurationMins":10080,"resetsAt":1788878214},"secondary":null}}}"#))
+        let result = QuotaSnapshot.parse(try json(#"{"rateLimits":{"primary":{"usedPercent":99}},"rateLimitsByLimitId":{"additional-limit":{"limitName":"Additional quota","primary":{"usedPercent":-5,"windowDurationMins":300},"secondary":{"usedPercent":150,"windowDurationMins":10080}},"codex":{"primary":{"usedPercent":48,"windowDurationMins":10080,"resetsAt":1788878214},"secondary":null}}}"#))
         XCTAssertEqual(result.windows.count, 3)
         XCTAssertEqual(result.menuWindow?.bucketID, "codex")
         XCTAssertEqual(result.menuWindow?.durationLabel, L10n.text("Week"))
@@ -69,12 +69,10 @@ final class CoreTests: XCTestCase {
     }
 
     func testCompactContextWindowKeepsRoundSizeAndExactCount() {
-        XCTAssertEqual(DisplayFormat.compactTokens(1_048_576), "1M")
-        XCTAssertEqual(DisplayFormat.compactTokens(1_500_000), "1.5M")
-        XCTAssertEqual(DisplayFormat.compactTokens(200_000), "200K")
-        XCTAssertEqual(DisplayFormat.compactTokens(999), "999")
         for language in ["en", "zh-Hans"] {
             L10n.$languageOverride.withValue(language) {
+                XCTAssertEqual(DisplayFormat.contextWindow(1_500_000), "1.5M tokens")
+                XCTAssertEqual(DisplayFormat.contextWindow(999), "999 tokens")
                 XCTAssertEqual(DisplayFormat.contextWindow(200_000), "200K tokens")
                 XCTAssertEqual(DisplayFormat.contextWindow(1_048_576), language == "en"
                     ? "1M tokens (1,048,576)"
@@ -104,6 +102,52 @@ final class CoreTests: XCTestCase {
         ]
         for usage in usages {
             XCTAssertNil(usage.cachedInputPercent, "Unexpected percentage for \(usage)")
+        }
+    }
+
+    func testUncachedInputRequiresCompleteValidSubset() {
+        XCTAssertEqual(TokenUsage(input: 13_442_571, cachedInput: 13_273_856).uncachedInput, 168_715)
+        XCTAssertEqual(TokenUsage(input: 0, cachedInput: 0).uncachedInput, 0)
+        XCTAssertEqual(TokenUsage(input: 100, cachedInput: 0).uncachedInput, 100)
+        XCTAssertEqual(TokenUsage(input: Int64.max, cachedInput: Int64.max).uncachedInput, 0)
+        for usage in [TokenUsage(), TokenUsage(input: 100), TokenUsage(cachedInput: 80),
+                      TokenUsage(input: -1, cachedInput: 0), TokenUsage(input: 100, cachedInput: -1),
+                      TokenUsage(input: 100, cachedInput: 101)] {
+            XCTAssertNil(usage.uncachedInput)
+        }
+    }
+
+    func testAdditiveTaskBreakdownKeepsSourceTotalAndReasoningSubset() {
+        let parent = TokenUsage(input: 435_519_979, output: 904_902, cachedInput: 432_755_456,
+                               reasoningOutput: 507_192, total: 436_424_881)
+        let child = TokenUsage(input: 1_493_699, output: 7_891, cachedInput: 1_397_632,
+                              reasoningOutput: 546, total: 1_501_590)
+        XCTAssertEqual(parent.uncachedInput, 2_764_523)
+        XCTAssertEqual(child.uncachedInput, 96_067)
+        for usage in [parent, child] {
+            XCTAssertFalse(usage.hasInconsistentBreakdown)
+            XCTAssertEqual(usage.cachedInput! + usage.uncachedInput! + usage.output!, usage.total)
+            XCTAssertEqual(usage.includedReasoningOutput, usage.reasoningOutput)
+        }
+        let different = TokenUsage(input: 100, output: 20, cachedInput: 80, total: 121)
+        XCTAssertTrue(different.hasInconsistentBreakdown)
+        XCTAssertEqual(different.total, 121)
+        XCTAssertTrue(TokenUsage(input: Int64.max, output: 1, cachedInput: 0, total: Int64.max).hasInconsistentBreakdown)
+        XCTAssertFalse(TokenUsage(input: 100, output: 20, total: 121).hasInconsistentBreakdown)
+        XCTAssertFalse(TokenUsage(input: 100, output: -1, cachedInput: 80, total: 99).hasInconsistentBreakdown)
+        XCTAssertEqual(TokenUsage(output: 0, reasoningOutput: 0).includedReasoningOutput, 0)
+        for usage in [TokenUsage(output: 20), TokenUsage(reasoningOutput: 5),
+                      TokenUsage(output: 20, reasoningOutput: -1), TokenUsage(output: 20, reasoningOutput: 21)] {
+            XCTAssertNil(usage.includedReasoningOutput)
+        }
+    }
+
+    func testTaskTotalAbbreviationsPreserveExistingPrecision() {
+        let cases: [(Int64, String)] = [(0, "0"), (999, "999"), (1_000, "1.0K"),
+            (999_900, "999.9K"), (1_000_000, "1.00M"), (1_501_590, "1.50M"),
+            (436_424_881, "436.42M"), (1_000_000_000, "1.00B")]
+        for (count, expected) in cases {
+            XCTAssertEqual(DisplayFormat.tokens(count), expected)
         }
     }
 
@@ -164,7 +208,7 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(try reader.read(url).boundary)
     }
 
-    private func metadata(id: String = "root", source: String = "cli", model: String = "gpt-5.6-sol") -> ThreadMetadata {
+    private func metadata(id: String = "root", source: String = "cli", model: String = "example-coding-model") -> ThreadMetadata {
         ThreadMetadata(id: id, title: "Test", rolloutPath: "/tmp/session.jsonl", model: model, source: source,
                        updatedAt: Date(timeIntervalSince1970: 1788397200), tokens: 500)
     }
@@ -302,7 +346,7 @@ final class CoreTests: XCTestCase {
         """#
         try script.write(to: executable, atomically: false, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-        let client = AppServerClient(requestTimeout: .seconds(2))
+        let client = AppServerClient(requestTimeout: .seconds(2), clientVersion: "9.8.7-fixture")
         let location = CodexLocation(home: home, executable: executable)
         let first = await client.fetch(location: location)
         let second = await client.fetch(location: location)
@@ -313,8 +357,10 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(first.snapshot?.resetCredits?.availableCount, 2)
         XCTAssertEqual(second.snapshot?.resetCredits?.expiryGroups.map(\.count), [2])
         XCTAssertEqual(first.account?.identity, "fixture-account")
-        let requests = try String(contentsOf: home.appendingPathComponent("requests"), encoding: .utf8)
-            .split(separator: "\n").map { try json(String($0))["method"].string }
+        let messages = try String(contentsOf: home.appendingPathComponent("requests"), encoding: .utf8)
+            .split(separator: "\n").map { try json(String($0)) }
+        XCTAssertEqual(messages.first?["params"]["clientInfo"]["version"].string, "9.8.7-fixture")
+        let requests = messages.map { $0["method"].string }
         XCTAssertEqual(requests, ["initialize", "initialized", "account/read", "account/rateLimits/read", "account/read", "account/rateLimits/read"])
     }
 

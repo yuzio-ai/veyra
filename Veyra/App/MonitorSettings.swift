@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Observation
 
 // Settings owns its rhythm; native controls own their drawing and focus appearance.
 enum SettingsLayout {
@@ -18,6 +19,7 @@ struct MonitorSettings: View {
     @Bindable var updates: UpdateStore
     var shortcuts: ShortcutStore?
     var profiles: CodexModelProfilesStore?
+    var codexControlsEnabled = true
     @State private var previewShortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar())
 
     var body: some View {
@@ -34,6 +36,9 @@ struct MonitorSettings: View {
             ShortcutSettingsSection(shortcuts: shortcuts ?? previewShortcuts)
             Divider()
             CodexSettingsSection(store: store)
+                .disabled(!codexControlsEnabled)
+            Divider()
+            DshSettingsSection(store: store)
             Divider()
             UpdateSettingsSection(updates: updates)
         }
@@ -51,17 +56,31 @@ private struct ModelSettingsContainer: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if profiles.isPreview { SettingsTabControl(profiles: profiles).padding(14); Divider() }
-            if profiles.tab == .models { CodexModelProfilesView(profiles: profiles) }
-            else {
+            if profiles.tab == .models {
+                if store.canUseCodexServices { CodexModelProfilesView(profiles: profiles) }
+                else {
+                    VStack(spacing: 16) {
+                        Text("Codex is optional for dsh monitoring.").font(.headline)
+                        Text("Model settings require a local Codex executable and data directory.")
+                            .foregroundStyle(.secondary)
+                        Button("Open General Settings") { profiles.tab = .general }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
                 ScrollView {
-                    MonitorSettings(store: store, updates: updates, shortcuts: shortcuts)
+                    MonitorSettings(store: store, updates: updates, shortcuts: shortcuts,
+                                    codexControlsEnabled: !profiles.busy)
                         .frame(maxWidth: .infinity)
-                }.disabled(profiles.busy)
+                }
             }
         }
         .frame(minWidth: 900, idealWidth: 1100, maxWidth: .infinity, minHeight: 600, idealHeight: 740, maxHeight: .infinity)
-        .task(id: store.location) { await profiles.load(location: store.location) }
+        .task(id: store.canUseCodexServices) {
+            if store.canUseCodexServices { await profiles.load(location: store.location) }
+        }
+        .task(id: store.location) {
+            if store.canUseCodexServices { await profiles.load(location: store.location) }
+        }
         .alert("Save changes to this provider?", isPresented: $profiles.showUnsavedPrompt) {
             Button("Save") { Task { await profiles.resolveNavigation(save: true) } }
             Button("Discard changes", role: .destructive) { Task { await profiles.resolveNavigation(save: false) } }
@@ -86,6 +105,80 @@ private struct CodexSettingsSection: View {
                 PathSettingRow(store: store, field: .executable)
                 CodexStatusRow(store: store)
             }
+        }
+    }
+}
+
+private struct DshSettingsSection: View {
+    @Bindable var store: MonitorStore
+    @State private var draft: String?
+    @State private var error: CodexPathError?
+    @State private var submission = 0
+
+    private var text: Binding<String> {
+        Binding(get: { draft ?? store.dshLocation.home.path }, set: {
+            draft = $0; error = nil; submission += 1
+        })
+    }
+    private var status: String {
+        switch store.dshReadState {
+        case .detecting: L10n.text("Detecting dsh…")
+        case .notFound: L10n.text("dsh data not found. Choose its data directory if needed.")
+        case .available: store.dshWarning ?? L10n.text("dsh data directory is available")
+        case .failed: store.dshWarning ?? L10n.text("Unable to read dsh session records. Check its data directory.")
+        }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsLayout.contentSpacing) {
+            VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
+                Text(verbatim: "dsh").font(.headline)
+                Text("Monitor local dsh tasks without installing Codex.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
+                Text("Data directory")
+                HStack {
+                    NativePathField(text: text, title: L10n.text("dsh data directory"), identifier: "settings.path.dsh",
+                                    commit: commit, discardDraft: { draft = nil; error = nil; submission += 1 })
+                    Button("Choose…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseDirectories = true; panel.canChooseFiles = false
+                        panel.allowsMultipleSelection = false; panel.showsHiddenFiles = true
+                        if panel.runModal() == .OK, let url = panel.url { text.wrappedValue = url.path; commit() }
+                    }.accessibilityIdentifier("settings.choose.dsh")
+                }
+                if let error { Text(error.message).foregroundStyle(.orange) }
+                HStack {
+                    Text(status).fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(store.dshReadState == .failed || store.dshWarning != nil ? Color.orange : Color.secondary)
+                        .accessibilityIdentifier("settings.dsh.status")
+                    Spacer()
+                    if !store.dshHomePath.isEmpty {
+                        Button("Restore automatic detection") {
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                            submission += 1; draft = nil; error = nil
+                            let version = store.beginDshPathSubmission()
+                            Task { _ = await store.commitDshPath("", restoringAutomatic: true, submissionVersion: version) }
+                        }
+                    } else {
+                        Button("Detect Again") { Task { await store.refreshAll() } }
+                    }
+                }.font(.subheadline)
+            }
+        }
+        .onChange(of: store.dshPathResetRevision) { draft = nil; error = nil; submission += 1 }
+        .onDisappear { draft = nil; error = nil; submission += 1 }
+    }
+    private func commit() {
+        guard let draft else { return }
+        submission += 1
+        let request = submission, resetVersion = store.dshPathResetRevision
+        let version = store.beginDshPathSubmission()
+        Task {
+            let result = await store.commitDshPath(draft, resetVersion: resetVersion, submissionVersion: version)
+            guard request == submission else { return }
+            if case .rejected(let issue) = result { error = issue }
+            else { self.draft = nil; error = nil }
         }
     }
 }
@@ -175,7 +268,7 @@ private struct CodexStatusRow: View {
         switch store.configurationState {
         case .detecting: L10n.text("Detecting Codex…")
         case .valid: store.hasManualPaths ? L10n.text("Codex configuration is valid") : L10n.text("Codex detected automatically")
-        case .notFound: L10n.missingCodexExecutable()
+        case .notFound: L10n.text("Codex not detected. dsh monitoring remains available.")
         case .invalid(.home): L10n.text("Codex data directory is unavailable")
         case .invalid(.executable): L10n.text("Codex executable is invalid")
         }
@@ -187,8 +280,8 @@ private struct CodexStatusRow: View {
                 if store.configurationState == .detecting {
                     ProgressView().controlSize(.small).accessibilityHidden(true)
                 } else {
-                    Image(systemName: store.configurationState == .valid ? "checkmark.circle" : "exclamationmark.circle")
-                        .foregroundStyle(store.configurationState == .valid ? Color.secondary : Color.orange)
+                    Image(systemName: store.configurationState == .valid ? "checkmark.circle" : (store.configurationState == .notFound ? "info.circle" : "exclamationmark.circle"))
+                        .foregroundStyle(store.configurationState == .valid || store.configurationState == .notFound ? Color.secondary : Color.orange)
                         .accessibilityHidden(true)
                 }
                 Text(message).fixedSize(horizontal: false, vertical: true)
@@ -246,6 +339,8 @@ private struct NativePathField: NSViewRepresentable {
 
     func updateNSView(_ field: PathTextField, context: Context) {
         context.coordinator.parent = self
+        field.isEnabled = context.environment.isEnabled
+        field.isEditable = context.environment.isEnabled
         if field.stringValue != text {
             field.stringValue = text
             if let editor = field.currentEditor() { editor.string = text }
@@ -306,35 +401,82 @@ private struct NativePathField: NSViewRepresentable {
     }
 }
 
-struct SettingsTabControl: View {
-    @Bindable var profiles: CodexModelProfilesStore
-    var body: some View {
-        Picker("Settings", selection: Binding(get: { profiles.tab }, set: { tab in profiles.navigate { profiles.tab = tab } })) {
-            Text("General").tag(VeyraSettingsTab.general)
-            Text("Models").tag(VeyraSettingsTab.models)
-        }.labelsHidden().pickerStyle(.segmented).frame(width: 240)
-            .accessibilityIdentifier("settings.tabs")
+@MainActor
+enum SettingsWindow {
+    static func make<Content: View>(hosting: NSHostingView<Content>,
+                                    contentSize: NSSize = NSSize(width: 1100, height: 780)) -> NSWindow {
+        // Track the content minimum without deriving a maximum from the form's layout.
+        hosting.sizingOptions = [.minSize]
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: contentSize),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.title = L10n.text("Settings")
+        window.identifier = NSUserInterfaceItemIdentifier("veyra.settings")
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.contentMinSize = NSSize(width: 900, height: 600)
+        return window
     }
 }
 
 @MainActor
 final class SettingsToolbarController: NSObject, NSToolbarDelegate {
     private let profiles: CodexModelProfilesStore
-    private let tabs = NSToolbarItem.Identifier("veyra.settings.tabs")
+    private let toolbar = NSToolbar(identifier: "veyra.settings.toolbar")
+    private let general = NSToolbarItem.Identifier("veyra.settings.general")
+    private let models = NSToolbarItem.Identifier("veyra.settings.models")
+
     init(profiles: CodexModelProfilesStore, window: NSWindow) {
         self.profiles = profiles
         super.init()
-        let toolbar = NSToolbar(identifier: "veyra.settings.toolbar")
-        toolbar.delegate = self; toolbar.displayMode = .iconOnly; toolbar.allowsUserCustomization = false
-        window.toolbar = toolbar; window.toolbarStyle = .unified
+        toolbar.delegate = self
+        toolbar.displayMode = .iconAndLabel
+        toolbar.allowsUserCustomization = false
+        if #available(macOS 15.0, *) { toolbar.allowsDisplayModeCustomization = false }
+        toolbar.centeredItemIdentifiers = [general, models]
+        window.titleVisibility = .visible
+        window.toolbarStyle = .expanded
+        window.toolbar = toolbar
+        observeState()
     }
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.flexibleSpace, tabs] }
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [.flexibleSpace, tabs, .flexibleSpace] }
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        guard itemIdentifier == tabs else { return nil }
-        let item = NSToolbarItem(itemIdentifier: tabs)
-        item.label = L10n.text("Settings")
-        item.view = NSHostingView(rootView: SettingsTabControl(profiles: profiles).padding(.vertical, 4))
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [general, models] }
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [general, models] }
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [general, models] }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        guard identifier == general || identifier == models else { return nil }
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = identifier == general ? L10n.text("General") : L10n.text("Models")
+        item.paletteLabel = item.label
+        item.toolTip = item.label
+        item.image = NSImage(systemSymbolName: identifier == general ? "gearshape" : "cpu", accessibilityDescription: item.label)
+        item.target = self
+        item.action = #selector(selectTab(_:))
+        item.autovalidates = false
         return item
+    }
+
+    @objc private func selectTab(_ sender: NSToolbarItem) {
+        let tab: VeyraSettingsTab = sender.itemIdentifier == general ? .general : .models
+        if !profiles.busy && !profiles.showUnsavedPrompt && profiles.tab != tab {
+            profiles.navigate { [weak profiles] in profiles?.tab = tab }
+        }
+        // AppKit selects the clicked item before invoking its action. Restore the actual
+        // page while navigation is blocked or waiting for the unsaved-changes decision.
+        synchronizeState()
+    }
+
+    private func synchronizeState() {
+        toolbar.selectedItemIdentifier = profiles.tab == .general ? general : models
+        let enabled = !profiles.busy && !profiles.showUnsavedPrompt
+        for item in toolbar.items { item.isEnabled = enabled }
+    }
+
+    private func observeState() {
+        withObservationTracking {
+            synchronizeState()
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeState() }
+        }
     }
 }

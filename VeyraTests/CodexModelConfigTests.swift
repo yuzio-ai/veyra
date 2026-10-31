@@ -25,29 +25,49 @@ final class CodexModelConfigTests: XCTestCase {
     }
 
     func testDefaultAndMissingProvidersAreNotCustom() {
-        for text in ["model_provider = \"openai\"", "model = \"gpt-5.6-sol\"", "", "model_provider = \"\""] {
+        for text in ["model_provider = \"openai\"", "model = \"example-coding-model\"", "", "model_provider = \"\""] {
             let config = CodexModelConfig.parse(text)
             XCTAssertFalse(config.usesCustomProvider, text)
             XCTAssertNil(config.customProvider, text)
         }
     }
 
+    func testOpenAIBaseURLOverridesAreCustomWithImplicitOrExplicitProvider() {
+        for selector in ["", "model_provider = \"openai\"\n"] {
+            for url in ["https://gateway.example.invalid/v1", ""] {
+                let config = CodexModelConfig.parse(selector + "openai_base_url = '\(url)'\n")
+                XCTAssertTrue(config.usesCustomProvider)
+                XCTAssertEqual(config.customProvider, "openai")
+                XCTAssertEqual(config.openAIBaseURL, url)
+            }
+        }
+    }
+
+    func testCommentedAndProfileScopedOpenAIBaseURLsDoNotOverrideGlobalRoute() {
+        for text in ["# openai_base_url = 'https://gateway.example.invalid/v1'",
+                     "[profiles.gateway]\nopenai_base_url = 'https://gateway.example.invalid/v1'"] {
+            let config = CodexModelConfig.parse(text)
+            XCTAssertNil(config.openAIBaseURL)
+            XCTAssertFalse(config.usesCustomProvider)
+        }
+    }
+
     func testSectionKeysAndCommentsNeverMarkCustom() {
         let config = CodexModelConfig.parse("""
             # model_provider = "commented-out"
-            model = "gpt-5.6-sol" # trailing comment
+            model = "example-coding-model" # trailing comment
             [profiles.work]
             model_provider = "moonshot"
             model = "kimi-k3"
             """)
-        XCTAssertEqual(config.model, "gpt-5.6-sol")
+        XCTAssertEqual(config.model, "example-coding-model")
         XCTAssertNil(config.provider)
         XCTAssertFalse(config.usesCustomProvider)
     }
 
     func testLegacyProfileDoesNotOverrideGlobalModelAndProvider() {
         let config = CodexModelConfig.parse("""
-            model = "gpt-5.6-sol"
+            model = "example-coding-model"
             profile = "work"
 
             [profiles.work]
@@ -57,7 +77,7 @@ final class CodexModelConfigTests: XCTestCase {
             [profiles.play]
             model_provider = "other"
             """)
-        XCTAssertEqual(config.model, "gpt-5.6-sol")
+        XCTAssertEqual(config.model, "example-coding-model")
         XCTAssertNil(config.provider)
         XCTAssertFalse(config.usesCustomProvider)
         XCTAssertNil(config.customProvider)
@@ -69,7 +89,7 @@ final class CodexModelConfigTests: XCTestCase {
             profile = "fast"
 
             [profiles.fast]
-            model = "gpt-5.3-codex-spark"
+            model = "example-fast-model"
             """)
         XCTAssertNil(config.model)
         XCTAssertEqual(config.provider, "openai")

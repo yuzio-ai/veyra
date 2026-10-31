@@ -89,15 +89,13 @@ final class ResetCreditsTests: XCTestCase {
         XCTAssertEqual(state.resetCredits, snapshot.resetCredits)
     }
 
-    func testLocalUpdatesAndFailuresPreserveCreditsButSuccessfulMissingFieldClearsThem() throws {
+    func testFailuresPreserveCreditsButSuccessfulMissingFieldClearsThem() throws {
         var state = QuotaDisplayState()
         XCTAssertNil(state.resetCredits)
         let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "email": .string("fixture@example.invalid")]))
         let credits = try parse(#"{"availableCount":1,"credits":[{"status":"available","expiresAt":200}]}"#)
         let network = QuotaSnapshot(windows: [], fetchedAt: now, accountID: nil, resetCredits: credits)
         state.apply(QuotaRefresh(account: account, snapshot: network))
-        let local = QuotaSnapshot(windows: [], fetchedAt: now.addingTimeInterval(10), accountID: nil, source: .local)
-        state.updateLocal(local)
         XCTAssertEqual(state.snapshot, network)
         XCTAssertEqual(state.resetCredits, credits)
         state.apply(QuotaRefresh(account: account, error: .timeout))
@@ -108,19 +106,18 @@ final class ResetCreditsTests: XCTestCase {
         XCTAssertTrue(state.resetCredits?.credits.isEmpty == true)
     }
 
-    func testAccountInvalidationClearsCreditsEvenWhenShowingLocalQuota() throws {
+    func testAccountInvalidationClearsCredits() throws {
         let credits = try parse(#"{"availableCount":1}"#)
         let first = AccountSnapshot(json: .object(["type": .string("chatgpt")]), accountID: "first")
         let second = AccountSnapshot(json: .object(["type": .string("chatgpt")]), accountID: "second")
-        let local = QuotaSnapshot(windows: [], fetchedAt: now.addingTimeInterval(10), accountID: nil, source: .local)
         for explicitInvalidation in [true, false] {
             var state = QuotaDisplayState()
             state.apply(QuotaRefresh(account: first, snapshot: QuotaSnapshot(windows: [], fetchedAt: now,
                 accountID: "first", resetCredits: credits)))
-            state.updateLocal(local)
             if explicitInvalidation { state.invalidateAccount() }
             else { state.apply(QuotaRefresh(account: second, error: .timeout)) }
-            XCTAssertEqual(state.snapshot, local)
+            XCTAssertNil(state.snapshot)
+            XCTAssertNil(state.account)
             XCTAssertNil(state.resetCredits)
         }
     }

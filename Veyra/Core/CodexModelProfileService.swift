@@ -114,6 +114,11 @@ actor CodexModelProfileService {
         defer { operating = false }
         let lock = try acquire(home: location.home); defer { release(lock) }
         var library = try library(home: location.home)
+        if let saved = library.connections.first(where: { $0.legacyProfile?.id == profile.id }) {
+            var target = ProviderSettings(profile: profile)
+            target.connectivity = saved.connectivity
+            try validateConnectionForApply(target, home: location.home)
+        }
         let snapshot = try await transport.readConfiguration(location: location)
         _ = try reconcile(&library, snapshot: snapshot, home: location.home)
         guard library.pending == nil else { throw ModelProfileFailure.changed }
@@ -138,28 +143,6 @@ actor CodexModelProfileService {
         let inverse = edits.map { CodexConfigEdit(keyPath: $0.keyPath, value: snapshot.value(at: $0.keyPath)) }
         return try await transact(ModelProfileJournal(before: inverse, after: edits), library: library,
                                   snapshot: snapshot, location: location)
-    }
-
-    func undo(location: CodexLocation) async throws -> ModelProfileContext {
-        guard !operating else { throw ModelProfileFailure.busy }
-        operating = true
-        defer { operating = false }
-        let lock = try acquire(home: location.home); defer { release(lock) }
-        var library = try library(home: location.home)
-        let snapshot = try await transport.readConfiguration(location: location)
-        _ = try reconcile(&library, snapshot: snapshot, home: location.home)
-        guard library.pending == nil else { throw ModelProfileFailure.changed }
-        guard let journal = library.journal, ModelProfilePatch.matches(journal.after, snapshot: snapshot) else {
-            throw ModelProfileFailure.changed
-        }
-        let providerIDs = journal.before.filter { $0.keyPath == "model_provider" }.compactMap { $0.value.string }
-        let dependencies = journal.before.map(\.value)
-            + providerIDs.flatMap { [snapshot.user["model_providers"][$0], snapshot.effective["model_providers"][$0]] }
-        for reference in Set(dependencies.flatMap(Self.credentialReferences)) {
-            guard try credentials.contains(reference) else { throw CredentialFailure.missing }
-        }
-        return try await transact(ModelProfileJournal(before: journal.after, after: journal.before, isUndo: true),
-                                  library: library, snapshot: snapshot, location: location)
     }
 
     static let originalKeys = ["model", "model_provider", "model_reasoning_effort", "model_catalog_json", "openai_base_url"]
@@ -269,23 +252,6 @@ actor CodexModelProfileService {
         return library
     }
 
-    func saveLegacyKey(_ profile: CodexModelProfile, newKey: String, home: URL) throws -> ModelProfileLibrary {
-        guard !operating, profile.kind == .custom else { throw ModelProfileFailure.busy }
-        let lock = try acquire(home: home); defer { release(lock) }
-        var library = try library(home: home)
-        let reference = CredentialReference()
-        var saved = profile.normalized()
-        saved.authentication = .keychain; saved.environmentKey = ""; saved.credentialReference = reference
-        saved.helperPath = helperExecutable.path
-        guard saved.validation.isEmpty else { throw ModelProfileFailure.invalid }
-        try credentials.save(newKey, reference: reference)
-        if let index = library.profiles.firstIndex(where: { $0.id == saved.id }) { library.profiles[index] = saved }
-        else { library.profiles.append(saved) }
-        do { try persist(library, home: home) }
-        catch { try? credentials.remove(reference); throw error }
-        return library
-    }
-
     func applyProvider(_ id: String, location: CodexLocation, expectedVersion: String) async throws -> ModelProfileContext {
         guard !operating else { throw ModelProfileFailure.busy }
         operating = true; defer { operating = false }
@@ -296,7 +262,7 @@ actor CodexModelProfileService {
             guard capability(location.executable) else { throw ModelProfileFailure.unsupported }
             guard let reference = settings.credential, try credentials.contains(reference) else { throw CredentialFailure.missing }
         }
-        guard settings.protocolName == "responses", settings.connectivity?.matches(settings) != true || settings.connectivity?.failure != .incompatible else { throw ProviderConnectionFailure.incompatible }
+        try validateConnectionForApply(settings, home: location.home)
         let preset = settings.modelAdapter
         let snapshot = try await transport.readConfiguration(location: location)
         _ = try reconcile(&library, snapshot: snapshot, home: location.home)
@@ -332,7 +298,7 @@ actor CodexModelProfileService {
         let data = try encoder.encode(catalog)
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let file = folder.appendingPathComponent(hash + ".json")
-        // Catalogs are immutable/versioned; existing undo references never change under them.
+        // Catalogs are immutable/versioned; existing sessions and pending writes keep their original references.
         if FileManager.default.fileExists(atPath: file.path) {
             guard try Data(contentsOf: file) == data else { throw ModelProfileFailure.storage }
         } else {
@@ -347,6 +313,13 @@ actor CodexModelProfileService {
         guard !edits.isEmpty else { return ModelProfileContext(library: library, snapshot: snapshot) }
         return try await transact(ModelProfileJournal(before: edits.map { CodexConfigEdit(keyPath: $0.keyPath, value: snapshot.value(at: $0.keyPath)) }, after: edits),
                                   library: library, snapshot: snapshot, location: location)
+    }
+
+    private func validateConnectionForApply(_ settings: ProviderSettings, home: URL) throws {
+        if let failure = settings.blockingConnectionFailure { throw failure }
+        if try cachedModels(settings: settings, home: home)?.failure == .authentication {
+            throw ModelDiscoveryFailure.authentication
+        }
     }
 
     func restoreOpenAI(location: CodexLocation, expectedVersion: String) async throws -> ModelProfileContext {
@@ -365,14 +338,6 @@ actor CodexModelProfileService {
                                   library: library, snapshot: snapshot, location: location)
     }
 
-    func discardUndo(home: URL) throws -> ModelProfileLibrary {
-        guard !operating else { throw ModelProfileFailure.busy }
-        let lock = try acquire(home: home); defer { release(lock) }
-        var library = try library(home: home)
-        guard library.pending == nil else { throw CredentialFailure.inUse }
-        library.journal = nil; try persist(library, home: home); return library
-    }
-
     func removeProviderKey(_ id: String, location: CodexLocation) async throws -> ModelProfileLibrary {
         guard !operating else { throw ModelProfileFailure.busy }
         operating = true; defer { operating = false }
@@ -380,7 +345,7 @@ actor CodexModelProfileService {
         var library = try library(home: location.home)
         guard let index = library.connections.firstIndex(where: { $0.id == id }), let reference = library.connections[index].credential else { return library }
         let snapshot = try await transport.readConfiguration(location: location)
-        let records = [library.journal, library.pending].compactMap { $0 }.flatMap { $0.before + $0.after }
+        let records = [library.pending].compactMap { $0 }.flatMap { $0.before + $0.after }
         let dependencyIDs = records.filter { $0.keyPath == "model_provider" }.compactMap { $0.value.string }
         let effectiveID = snapshot.effective["model_provider"].string ?? "openai"
         let protected: [JSONValue] = [snapshot.configuredProvider, snapshot.effective["model_providers"][effectiveID]]
@@ -458,22 +423,12 @@ actor CodexModelProfileService {
             guard !matchesUser && !matchesEffective else { throw CredentialFailure.inUse }
         }
         library.connections.removeAll { $0.id == id }
-        // Credentials are retained if any config/undo record may still use them. Explicit Key removal
+        // Credentials are retained if any configuration or interrupted write may still use them. Explicit Key removal
         // remains a separate protected action, so deleting a local row cannot break a saved session.
         try persist(library, home: location.home)
         return library
     }
 
-    private static func credentialReferences(_ value: JSONValue) -> [CredentialReference] {
-        if let items = value.array {
-            if items.count == 2, items[0].string == "--provider-credential", let raw = items[1].string, let id = UUID(uuidString: raw) {
-                return [CredentialReference(id: id)]
-            }
-            return items.flatMap(credentialReferences)
-        }
-        if let object = value.object { return object.values.flatMap(credentialReferences) }
-        return []
-    }
     private static func contains(_ reference: String, in value: JSONValue) -> Bool {
         switch value {
         case .string(let s): return s.lowercased() == reference
@@ -525,13 +480,13 @@ actor CodexModelProfileService {
         }
         if let receipt, receipt.version == actual.version, knownValues {
             let inverse = operation.before.filter { actual.value(at: $0.keyPath) != $0.value }
-            library.pending = ModelProfileJournal(before: inverse.map { CodexConfigEdit(keyPath: $0.keyPath, value: actual.value(at: $0.keyPath)) }, after: inverse, isUndo: true)
+            library.pending = ModelProfileJournal(before: inverse.map { CodexConfigEdit(keyPath: $0.keyPath, value: actual.value(at: $0.keyPath)) }, after: inverse)
             try persist(library, home: location.home)
             do { _ = try await transport.writeConfiguration(location: location, edits: inverse, expectedVersion: actual.version) }
             catch { /* Read back before classifying a disconnected inverse write. */ }
             actual = try await transport.readConfiguration(location: location)
             if ModelProfilePatch.matches(operation.before, snapshot: actual) {
-                library.pending = nil; library.journal = initial.journal
+                library.pending = nil
                 try persist(library, home: location.home)
                 throw ModelProfileFailure.invalid
             }
@@ -543,12 +498,10 @@ actor CodexModelProfileService {
     @discardableResult
     private func reconcile(_ library: inout ModelProfileLibrary, snapshot: CodexConfigSnapshot,
                            home: URL) throws -> ModelProfileFailure? {
-        guard var pending = library.pending else { return nil }
-        if ModelProfilePatch.matches(pending.after, snapshot: snapshot) {
-            pending.completed = true
-            library.journal = pending.isUndo ? nil : pending
-        } else if !ModelProfilePatch.matches(pending.before, snapshot: snapshot) {
-            // Preserve both the operation and the previous Undo until the user repairs
+        guard let pending = library.pending else { return nil }
+        if !ModelProfilePatch.matches(pending.after, snapshot: snapshot)
+            && !ModelProfilePatch.matches(pending.before, snapshot: snapshot) {
+            // Preserve the pending operation until the user repairs
             // the conflicting configuration. Never guess which process owns a value.
             return .changed
         }

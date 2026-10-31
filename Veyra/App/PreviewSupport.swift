@@ -6,11 +6,14 @@ import AppKit
 enum PreviewSupport {
     enum Scenario: String, CaseIterable {
         case loading, empty, single, longTitle = "long-title", multiple, quotas, error, expanded, unknown
-        case edgeCases = "edge-cases"
-        case localQuota = "local-quota", staleQuota = "stale-quota", noQuota = "no-quota", cooldown
+        case edgeCases = "edge-cases", taskProjects = "task-projects"
+        case noQuota = "no-quota", cooldown
         case customModel = "custom-model"
         case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
+        case tokenBreakdown = "token-breakdown", tokenEdges = "token-edges"
         case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
+        case dshOnly = "dsh-only", dshIdle = "dsh-idle", dshUnknown = "dsh-unknown"
+        case dshError = "dsh-error", noSources = "no-sources", mixedError = "mixed-error"
         case refreshing
         case updateAvailable = "update-available"
         case resetCredits = "reset-credits", resetCreditsExpired = "reset-credits-expired"
@@ -23,23 +26,27 @@ enum PreviewSupport {
 
     enum SettingsScenario: String, CaseIterable {
         case automatic, manual, detecting, missing, invalidDirectory, invalidExecutable, invalidDraft, longPath
+        case dshModels = "dsh-models"
     }
 
-    private static func settingsStore(_ scenario: SettingsScenario) -> MonitorStore {
+    static func settingsStore(_ scenario: SettingsScenario) -> MonitorStore {
         let home = URL(fileURLWithPath: "/Users/preview/.codex")
         let executable = URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex")
         let state: CodexConfigurationState
         switch scenario {
         case .detecting: state = .detecting
-        case .missing: state = .notFound
+        case .missing, .dshModels: state = .notFound
         case .invalidDirectory: state = .invalid(.home)
         case .invalidExecutable: state = .invalid(.executable)
         default: state = .valid
         }
-        let location = CodexLocation(home: home, executable: scenario == .missing ? nil : executable)
+        let location = CodexLocation(home: home, executable: [.missing, .dshModels].contains(scenario) ? nil : executable)
         let store = MonitorStore(defaults: UserDefaults(suiteName: "veyra-settings-preview")!,
                                  inspectConfiguration: { _, _ in CodexConfigurationReport(location: location, state: state) })
         store.isPreview = true
+        store.previewCodexServicesAvailable = ![.missing, .dshModels].contains(scenario)
+        store.dshHomePath = "/Users/preview/.dsh"
+        store.dshReadState = .available
         store.homePath = ""
         store.executablePath = ""
         if [.manual, .invalidDirectory, .invalidExecutable, .longPath].contains(scenario) {
@@ -83,6 +90,10 @@ enum PreviewSupport {
         switch scenario {
         case .expanded: ["demo-1"]
         case .familyExpanded: ["demo-1", "demo-2"]
+        case .tokenBreakdown: ["token-parent", "token-child", "token-deep"]
+        case .tokenEdges: ["token-zero", "token-missing", "token-invalid"]
+        case .edgeCases: ["demo-1", "demo-2"]
+        case .dshOnly: ["dsh:demo-1"]
         default: []
         }
     }
@@ -93,13 +104,35 @@ enum PreviewSupport {
         store.modelConfig = nil
         store.taskError = nil
         store.taskWarning = nil
+        store.dshWarning = nil
+        store.previewCodexServicesAvailable = true
+        store.codexReadState = .available
+        store.dshReadState = .notFound
         store.tasksBusy = false
         store.quotaBusy = false
         store.nextCalibrationAt = nil
-        store.localQuotaWarning = nil
         store.tasksUpdatedAt = referenceDate
         store.tasks = []
         store.taskAncestors = []
+        if [.dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError].contains(scenario) {
+            store.previewCodexServicesAvailable = false
+            store.codexReadState = .notFound
+            store.dshReadState = .available
+            switch scenario {
+            case .dshOnly: store.tasks = [dshTask(1), dshTask(2)]
+            case .dshUnknown: store.tasks = [dshTask(1, activity: .unknown)]
+            case .dshError:
+                store.dshReadState = .failed
+                store.dshWarning = L10n.text("Unable to read dsh session records. Check its data directory.")
+            case .noSources: store.dshReadState = .notFound; store.tasksUpdatedAt = nil
+            case .mixedError:
+                store.tasks = [dshTask(1)]
+                store.codexReadState = .failed
+                store.taskError = L10n.text("Unable to read Codex task records. Check its data directory.")
+            default: break
+            }
+            return
+        }
         if scenario == .loading {
             store.tasksUpdatedAt = nil
             store.tasksBusy = true
@@ -119,8 +152,8 @@ enum PreviewSupport {
         ]))
         var windows = [quota("codex", "Codex", primary: true, used: 52, minutes: 10_080)]
         if [.quotas, .multiple, .expanded].contains(scenario) {
-            windows += [quota("spark", "GPT-5.3-Codex-Spark", primary: true, used: 0, minutes: 300),
-                        quota("spark", "GPT-5.3-Codex-Spark", primary: false, used: 78, minutes: 10_080)]
+            windows += [quota("additional-limit", "Additional quota", primary: true, used: 0, minutes: 300),
+                        quota("additional-limit", "Additional quota", primary: false, used: 78, minutes: 10_080)]
         }
         if scenario == .error {
             windows = [quota("codex", "Codex", primary: true, used: 94, minutes: 300)]
@@ -167,12 +200,6 @@ enum PreviewSupport {
                 resetCredits: ResetCreditsSnapshot.parse(raw, at: referenceDate))
             store.quota.apply(QuotaRefresh(account: store.quota.account, snapshot: snapshot))
         }
-        if [.localQuota, .staleQuota].contains(scenario) {
-            store.quota.account = nil
-            store.quota.snapshot = QuotaSnapshot(windows: windows,
-                fetchedAt: referenceDate.addingTimeInterval(scenario == .staleQuota ? -600 : 0),
-                accountID: nil, source: .local)
-        }
         if scenario == .noQuota { store.quota = QuotaDisplayState() }
         if scenario == .customModel {
             store.quota = QuotaDisplayState()
@@ -183,14 +210,14 @@ enum PreviewSupport {
             store.nextCalibrationAt = referenceDate.addingTimeInterval(300)
         }
         switch scenario {
-        case .single, .quotas, .expanded, .localQuota, .staleQuota, .cooldown, .refreshing:
+        case .single, .quotas, .expanded, .cooldown, .refreshing:
             store.tasks = [task(1)]
             if scenario == .refreshing { store.tasksBusy = true }
         case .longTitle:
             store.tasks = [task(1, longTitle: true)]
-        case .multiple, .updateAvailable, .planProLite, .planBusiness, .planEnterprise, .planUnknown:
+        case .multiple, .taskProjects, .updateAvailable, .planProLite, .planBusiness, .planEnterprise, .planUnknown:
             store.tasks = (1...16).map { task($0, longTitle: $0 == 2 || $0 == 4, parentID: $0 == 2 ? "demo-1" : nil) }
-            if scenario == .multiple {
+            if scenario == .multiple || scenario == .taskProjects {
                 store.tasks += [dshTask(17), dshTask(18, activity: .unknown)]
             }
         case .unknown:
@@ -206,10 +233,45 @@ enum PreviewSupport {
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
             ]
+        case .tokenBreakdown:
+            store.modelConfig = CodexModelConfig(model: "fixture", provider: "fixture-provider")
+            store.tasks = [
+                TaskSnapshot(id: "token-parent", title: "任务明细 · 固定夹具", model: "example-coding-model",
+                    source: .desktop, parentID: nil, startedAt: referenceDate.addingTimeInterval(-9_960),
+                    updatedAt: referenceDate, tokens: TokenUsage(input: 435_519_979, output: 904_902,
+                        cachedInput: 432_755_456, reasoningOutput: 507_192, total: 436_424_881), activity: .running),
+                TaskSnapshot(id: "token-child", title: "profile preview worker", model: "example-coding-model",
+                    source: .subtask, parentID: "token-parent", startedAt: referenceDate.addingTimeInterval(-187),
+                    updatedAt: referenceDate, tokens: TokenUsage(input: 1_493_699, output: 7_891,
+                        cachedInput: 1_397_632, reasoningOutput: 546, total: 1_501_590), activity: .running,
+                    agentPath: "/root/profile_preview_worker", agentNickname: "FixtureAgent", agentRole: "reviewer",
+                    progress: TaskProgress(kind: .message, text: "已完成固定资料、首页与编辑入口的调用核对。正在检查直接进入编辑页面时的加载与恢复行为，验证长进展可以完整读取。")),
+                TaskSnapshot(id: "token-deep", title: "长名称子代理 · 完整路径和极长数值换行验证",
+                    model: "example-long-model-name-for-layout-validation", source: .subtask, parentID: "token-child",
+                    startedAt: referenceDate.addingTimeInterval(-90), updatedAt: referenceDate,
+                    tokens: TokenUsage(input: Int64.max / 2, output: Int64.max / 2, cachedInput: Int64.max / 3,
+                        reasoningOutput: Int64.max / 4, total: Int64.max - 1), activity: .running,
+                    agentPath: "/root/profile_preview_worker/very_long_nested_path_for_truncation_checks",
+                    agentNickname: "A very long subagent nickname for layout validation",
+                    progress: TaskProgress(kind: .tool, text: L10n.text("Running command")))
+            ]
+        case .tokenEdges:
+            store.modelConfig = CodexModelConfig(model: "fixture", provider: "fixture-provider")
+            store.tasks = [
+                TaskSnapshot(id: "token-zero", title: "Zero input and output", model: nil, source: .desktop,
+                    parentID: nil, startedAt: referenceDate, updatedAt: referenceDate,
+                    tokens: TokenUsage(input: 0, output: 0, cachedInput: 0, reasoningOutput: 0, total: 0), activity: .running),
+                TaskSnapshot(id: "token-missing", title: "Unavailable usage", model: nil, source: .subtask,
+                    parentID: "token-zero", startedAt: nil, updatedAt: referenceDate,
+                    tokens: TokenUsage(), activity: .running),
+                TaskSnapshot(id: "token-invalid", title: "Inconsistent source total and invalid subsets", model: "fixture",
+                    source: .desktop, parentID: nil, startedAt: referenceDate, updatedAt: referenceDate,
+                    tokens: TokenUsage(input: 100, output: 20, cachedInput: 101, reasoningOutput: 21, total: 121), activity: .running)
+            ]
         case .taskFamily, .familyExpanded:
             store.tasks = [task(1), task(2, parentID: "demo-1"), task(3, parentID: "demo-1", activity: .unknown),
                            task(4, parentID: "demo-2")]
-            store.tasks[1] = TaskSnapshot(id: "demo-2", title: "ios phone auth r2 review", model: "gpt-5.6-sol",
+            store.tasks[1] = TaskSnapshot(id: "demo-2", title: "ios phone auth r2 review", model: "example-coding-model",
                 source: .subtask, parentID: "demo-1", startedAt: referenceDate.addingTimeInterval(-210),
                 updatedAt: referenceDate, tokens: TokenUsage(input: 240_400, output: 1_300, total: 241_700), activity: .running,
                 agentPath: "/root/ios_phone_auth_r2_review", agentNickname: "Lorentz", agentRole: "reviewer",
@@ -223,10 +285,23 @@ enum PreviewSupport {
             store.tasks = [TaskSnapshot(id: "demo-1", title: "代码审查 · veyra 未提交更改", model: "kimi-k3", source: .desktop,
                                         parentID: nil, startedAt: referenceDate.addingTimeInterval(-9), updatedAt: referenceDate,
                                         tokens: TokenUsage(input: 5_230_000, output: 57_500, total: 5_290_000), activity: .running)]
-        case .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
+        case .dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError,
+             .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
              .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
              .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly:
             break
+        }
+        if scenario == .taskProjects || scenario == .multiple {
+            let projects = [
+                TaskProject(id: "preview-veyra", name: "Veyra", roots: ["/Projects/Veyra"]),
+                TaskProject(id: "preview-other", name: "Veyra", roots: ["/Projects/Other/Veyra"]),
+                TaskProject(id: "preview-long", name: "跨项目协作与长名称布局验证 · Long project name for overflow checks",
+                            roots: ["/Projects/Long name"])
+            ]
+            for index in store.tasks.indices {
+                let project = store.tasks[index].backend == .dsh ? projects[0] : projects[min(index / 5, 2)]
+                store.tasks[index].projectAssignment = index == 14 ? .unassigned : .project(project)
+            }
         }
     }
 
@@ -245,7 +320,7 @@ enum PreviewSupport {
                              activity: TaskActivity = .running) -> TaskSnapshot {
         TaskSnapshot(id: "demo-\(number)",
                      title: longTitle ? "检查额度读取与并行任务监控，验证非常长的任务名称能够正确换行并保持界面整齐" : "优化菜单栏弹窗与滚动体验 · \(number)",
-                     model: "gpt-5.6-sol", source: parentID == nil ? .desktop : .subtask, parentID: parentID,
+                     model: "example-coding-model", source: parentID == nil ? .desktop : .subtask, parentID: parentID,
                      startedAt: referenceDate.addingTimeInterval(-752), updatedAt: referenceDate,
                      tokens: TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, reasoningOutput: 2_891, total: 884_100),
                      activity: activity)
@@ -264,7 +339,7 @@ enum PreviewSupport {
         MonitorPanel(store: store, updates: .preview(scenario == .updateAvailable ? .available : .idle),
                      screenOverride: PanelScreenMetrics(visibleHeight: screenHeight),
                      initiallyExpandedTaskIDs: expandedTaskIDs(for: scenario),
-                     initiallyShowUnknown: scenario == .unknown, onSizingChange: onSizingChange)
+                     initiallyShowUnknown: scenario == .unknown || scenario == .taskProjects || scenario == .dshUnknown, onSizingChange: onSizingChange)
             .environment(\.monitorOpaquePreview, true)
             .environment(\.monitorPreviewContrast, increasedContrast ? .increased : .standard)
             .environment(\.monitorReferenceDate, referenceDate)
@@ -314,7 +389,11 @@ enum PreviewSupport {
                 }
                 let store = MonitorStore()
                 var results: [[String: Any]] = []
-                let scenarios = CommandLine.arguments.contains("--preview-settings-only") ? [] : Scenario.allCases
+                let dshOnly = CommandLine.arguments.contains("--preview-dsh-only")
+                let scenarios: [Scenario] = CommandLine.arguments.contains("--preview-settings-only") ? []
+                    : (dshOnly ? [.dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError] : Scenario.allCases)
+                if !scenarios.isEmpty { try renderStatusItems(to: directory) }
+                if !scenarios.isEmpty && !dshOnly { try await TaskDetailInteractionChecks.run(to: directory) }
                 for scenario in scenarios {
                     configure(store, scenario: scenario)
                     let appearances: [(String, NSAppearance.Name)] = [
@@ -345,7 +424,7 @@ enum PreviewSupport {
                             throw PreviewError.invalidLayout("\(scenario.rawValue)-\(name)")
                         }
                         // Layout regression budgets for these fixed fixtures only;
-                        // Include the reset-credit card, source timestamp and calibration controls;
+                        // Include the reset-credit card and quota refresh controls;
                         // production height always comes from the actual content.
                         let heightBudget: CGFloat = scenario == .single ? 560 : 776
                         guard measured.panelHeight <= heightBudget else {
@@ -361,14 +440,20 @@ enum PreviewSupport {
                     }
                 }
                 // Fixed settings fixtures never expose the user's configured paths.
-                let settingsCases = UpdateStore.PreviewState.allCases.map { (SettingsScenario.automatic, $0) }
-                    + SettingsScenario.allCases.filter { $0 != .automatic }.map { ($0, UpdateStore.PreviewState.idle) }
+                let settingsCases = dshOnly ? [(SettingsScenario.missing, UpdateStore.PreviewState.idle), (.dshModels, .idle)]
+                    : UpdateStore.PreviewState.allCases.map { (SettingsScenario.automatic, $0) }
+                        + SettingsScenario.allCases.filter { $0 != .automatic }.map { ($0, UpdateStore.PreviewState.idle) }
                 for (settingsScenario, updateState) in settingsCases {
                     let settingsStore = settingsStore(settingsScenario)
                     for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
                                                ("light-increased", .accessibilityHighContrastAqua),
                                                ("dark-increased", .accessibilityHighContrastDarkAqua)] {
-                        let hosting = NSHostingView(rootView: MonitorSettings(store: settingsStore, updates: .preview(updateState))
+                        let unavailableProfiles = CodexModelProfilesStore.preview()
+                        unavailableProfiles.tab = .models
+                        let hosting = NSHostingView(rootView: MonitorSettings(store: settingsStore, updates: .preview(updateState),
+                            profiles: settingsScenario == .dshModels ? unavailableProfiles : nil)
+                            .frame(width: settingsScenario == .dshModels ? 900 : SettingsLayout.width,
+                                   height: settingsScenario == .dshModels ? 630 : nil)
                             .environment(\.monitorReferenceDate, referenceDate)
                             .background(Color(nsColor: .windowBackgroundColor)))
                         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 1),
@@ -389,7 +474,8 @@ enum PreviewSupport {
                                 field.delegate?.controlTextDidEndEditing?(Notification(name: NSControl.textDidEndEditingNotification, object: field))
                             }
                         }
-                        guard abs(hosting.bounds.width - SettingsLayout.width) < 1, hosting.bounds.height > 100 else {
+                        guard abs(hosting.bounds.width - (settingsScenario == .dshModels ? 900 : SettingsLayout.width)) < 1,
+                              hosting.bounds.height > 100 else {
                             throw PreviewError.invalidLayout("settings-\(name)")
                         }
                         let filename = settingsScenario != .automatic ? "settings-\(settingsScenario.rawValue)-\(name)"
@@ -401,7 +487,7 @@ enum PreviewSupport {
                         retainedWindow = nil
                     }
                 }
-                results += try await ModelProfilePreviews.render(to: directory)
+                if !dshOnly { results += try await ModelProfilePreviews.render(to: directory) }
                 if CommandLine.arguments.contains("--exercise-settings") {
                     try await SettingsInteractionChecks.run(to: directory)
                 }
@@ -413,6 +499,28 @@ enum PreviewSupport {
                 FileHandle.standardError.write(Data("Preview failed: \(error)\n".utf8))
                 exit(1)
             }
+        }
+    }
+
+    private static func renderStatusItems(to directory: URL) throws {
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            let taskCounts = ["0", "1", "2", "12", "—", "2", "123", "1234", "—"]
+            let strip = NSView(frame: NSRect(x: 0, y: 0, width: 8 + taskCounts.count * 84, height: 36))
+            strip.wantsLayer = true
+            strip.layer?.backgroundColor = (name == "light" ? NSColor.white : .black).cgColor
+            strip.appearance = NSAppearance(named: appearance)
+            let samples: [Double?] = [0, 0.4, 48, 100, nil]
+            for index in taskCounts.indices {
+                let button = NSButton(frame: NSRect(x: 8 + index * 84, y: 7, width: 76, height: 22))
+                button.isBordered = false
+                button.imagePosition = .imageOnly
+                button.title = ""
+                button.image = MenuBarController.statusImage(percent: index < samples.count ? samples[index] : nil,
+                                                            showsQuota: index < samples.count, taskCount: taskCounts[index])
+                button.contentTintColor = name == "light" ? .black : .white
+                strip.addSubview(button)
+            }
+            try saveBitmap(strip, to: directory.appendingPathComponent("status-items-\(name).png"))
         }
     }
 

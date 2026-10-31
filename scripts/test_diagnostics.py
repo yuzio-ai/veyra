@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import plistlib
 from pathlib import Path
 import shlex
 import signal
@@ -10,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import uuid
 
 
 SECRETS = ["private@example.invalid", "TEST_SECRET", "DATA_SECRET", "/private/account/path",
@@ -32,6 +34,7 @@ for line in sys.stdin:
         continue
     response = {"id": request["id"]}
     if method == "initialize":
+        (home / "client-version").write_text(request["params"]["clientInfo"]["version"])
         response["result"] = {}
     elif method == "account/read":
         response["result"] = {"account": {"type": "chatgpt", "email": "fixture@example.invalid"}}
@@ -60,7 +63,7 @@ for line in sys.stdin:
 '''
 
 
-def run_case(app, mode, expected_code, network=True, with_task=False):
+def run_case(app, mode, expected_code, network=True, with_task=False, benchmark=False):
     with tempfile.TemporaryDirectory(prefix="veyra-diagnostics-") as directory:
         home = Path(directory)
         with sqlite3.connect(home / "state_5.sqlite") as db:
@@ -96,6 +99,8 @@ def run_case(app, mode, expected_code, network=True, with_task=False):
         command = [str(app), "--diagnose", "-codexHome", str(home), "-codexExecutable", str(executable)]
         if network:
             command.append("--network")
+        if benchmark:
+            command.append("--energy-benchmark")
         # Python restores SIGPIPE to its default in the app, exposing missing descriptor protection.
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                               env=environment, restore_signals=True, start_new_session=True) as process:
@@ -112,6 +117,7 @@ def run_case(app, mode, expected_code, network=True, with_task=False):
         for secret in SECRETS + [str(home), "PRIVATE_RESPONSE", "PRIVATE_INTERPRETER", "fixture@example.invalid"]:
             assert secret not in stdout + stderr, f"{mode}: private fixture data escaped diagnostics"
         payload = json.loads(stdout)
+        assert payload['energyBenchmarkIsolation'] is benchmark, f"{mode}: unexpected benchmark isolation capability"
         assert "quotaErrorCode" in payload, f"{mode}: missing error code field"
         assert payload["quotaErrorCode"] == expected_code, f"{mode}: unexpected error category: {payload}"
         if with_task:
@@ -126,12 +132,16 @@ def run_case(app, mode, expected_code, network=True, with_task=False):
                 assert payload["windows"][0]["remainingPercent"] == 75
             else:
                 assert payload["windows"] == []
+                assert payload["quotaSource"] is None
                 assert not (home / "requests").exists(), "Local diagnostics started the quota sidecar"
         else:
             assert isinstance(payload["quotaError"], str) and payload["quotaError"]
         if mode != "launch_failed" and network:
             requests = (home / "requests").read_text().splitlines()
             assert requests[0] == "initialize"
+            with (app.parent.parent / "Info.plist").open("rb") as info:
+                expected_version = plistlib.load(info)["CFBundleShortVersionString"]
+            assert (home / "client-version").read_text() == expected_version, "Handshake version differs from app bundle"
             assert set(requests) <= {"initialize", "initialized", "account/read", "account/rateLimits/read"}
         print(f"PASS diagnostics: {mode} ({'task context privacy' if with_task else 'network fixture' if network else 'local only'})")
 
@@ -157,6 +167,29 @@ def run_language_cases(app):
     return len(cases)
 
 
+def run_revoked_native_lease_cases(app):
+    for mode in ('menu', 'layouts'):
+        for contents in (None, 'wrong-token'):
+            with tempfile.TemporaryDirectory(prefix='veyra-preview-lease-') as name:
+                directory = Path(name)
+                token = str(uuid.uuid4())
+                if contents is not None:
+                    (directory / 'active-lease').write_text(contents)
+                arguments = (['--preview-menu', 'multiple', '--show-menu', '--exit-after-menu-checks',
+                              '--exercise-menu-to', str(directory)] if mode == 'menu'
+                             else ['--render-previews', str(directory)])
+                result = subprocess.run([str(app)] + arguments + ['--preview-lease', token],
+                    capture_output=True, text=True, timeout=10, start_new_session=True)
+                assert result.returncode == 1, 'A revoked GUI fixture must exit before initializing the app'
+                assert result.stderr.strip() == 'GUI preview fixture lease is unavailable.'
+                receipt = json.loads((directory / 'process.json').read_text())
+                assert receipt['pid'] == receipt['group'] and receipt['token'] == token
+                assert not (directory / 'menu-check.json').exists()
+                assert not (directory / 'layouts.json').exists()
+    print('PASS diagnostics: revoked and replaced GUI launch leases')
+    return 4
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path, help="Path to the built Veyra executable")
@@ -173,8 +206,10 @@ def main():
         run_case(app, mode, expected_code)
     run_case(app, "success", None, network=False)
     run_case(app, "success", None, network=False, with_task=True)
+    run_case(app, "success", None, network=False, with_task=True, benchmark=True)
     language_checks = run_language_cases(app)
-    print(f"Passed {len(cases) + 2} isolated app diagnostics checks and {language_checks} language checks")
+    lease_checks = run_revoked_native_lease_cases(app)
+    print(f"Passed {len(cases) + 3 + lease_checks} isolated app diagnostics checks and {language_checks} language checks")
 
 
 if __name__ == "__main__":

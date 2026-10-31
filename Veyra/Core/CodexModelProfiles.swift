@@ -129,39 +129,6 @@ struct CodexModelProfile: Codable, Equatable, Identifiable, Sendable {
         return url.user == nil && url.password == nil && url.query == nil && url.fragment == nil
     }
 
-    static func imported(from snapshot: CodexConfigSnapshot, name: String) -> Self {
-        let config = snapshot.effective
-        let providerID = config["model_provider"].string ?? "openai"
-        let rawTable = snapshot.user["model_providers"][providerID]
-        let table = rawTable.object == nil ? config["model_providers"][providerID] : rawTable
-        let baseOverride = config["openai_base_url"].string
-        var profile = Self(name: name)
-        profile.model = config["model"].string ?? ""
-        profile.reasoning = config["model_reasoning_effort"].string ?? ""
-        profile.catalogPath = config["model_catalog_json"].string ?? ""
-        if providerID == "openai", baseOverride == nil {
-            return profile
-        }
-        let allowed: Set<String> = ["name", "base_url", "wire_api", "env_key"]
-        if providerID != "openai", let object = table.object,
-           Set(object.keys).isSubset(of: allowed),
-           [nil, "responses"].contains(table["wire_api"].string),
-           let baseURL = table["base_url"].string, Self.validServiceURL(baseURL) {
-            profile.kind = .custom
-            profile.baseURL = baseURL
-            profile.providerName = table["name"].string ?? ""
-            profile.environmentKey = table["env_key"].string ?? ""
-            profile.authentication = profile.environmentKey.isEmpty ? .none : .environment
-        } else {
-            profile.kind = .reference
-            profile.providerName = table["name"].string ?? ""
-            profile.referencedProvider = providerID
-            // A credential-bearing URL must never enter Veyra's persisted library.
-            if let baseOverride, Self.validServiceURL(baseOverride) { profile.referencedOpenAIBaseURL = baseOverride }
-        }
-        return profile
-    }
-
     func matches(_ snapshot: CodexConfigSnapshot) -> Bool {
         let config = snapshot.user
         if authentication == .keychain {
@@ -261,7 +228,7 @@ enum ModelProfileFailure: Error, Equatable, Sendable, LocalizedError {
         case .unavailable: L10n.text("Unable to read or update Codex configuration. Check its paths and retry.")
         case .storage: L10n.text("Unable to save model profiles or the recovery record. No further changes were made.")
         case .busy: L10n.text("A model configuration operation is already in progress.")
-        case .changed: L10n.text("The switched fields changed outside Veyra. Undo is unavailable to avoid overwriting them.")
+        case .changed: L10n.text("Configuration fields changed outside Veyra. Reload or resolve the configuration before switching providers.")
         case .referenceMissing: L10n.text("The referenced provider is unavailable. Restore it in Codex or create a custom profile.")
         case .unsafeBackup: L10n.text("The existing service address contains credentials. Move them to Codex authentication before switching.")
         }
@@ -279,15 +246,12 @@ enum ModelProfileFailure: Error, Equatable, Sendable, LocalizedError {
 struct ModelProfileJournal: Codable, Equatable, Sendable {
     var before: [CodexConfigEdit]
     var after: [CodexConfigEdit]
-    var completed = false
-    var isUndo = false
 }
 
 struct ModelProfileLibrary: Codable, Equatable, Sendable {
     var schemaVersion = 3
     var connections: [ProviderDescriptor] = []
     var openAISnapshot: [CodexConfigEdit]?
-    var journal: ModelProfileJournal?
     var pending: ModelProfileJournal?
     // Compatibility projections; only connections is serialized in schema 3.
     var profiles: [CodexModelProfile] {
@@ -299,7 +263,7 @@ struct ModelProfileLibrary: Codable, Equatable, Sendable {
         set { connections.removeAll { $0.legacyProfile == nil }; connections += newValue }
     }
     init() {}
-    enum CodingKeys: String, CodingKey { case schemaVersion, connections, profiles, providers, openAISnapshot, journal, pending }
+    enum CodingKeys: String, CodingKey { case schemaVersion, connections, profiles, providers, openAISnapshot, pending }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
@@ -311,14 +275,15 @@ struct ModelProfileLibrary: Codable, Equatable, Sendable {
         }
         guard Set(connections.map(\.id)).count == connections.count else { throw ModelProfileFailure.storage }
         openAISnapshot = try c.decodeIfPresent([CodexConfigEdit].self, forKey: .openAISnapshot)
-        journal = try c.decodeIfPresent(ModelProfileJournal.self, forKey: .journal)
+        // Completed Undo history from older builds is obsolete. Pending writes
+        // still decode below so interrupted transactions can be reconciled.
         pending = try c.decodeIfPresent(ModelProfileJournal.self, forKey: .pending)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(3, forKey: .schemaVersion); try c.encode(connections, forKey: .connections)
         try c.encodeIfPresent(openAISnapshot, forKey: .openAISnapshot)
-        try c.encodeIfPresent(journal, forKey: .journal); try c.encodeIfPresent(pending, forKey: .pending)
+        try c.encodeIfPresent(pending, forKey: .pending)
     }
 }
 

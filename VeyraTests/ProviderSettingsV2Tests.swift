@@ -83,7 +83,7 @@ final class ProviderSettingsV2Tests: XCTestCase {
             XCTAssertFalse(try String(contentsOf: file, encoding: .utf8).contains("fixture-canary"))
         }
     }
-    func testOpenAIRestoreAllowsSafeURLAndUndoRestoresIt() async throws {
+    func testOpenAIRestoreAllowsSafeURLAndGatewayCanBeSelectedAgain() async throws {
         let (_, location, rpc, _, _, service) = try fixture()
         let address = "https://gateway.example.invalid/v1"
         await rpc.change("openai_base_url", to: .string(address))
@@ -91,8 +91,11 @@ final class ProviderSettingsV2Tests: XCTestCase {
         let restored = try await service.restoreOpenAI(location: location, expectedVersion: before.version)
         XCTAssertTrue(restored.snapshot.providerIdentity.isOfficial)
         XCTAssertEqual(restored.snapshot.user["openai_base_url"], .null)
-        let undone = try await service.undo(location: location)
-        XCTAssertEqual(undone.snapshot.user, before.user)
+        var gateway = CodexModelProfile(name: "Saved gateway", kind: .reference, model: "original")
+        gateway.referencedProvider = "openai"
+        gateway.referencedOpenAIBaseURL = address
+        let selected = try await service.apply(gateway, location: location, expectedVersion: restored.snapshot.version)
+        XCTAssertEqual(selected.snapshot.user["openai_base_url"].string, address)
     }
     func testUnsafeTargetURLCannotCreateRecoveryOrWriteConfiguration() async throws {
         let (home, location, rpc, _, _, service) = try fixture()
@@ -131,7 +134,7 @@ final class ProviderSettingsV2Tests: XCTestCase {
             XCTAssertEqual(restored.snapshot.user["model_context_window"].integer, 128000)
         }
     }
-    func testUnauthenticatedContextOverrideReplacesPreviousProviderAndUndoRestoresIt() async throws {
+    func testUnauthenticatedContextOverrideReplacesPreviousProviderAndReselectionRestoresIt() async throws {
         let (home, location, rpc, _, _, service) = try fixture()
         await rpc.change("model_context_window", to: .number(128000))
         var gateway = local(); gateway.authentication = .keychain; gateway.contextWindowOverride = 200000
@@ -144,9 +147,10 @@ final class ProviderSettingsV2Tests: XCTestCase {
         let applied = try await service.applyProvider(value.id, location: location, expectedVersion: previous.snapshot.version)
         XCTAssertEqual(applied.snapshot.user["model_context_window"].integer, 8192)
         XCTAssertEqual(applied.snapshot.configuredProvider["auth"], .null)
-        let undone = try await service.undo(location: location)
-        XCTAssertEqual(undone.snapshot.user, previous.snapshot.user)
-        let official = try await service.restoreOpenAI(location: location, expectedVersion: undone.snapshot.version)
+        let selected = try await service.applyProvider(gateway.id, location: location, expectedVersion: applied.snapshot.version)
+        XCTAssertEqual(selected.snapshot.user["model_context_window"].integer, 200000)
+        XCTAssertEqual(selected.snapshot.configuredProviderID, gateway.codexProviderID)
+        let official = try await service.restoreOpenAI(location: location, expectedVersion: selected.snapshot.version)
         XCTAssertTrue(official.snapshot.providerIdentity.isOfficial)
         XCTAssertEqual(official.snapshot.user["model_context_window"].integer, 128000)
     }
@@ -168,8 +172,10 @@ final class ProviderSettingsV2Tests: XCTestCase {
         _ = try await service.fetchProviderModels(value.id, home: home)
         let automatic = try await service.applyProvider(value.id, location: location, expectedVersion: discovered.snapshot.version)
         XCTAssertEqual(automatic.snapshot.user["model_context_window"], .null)
-        let undone = try await service.undo(location: location)
-        XCTAssertEqual(undone.snapshot.user, discovered.snapshot.user)
+        await client.configure([DiscoveredModel(id: value.model, contextWindow: 65536)])
+        _ = try await service.fetchProviderModels(value.id, home: home)
+        let refreshed = try await service.applyProvider(value.id, location: location, expectedVersion: automatic.snapshot.version)
+        XCTAssertEqual(refreshed.snapshot.user["model_context_window"].integer, 65536)
     }
     func testMigrationIsCanonicalIdempotentAndBacksUpOriginalBeforeWriting() async throws {
         let (home, location, rpc, _, _, service) = try fixture()
@@ -233,6 +239,75 @@ final class ProviderSettingsV2Tests: XCTestCase {
         let file = await service.libraryURL(home: home)
         XCTAssertFalse(try String(contentsOf: file).contains("fixture-secret"))
     }
+    func testKnownBlockingConnectionFailuresRejectPresetAndLegacyWritePaths() async throws {
+        for failure in [ProviderConnectionFailure.authentication, .incompatible] {
+            for legacy in [false, true] {
+                let (home, location, rpc, _, client, service) = try fixture()
+                let id: String
+                var profile: CodexModelProfile?
+                if legacy {
+                    profile = try local().profile(helper: URL(fileURLWithPath: "/tmp/fixture-helper"))
+                    _ = try await service.saveProfiles([profile!], home: home)
+                    id = ProviderSettings(profile: profile!).id
+                } else {
+                    var settings = ProviderSettings(preset: ProviderPreset.all[0]); settings.model = "fixture-model"
+                    _ = try await service.saveDiscoveredProvider(settings, newKey: "fixture-only-key", home: home)
+                    id = settings.id
+                }
+                await client.configure(failure)
+                _ = try await service.testConnection(id, home: home)
+                let file = await service.libraryURL(home: home)
+                let before = try Data(contentsOf: file)
+                do {
+                    _ = try await service.applyProvider(id, location: location, expectedVersion: "0")
+                    XCTFail("A known blocking connection failure must never write defaults")
+                } catch { XCTAssertEqual(error as? ProviderConnectionFailure, failure) }
+                if let profile {
+                    do {
+                        _ = try await service.apply(profile, location: location, expectedVersion: "0")
+                        XCTFail("The legacy profile entry must use the same connection gate")
+                    } catch { XCTAssertEqual(error as? ProviderConnectionFailure, failure) }
+                }
+                let writes = await rpc.writeCount
+                XCTAssertEqual(writes, 0)
+                XCTAssertEqual(try Data(contentsOf: file), before, "Rejected applies must preserve recovery metadata")
+            }
+        }
+    }
+    func testTransientConnectionFailureDoesNotBlockExplicitApply() async throws {
+        for failure in [ProviderConnectionFailure.network, .timeout, .rateLimited, .server, .inconclusive] {
+            let (home, location, rpc, _, client, service) = try fixture()
+            let value = local()
+            _ = try await service.saveProvider(value, newKey: nil, home: home)
+            await client.configure(failure)
+            _ = try await service.testConnection(value.id, home: home)
+            _ = try await service.applyProvider(value.id, location: location, expectedVersion: "0")
+            let writes = await rpc.writeCount
+            XCTAssertEqual(writes, 1)
+        }
+    }
+    func testLegacyApplyCannotBypassModelListAuthenticationFailure() async throws {
+        let (home, location, rpc, keys, _, _) = try fixture()
+        let models = ProviderModelFixture()
+        let service = CodexModelProfileService(transport: rpc, root: home.appendingPathComponent("cache-auth-library"),
+            credentials: keys, capability: { _ in true }, modelClient: models)
+        let profile = try local().profile(helper: URL(fileURLWithPath: "/tmp/fixture-helper"))
+        _ = try await service.saveProfiles([profile], home: home)
+        let id = ProviderSettings(profile: profile).id
+        await models.configure(failure: .authentication)
+        let cache = try await service.fetchProviderModels(id, home: home)
+        XCTAssertEqual(cache.failure, .authentication)
+        do {
+            _ = try await service.applyProvider(id, location: location, expectedVersion: "0")
+            XCTFail("Legacy connections must respect model-list authentication failures")
+        } catch { XCTAssertEqual(error as? ModelDiscoveryFailure, .authentication) }
+        do {
+            _ = try await service.apply(profile, location: location, expectedVersion: "0")
+            XCTFail("Legacy profiles must use the same authentication gate")
+        } catch { XCTAssertEqual(error as? ModelDiscoveryFailure, .authentication) }
+        let writes = await rpc.writeCount
+        XCTAssertEqual(writes, 0)
+    }
     func testLateConnectivityResultCannotOverwriteChangedConnection() async throws {
         let (home, _, _, _, client, service) = try fixture()
         var value = local()
@@ -266,7 +341,7 @@ final class ProviderSettingsV2Tests: XCTestCase {
         XCTAssertEqual(repaired.snapshot.configuredProvider["auth"]["args"], profile.provider["auth"]["args"])
         XCTAssertEqual(repaired.snapshot.configuredProvider["auth"]["command"].string, "/Applications/New Veyra.app/Contents/MacOS/Veyra")
         XCTAssertTrue(try keys.contains(old))
-        XCTAssertEqual(repaired.library.journal?.after.map(\.keyPath), ["model_providers." + profile.providerID + ".auth.command"])
+        XCTAssertNil(repaired.library.pending)
     }
     func testUnifiedOfficialApplyRestoresSignInSettingsAndLegacyOfficialRowCanBeDeleted() async throws {
         let (home, location, _, _, _, service) = try fixture()
@@ -336,19 +411,20 @@ final class ProviderSettingsV2Tests: XCTestCase {
         let removed = try await service.deleteConnection(value.id, location: location)
         XCTAssertTrue(removed.connections.isEmpty)
         XCTAssertTrue(try keys.contains(value.credential!))
-        let undo = try await service.undo(location: location)
-        XCTAssertEqual(undo.snapshot.configuredProviderID, value.codexProviderID)
+        let current = try await service.read(location: location)
+        XCTAssertTrue(current.snapshot.providerIdentity.isOfficial)
+        XCTAssertNotNil(current.snapshot.user["model_providers"][value.codexProviderID].object)
     }
 }
 
 @MainActor
 final class ProviderSettingsV2StoreTests: XCTestCase {
-    private func fixture() async throws -> (ModelConfigurationFixture, CodexModelProfilesStore) {
+    private func fixture(connectivityClient: ConnectivityFixture = ConnectivityFixture()) async throws -> (ModelConfigurationFixture, CodexModelProfilesStore) {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("veyra-v2-store-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: home) }
         let rpc = ModelConfigurationFixture(home: home)
-        let service = CodexModelProfileService(transport: rpc, root: home.appendingPathComponent("library"), credentials: MemoryCredentialStore(), capability: { _ in true }, modelClient: ProviderModelFixture(), connectivityClient: ConnectivityFixture())
+        let service = CodexModelProfileService(transport: rpc, root: home.appendingPathComponent("library"), credentials: MemoryCredentialStore(), capability: { _ in true }, modelClient: ProviderModelFixture(), connectivityClient: connectivityClient)
         let store = CodexModelProfilesStore(service: service)
         await store.load(location: CodexLocation(home: home, executable: nil)); store.activateWorkspace()
         store.chooseWorkspace(.create)
@@ -356,6 +432,82 @@ final class ProviderSettingsV2StoreTests: XCTestCase {
         store.providerDraft?.model = "manual-model"; store.providerDraft?.authentication = ModelProfileAuthentication.none
         return (rpc, store)
     }
+    func testPresetMenuAndSettingsRejectKnownConnectionFailures() async throws {
+        for failure in [ProviderConnectionFailure.authentication, .incompatible] {
+            let client = ConnectivityFixture()
+            let (rpc, store) = try await fixture(connectivityClient: client)
+            store.chooseConnectionForAction("deepseek")
+            store.providerDraft?.model = "fixture-model"; store.apiKeyInput = "fixture-only-key"
+            let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+            await store.refreshWorkspaceModels()
+            XCTAssertTrue(store.switchablePresets.contains { $0.id == "deepseek" })
+            await client.configure(failure)
+            await store.testWorkspaceConnection()
+            XCTAssertFalse(store.canApplyWorkspace)
+            XCTAssertFalse(store.switchablePresets.contains { $0.id == "deepseek" })
+            await store.applyPreset("deepseek")
+            let writes = await rpc.writeCount
+            XCTAssertEqual(writes, 0)
+            XCTAssertEqual(store.error, failure.localizedDescription)
+        }
+    }
+    func testConnectionResultsPreserveUnsavedMetadata() async throws {
+        for failure: ProviderConnectionFailure? in [nil, .network] {
+            let client = ConnectivityFixture()
+            let (rpc, store) = try await fixture(connectivityClient: client)
+            let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+            let original = try XCTUnwrap(store.savedConnection)
+            let scope = try XCTUnwrap(ProviderModelScope(original))
+            store.providerModelCaches[original.id] = ProviderModelCache(scope: scope,
+                models: [DiscoveredModel(id: original.model, reasoningLevels: ["low", "high"])], fetchedAt: Date())
+            await client.configure(failure, suspended: true)
+            let operation = Task { await store.testWorkspaceConnection() }
+            for _ in 0..<100 {
+                if await client.calls > 0 { break }
+                try await Task.sleep(for: .milliseconds(2))
+            }
+            let calls = await client.calls; XCTAssertEqual(calls, 1)
+            store.providerDraft?.name = "Unsaved name"
+            store.providerDraft?.contextWindowOverride = 8192
+            store.providerDraft?.reasoning = "high"
+            XCTAssertTrue(store.connectionTesting)
+            await client.resume(); await operation.value
+
+            XCTAssertFalse(store.connectionTesting)
+            XCTAssertTrue(store.hasUnsavedChanges)
+            XCTAssertEqual(store.editStatus, .modified)
+            XCTAssertEqual(store.providerDraft?.name, "Unsaved name")
+            XCTAssertEqual(store.providerDraft?.contextWindowOverride, 8192)
+            XCTAssertEqual(store.providerDraft?.reasoning, "high")
+            XCTAssertEqual(store.savedConnection?.name, original.name)
+            XCTAssertEqual(store.savedConnection?.contextWindowOverride, original.contextWindowOverride)
+            XCTAssertEqual(store.savedConnection?.reasoning, original.reasoning)
+            XCTAssertNotNil(store.providerDraft?.connectivity)
+            XCTAssertEqual(store.providerDraft?.connectivity?.failure, failure)
+            XCTAssertEqual(store.providerDraft?.connectivity, store.savedConnection?.connectivity)
+
+            store.chooseWorkspace(.official)
+            XCTAssertTrue(store.showUnsavedPrompt)
+            store.cancelNavigation()
+            let savedEdits = await store.saveWorkspace(); XCTAssertTrue(savedEdits)
+            XCTAssertFalse(store.hasUnsavedChanges)
+            XCTAssertEqual(store.savedConnection?.name, "Unsaved name")
+            XCTAssertEqual(store.savedConnection?.contextWindowOverride, 8192)
+            XCTAssertEqual(store.savedConnection?.reasoning, "high")
+            let writes = await rpc.writeCount; XCTAssertEqual(writes, 0)
+        }
+    }
+
+    func testConnectionResultWithoutEditsKeepsSavedState() async throws {
+        let (_, store) = try await fixture()
+        let saved = await store.saveWorkspace(); XCTAssertTrue(saved)
+        await store.testWorkspaceConnection()
+        XCTAssertNotNil(store.savedConnection?.connectivity)
+        XCTAssertEqual(store.providerDraft, store.savedConnection)
+        XCTAssertFalse(store.hasUnsavedChanges)
+        XCTAssertEqual(store.editStatus, .clean)
+    }
+
     func testSaveAndUnverifiedApplyAreSeparateAndFailurePreservesSavedDefinition() async throws {
         let (rpc, store) = try await fixture()
         let saved = await store.saveWorkspace(); XCTAssertTrue(saved)

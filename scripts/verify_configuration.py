@@ -56,7 +56,6 @@ BUILD_NUMBER_RE = re.compile(r"^[0-9]+$")
 SWIFT_VERSION = "6.0"
 SWIFT_CONCURRENCY = "complete"
 TEST_MEMBERSHIP_EXCEPTIONS = {
-    "App/DashboardStore.swift",
     "App/MonitorStore.swift",
     "App/CodexModelProfilesStore.swift",
     "App/UpdateStore.swift",

@@ -33,21 +33,6 @@ extension EnvironmentValues {
     }
 }
 
-/// Only group fixed controls. Never wrap a scrolling content area in this container.
-struct MonitorGlassGroup<Content: View>: View {
-    @ViewBuilder let content: () -> Content
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.monitorOpaquePreview) private var opaquePreview
-
-    var body: some View {
-        if #available(macOS 26, *), !reduceTransparency && !opaquePreview {
-            GlassEffectContainer(spacing: 8) { content() }
-        } else {
-            content()
-        }
-    }
-}
-
 struct ControlCenterTile: ViewModifier {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -76,15 +61,109 @@ struct ControlCenterTile: ViewModifier {
     }
 }
 
-struct MonitorActionStyle: ViewModifier {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.monitorOpaquePreview) private var opaquePreview
+/// Borderless native controls keep AppKit focus and keyboard dispatch inside the popover.
+struct MonitorActionButton: NSViewRepresentable {
+    let systemName: String
+    let label: String
+    let help: String
+    let identifier: String
+    var action: @MainActor () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.monitorPreviewContrast) private var previewContrast
 
-    func body(content: Content) -> some View {
-        if #available(macOS 26, *), !reduceTransparency && !opaquePreview {
-            content.buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.regular)
-        } else {
-            content.buttonStyle(.bordered).buttonBorderShape(.circle).controlSize(.regular)
+    @MainActor final class Coordinator: NSObject {
+        var action: @MainActor () -> Void
+        init(action: @escaping @MainActor () -> Void) { self.action = action }
+        @objc func invoke(_ sender: NSButton) {
+            guard sender.isEnabled else { return }
+            action()
         }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+    func makeNSView(context: Context) -> MonitorActionNativeButton {
+        let button = MonitorActionNativeButton(title: "", target: context.coordinator,
+                                               action: #selector(Coordinator.invoke(_:)))
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.imagePosition = .imageOnly
+        button.focusRingType = .none
+        (button.cell as? NSButtonCell)?.highlightsBy = []
+        return button
+    }
+
+    func updateNSView(_ button: MonitorActionNativeButton, context: Context) {
+        context.coordinator.action = action
+        button.image = NSImage(systemSymbolName: systemName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+        button.isEnabled = isEnabled
+        button.increasedContrast = (previewContrast ?? contrast) == .increased
+        button.toolTip = help
+        button.setAccessibilityLabel(label)
+        button.setAccessibilityIdentifier(identifier)
+        button.needsDisplay = true
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: MonitorActionNativeButton, context: Context) -> CGSize? {
+        CGSize(width: 28, height: 28)
+    }
+}
+
+final class MonitorActionNativeButton: NSButton {
+    var increasedContrast = false
+    private var hovered = false
+    private var hoverTracking: NSTrackingArea?
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 28, height: 28) }
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) }
+    override var acceptsFirstResponder: Bool { isEnabled }
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        needsDisplay = true
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        needsDisplay = true
+        return resigned
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let tracking = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: self, userInfo: nil)
+        addTrackingArea(tracking)
+        hoverTracking = tracking
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isEnabled, hovered || cell?.isHighlighted == true {
+            let pressed = cell?.isHighlighted == true
+            let opacity = pressed ? (increasedContrast ? 0.22 : 0.12) : (increasedContrast ? 0.14 : 0.07)
+            NSColor.labelColor.withAlphaComponent(opacity).setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        }
+        super.draw(dirtyRect)
+        if isEnabled, window?.isKeyWindow == true, window?.firstResponder === self {
+            // Borderless cells omit their ring when Full Keyboard Access is off.
+            // Keep programmatically focused controls visible in that mode too.
+            NSColor.keyboardFocusIndicatorColor.setStroke()
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 5, yRadius: 5)
+            ring.lineWidth = 2
+            ring.stroke()
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 49 || event.keyCode == 36 {
+            if isEnabled, !event.isARepeat { performClick(nil) }
+        } else { super.keyDown(with: event) }
     }
 }
