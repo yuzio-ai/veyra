@@ -147,6 +147,37 @@ final class AppServerClientTests: XCTestCase {
         }
     }
 
+    func testUnavailableAuthenticationClearsOldQuotaWithoutRequestingRateLimits() async throws {
+        for (account, failure): (String, QuotaFailure) in [
+            ("null", .notLoggedIn), (#"{"type":"apiKey"}"#, .unsupportedAuthentication)
+        ] {
+            let home = try home()
+            let location = try fakeCodex(home: home, onRequest: #"""
+            if [ -f "$CODEX_HOME/auth-changed" ]; then
+              case "$request" in
+                *'"method":"account/read"'*)
+                  printf '%s\n' '{"id":'"$rpc_id"',"result":{"account":\#(account)}}'
+                  continue ;;
+                *'"method":"account/rateLimits/read"'*) touch "$CODEX_HOME/unexpected-quota-request" ;;
+              esac
+            fi
+            """#)
+            let client = AppServerClient(requestTimeout: .seconds(5))
+            var display = QuotaDisplayState()
+            display.apply(await client.fetch(location: location))
+            XCTAssertNotNil(display.snapshot)
+            try Data().write(to: home.appendingPathComponent("auth-changed"))
+            let result = await client.fetch(location: location)
+            await client.shutdown()
+            XCTAssertEqual(result.error, failure)
+            XCTAssertFalse(result.didRequestQuota)
+            display.apply(result)
+            XCTAssertNil(display.snapshot)
+            XCTAssertNil(display.resetCredits)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: home.appendingPathComponent("unexpected-quota-request").path))
+        }
+    }
+
     func testUnknownSystemErrorIsReducedToSafeCategory() {
         let error = NSError(domain: "private@example.invalid", code: 123,
                             userInfo: [NSLocalizedDescriptionKey: "TEST_SECRET /private/account/path"])

@@ -14,8 +14,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     private var renderedShowsQuota: Bool?
     private var renderedTaskCount: String?
 
-    init(store: MonitorStore, updates: UpdateStore, openSettings: @escaping () -> Void,
-         profiles: CodexModelProfilesStore? = nil, openModelProfiles: @escaping () -> Void = {}) {
+    init(store: MonitorStore, updates: UpdateStore, openSettings: @escaping () -> Void) {
         self.store = store
         super.init()
         popover.behavior = .transient
@@ -31,15 +30,13 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             }, openSettings: { [weak self] in
                 self?.hide(restoringFocus: false)
                 openSettings()
-            }, profiles: profiles, openModelProfiles: { [weak self] in
-                self?.hide(restoringFocus: false)
-                openModelProfiles()
-            }, closeMenu: { [weak self] in self?.hide() })
+            })
             .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
             .environment(\.monitorOpaquePreview, PreviewSupport.menuReduceTransparency)
             .environment(\.monitorPreviewContrast, PreviewSupport.menuIncreasedContrast ? .increased : nil)
             .onExitCommand { [weak self] in self?.hide() }
-        let hosting = NSHostingController(rootView: panel)
+        let hosting = MonitorPopoverHostingController(rootView: panel)
+        hosting.onDismiss = { [weak self] in self?.hide() }
         hosting.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hosting
         Diagnostics.menuWindow = { [weak self] in self?.popover.contentViewController?.view.window }
@@ -171,4 +168,12 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         image.isTemplate = true
         return image
     }
+}
+
+@MainActor
+private final class MonitorPopoverHostingController<Content: View>: NSHostingController<Content>, MonitorMenuDismissalHandling {
+    var onDismiss: (() -> Void)?
+
+    func dismissMenu() { onDismiss?() }
+    override func cancelOperation(_ sender: Any?) { dismissMenu() }
 }

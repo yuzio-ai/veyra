@@ -190,6 +190,33 @@ def run_revoked_native_lease_cases(app):
     return 4
 
 
+def run_unsupported_command_cases(app):
+    removed_commands = [
+        '--provider-credential', '--provider-credential-fixture', '--create-credential-fixture',
+        '--create-denied-credential-fixture', '--delete-credential-fixture', '--lock-credential-fixture',
+        '--create-model-catalog-fixture', '--render-provider-previews', '--unknown-command',
+    ]
+    commands = [[command, 'PRIVATE_VALUE'] for command in removed_commands] + [
+        ['--preview-menu', 'custom-model'], ['--preview-menu', 'PRIVATE_VALUE'],
+        ['--preview-menu', 'single', '--preview-appearance', 'PRIVATE_VALUE'],
+        ['--preview-menu', 'single', '--preview-menu', 'multiple'], ['--preview-settings-only'],
+        ['--exercise-menu-to', 'PRIVATE_VALUE'],
+        ['--render-previews', 'PRIVATE_VALUE', '--preview-menu', 'single'],
+    ]
+    with tempfile.TemporaryDirectory(prefix='veyra-unsupported-command-') as home:
+        for arguments in commands:
+            # Keep a future validation regression isolated even if it reaches app startup.
+            isolated = ['--energy-benchmark', '-codexHome', home, '-codexExecutable', '/usr/bin/true', '-dshHome', home]
+            result = subprocess.run([str(app)] + arguments + isolated,
+                env=dict(os.environ, CODEX_HOME=home), capture_output=True, text=True, timeout=5)
+            assert result.returncode == 64, 'Unsupported command must exit before starting the application'
+            assert result.stdout == '', 'Unsupported command must not write credential output'
+            assert result.stderr == 'Veyra: unsupported or incomplete command-line arguments.\n'
+            assert not list(Path(home).iterdir()), 'Unsupported command must not create runtime data'
+    print('PASS diagnostics: removed and unsupported commands fail before app startup')
+    return len(commands)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", required=True, type=Path, help="Path to the built Veyra executable")
@@ -209,7 +236,8 @@ def main():
     run_case(app, "success", None, network=False, with_task=True, benchmark=True)
     language_checks = run_language_cases(app)
     lease_checks = run_revoked_native_lease_cases(app)
-    print(f"Passed {len(cases) + 3 + lease_checks} isolated app diagnostics checks and {language_checks} language checks")
+    argument_checks = run_unsupported_command_cases(app)
+    print(f"Passed {len(cases) + 3 + lease_checks + argument_checks} isolated app diagnostics checks and {language_checks} language checks")
 
 
 if __name__ == "__main__":

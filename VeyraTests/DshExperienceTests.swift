@@ -16,12 +16,6 @@ final class DshExperienceTests: XCTestCase {
                      activity: .running, backend: backend)
     }
 
-    private func profiles(home: URL, clock: PollingClock = .continuous()) -> (CodexModelProfilesStore, ModelConfigurationFixture) {
-        let transport = ModelConfigurationFixture(home: home)
-        let service = CodexModelProfileService(transport: transport, root: home.appendingPathComponent("profiles"),
-            credentials: MemoryCredentialStore(), helperExecutable: URL(fileURLWithPath: "/fixture/Veyra"), capability: { _ in true })
-        return (CodexModelProfilesStore(service: service, configurationClock: clock), transport)
-    }
 
     private func drain() async { for _ in 0..<100 { await Task.yield() } }
     private func waitUntil(_ condition: () -> Bool) async throws {
@@ -32,7 +26,7 @@ final class DshExperienceTests: XCTestCase {
         XCTFail("Timed out waiting for isolated source state")
     }
 
-    func testPureDshCountsTasksAndNeverRequestsCodexQuotaOrConfiguration() async throws {
+    func testPureDshCountsTasksAndNeverRequestsCodexQuota() async throws {
         let folder = try SQLiteFixture(), clock = TestPollingClock(), counter = DshRequestCounter()
         let absent = CodexLocation(home: folder.home.appendingPathComponent("no-codex"), executable: nil)
         let running = task()
@@ -40,11 +34,8 @@ final class DshExperienceTests: XCTestCase {
             DshTaskRead(tasks: [running], fetchedAt: .now, warning: nil, parsedFiles: 1, skippedFiles: 0)
         }, fetchQuota: { _ in await counter.fetch() }, clock: clock.clock, defaults: defaults(),
         resolveLocation: { _, _ in absent })
-        let (profiles, transport) = profiles(home: folder.home, clock: clock.clock)
-        profiles.followConfiguration(of: store)
         store.start(); await store.refreshAll(); await drain()
         store.setPanelVisible(true)
-        _ = await profiles.load(location: store.location)
         await store.calibrateQuota()
         clock.advance(3600); await store.refreshAll(); await drain()
         XCTAssertEqual(store.codexReadState, .notFound)
@@ -52,9 +43,8 @@ final class DshExperienceTests: XCTestCase {
         XCTAssertEqual(store.menuTaskCount, "1")
         XCTAssertFalse(store.showsQuota)
         XCTAssertFalse(store.hasSourceWarning)
-        XCTAssertNil(profiles.error)
-        let quotas = await counter.requests, configs = await transport.readCount
-        XCTAssertEqual(quotas, 0); XCTAssertEqual(configs, 0)
+        let quotas = await counter.requests
+        XCTAssertEqual(quotas, 0)
         store.sleep(); clock.advance(3600); store.wake(); await store.refreshAll(); await drain()
         let afterWake = await counter.requests
         XCTAssertEqual(afterWake, 0)
@@ -144,36 +134,31 @@ final class DshExperienceTests: XCTestCase {
         store.stop()
     }
 
-    func testCapabilityLossCancelsConfigurationRetriesAndRecoveryReloads() async throws {
-        let folder = try SQLiteFixture(), clock = TestPollingClock()
+    func testServiceLossClearsQuotaAndRecoveryResumesMonitoring() async throws {
+        let folder = try SQLiteFixture(), clock = TestPollingClock(), counter = DshRequestCounter()
         let executable = folder.home.appendingPathComponent("codex")
         try FileManager.default.createSymbolicLink(at: executable, withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
         let location = CodexLocation(home: folder.home, executable: executable)
-        let store = MonitorStore(readDsh: { _ in .empty }, defaults: defaults(), resolveLocation: { _, _ in location })
-        let (profiles, transport) = profiles(home: folder.home, clock: clock.clock)
-        await transport.configureReadFailures(1)
-        profiles.followConfiguration(of: store)
-        await store.refreshAll(); await drain()
-        try await waitUntil { !profiles.busy && profiles.configurationReloadError != nil }
-        let before = await transport.readCount
-        XCTAssertEqual(before, 1)
+        let store = MonitorStore(readDsh: { _ in .empty }, fetchQuota: { _ in await counter.fetch() },
+            clock: clock.clock, now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) },
+            defaults: defaults(), resolveLocation: { _, _ in location })
+        store.quota.snapshot = QuotaSnapshot(windows: [], fetchedAt: .now, accountID: "fixture")
         try FileManager.default.removeItem(at: executable)
         await store.refreshAll()
-        clock.advance(3600); await drain()
-        _ = await profiles.load(location: location)
-        let after = await transport.readCount
-        XCTAssertEqual(after, before)
         XCTAssertFalse(store.showsQuota)
-        XCTAssertFalse(profiles.monitoringAvailable)
-        XCTAssertNil(profiles.configurationReloadError)
+        XCTAssertNil(store.quota.snapshot)
         XCTAssertNotNil(store.codexServiceWarning)
+        await store.calibrateQuota()
+        let unavailableRequests = await counter.requests
+        XCTAssertEqual(unavailableRequests, 0)
         try FileManager.default.createSymbolicLink(at: executable, withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
         await store.refreshAll()
-        try await waitUntil { profiles.snapshot != nil && !profiles.busy }
         XCTAssertTrue(store.showsQuota)
-        XCTAssertNotNil(profiles.snapshot)
         XCTAssertNil(store.codexServiceWarning)
-        clock.finish(); await drain()
+        await store.calibrateQuota()
+        let recoveredRequests = await counter.requests
+        XCTAssertEqual(recoveredRequests, 1)
+        store.stop(); clock.finish(); await drain()
     }
 
     func testDshPathPrecedenceAndWhitespaceEnvironment() {
@@ -404,48 +389,6 @@ extension DshExperienceTests {
     }
 }
 
-@MainActor
-extension DshExperienceTests {
-    func testLateCredentialCapabilityCannotReenableCodexAfterAvailabilityLoss() async throws {
-        let folder = try SQLiteFixture(), gate = DshReviewCapabilityGate()
-        defer { gate.release() }
-        let executable = folder.home.appendingPathComponent("codex")
-        try FileManager.default.createSymbolicLink(at: executable, withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
-        let location = CodexLocation(home: folder.home, executable: executable)
-        let store = MonitorStore(readDsh: { _ in .empty }, defaults: defaults(), resolveLocation: { _, _ in location })
-        let transport = ModelConfigurationFixture(home: folder.home)
-        let service = CodexModelProfileService(transport: transport, root: folder.home.appendingPathComponent("profiles"),
-            credentials: MemoryCredentialStore(), helperExecutable: URL(fileURLWithPath: "/fixture/Veyra"),
-            capability: { _ in gate.check() })
-        let profiles = CodexModelProfilesStore(service: service)
-        profiles.followConfiguration(of: store)
-        let load = Task { await profiles.load(location: location) }
-        try await waitUntil { gate.hasEntered }
-        try FileManager.default.removeItem(at: executable)
-        store.configurationDidChange()
-        XCTAssertFalse(profiles.monitoringAvailable)
-        gate.release()
-        let loaded = await load.value
-        XCTAssertFalse(loaded)
-        XCTAssertFalse(profiles.credentialCommandsSupported)
-        XCTAssertFalse(profiles.writesSupported)
-        XCTAssertNil(profiles.snapshot)
-        XCTAssertTrue(profiles.providerKeyAvailable.isEmpty)
-    }
-}
-
-private final class DshReviewCapabilityGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private let released = DispatchSemaphore(value: 0)
-    private var entered = false
-    var hasEntered: Bool { lock.lock(); defer { lock.unlock() }; return entered }
-    func check() -> Bool {
-        lock.lock(); entered = true; lock.unlock()
-        _ = released.wait(timeout: .now() + 5)
-        return true
-    }
-    func release() { released.signal() }
-}
 
 @MainActor
 extension DshExperienceTests {

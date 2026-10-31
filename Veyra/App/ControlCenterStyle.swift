@@ -111,7 +111,36 @@ struct MonitorActionButton: NSViewRepresentable {
     }
 }
 
-final class MonitorActionNativeButton: NSButton {
+@MainActor
+protocol MonitorMenuDismissalHandling: AnyObject {
+    func dismissMenu()
+}
+
+/// Route Escape through the menu owner before AppKit closes its transient popover.
+class MonitorNativeButton: NSButton {
+    override func cancelOperation(_ sender: Any?) {
+        var responder = nextResponder
+        while let current = responder {
+            if let owner = current as? any MonitorMenuDismissalHandling {
+                owner.dismissMenu()
+                return
+            }
+            responder = current.nextResponder
+        }
+        if let owner = window?.contentViewController as? any MonitorMenuDismissalHandling {
+            owner.dismissMenu()
+        } else {
+            super.cancelOperation(sender)
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { cancelOperation(nil) }
+        else { super.keyDown(with: event) }
+    }
+}
+
+final class MonitorActionNativeButton: MonitorNativeButton {
     var increasedContrast = false
     private var hovered = false
     private var hoverTracking: NSTrackingArea?

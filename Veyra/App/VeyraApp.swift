@@ -5,7 +5,10 @@ import SwiftUI
 @MainActor
 enum VeyraApp {
     static func main() {
-        if let result = ProviderCredentialCommand.run(Array(CommandLine.arguments.dropFirst())) { exit(result) }
+        guard AppArguments.accepts(Array(CommandLine.arguments.dropFirst())) else {
+            FileHandle.standardError.write(Data("Veyra: unsupported or incomplete command-line arguments.\n".utf8))
+            exit(64)
+        }
         do { try Diagnostics.validatePreviewLease() }
         catch {
             FileHandle.standardError.write(Data("GUI preview fixture lease is unavailable.\n".utf8))
@@ -28,22 +31,12 @@ enum VeyraApp {
 @MainActor
 final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private var previewWindow: NSWindow?
-    private var settingsToolbar: SettingsToolbarController?
     private var settingsWindow: NSWindow?
-    private lazy var modelProfiles: CodexModelProfilesStore = {
-        guard PreviewSupport.menuScenario == nil, !CommandLine.arguments.contains("--energy-benchmark") else {
-            return CodexModelProfilesStore.preview()
-        }
-        let profiles = CodexModelProfilesStore(configurationChanged: { MonitorStore.shared.configurationDidChange() })
-        profiles.followConfiguration(of: MonitorStore.shared)
-        return profiles
-    }()
-    private var modelSettingsDelegate: ModelProfileSettingsWindowDelegate?
     private var menuBar: MenuBarController?
     private lazy var shortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar(), defaults: allowsGlobalShortcut ? .standard : nil)
     private var allowsGlobalShortcut: Bool {
         let isolatedModes = ["--diagnose", "--render-previews", "--preview-menu", "--show-panel",
-                             "--capture-menu-to", "--exercise-menu-to", "--render-provider-previews", "--energy-benchmark"]
+                             "--capture-menu-to", "--exercise-menu-to", "--energy-benchmark"]
         return !CommandLine.arguments.contains(where: { isolatedModes.contains($0) })
             && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
     }
@@ -71,11 +64,6 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             PreviewSupport.render(to: URL(fileURLWithPath: arguments[index + 1]))
             return
         }
-        if let index = arguments.firstIndex(of: "--render-provider-previews"), arguments.indices.contains(index + 1) {
-            MonitorStore.shared.isPreview = true
-            PreviewSupport.renderProviders(to: URL(fileURLWithPath: arguments[index + 1]))
-            return
-        }
         if let scenario = PreviewSupport.menuScenario {
             if let appearance = PreviewSupport.menuAppearance { NSApp.appearance = NSAppearance(named: appearance) }
             PreviewSupport.configure(MonitorStore.shared, scenario: scenario)
@@ -89,8 +77,6 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         configureMainMenu()
         menuBar = MenuBarController(store: MonitorStore.shared, updates: updates, openSettings: { [weak self] in
             self?.showSettings()
-        }, profiles: modelProfiles, openModelProfiles: { [weak self] in
-            self?.showModelProfiles()
         })
         shortcuts.onTrigger = { [weak self] in self?.menuBar?.toggle() }
         if allowsGlobalShortcut { shortcuts.start() }
@@ -125,23 +111,13 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showSettings() {
         menuBar?.hide(restoringFocus: false)
         if settingsWindow == nil {
-            let hosting = NSHostingView(rootView: MonitorSettings(store: MonitorStore.shared, updates: updates, shortcuts: shortcuts,
-                                                                profiles: modelProfiles))
+            let hosting = NSHostingView(rootView: MonitorSettings(store: MonitorStore.shared, updates: updates, shortcuts: shortcuts))
             let window = SettingsWindow.make(hosting: hosting)
-            settingsToolbar = SettingsToolbarController(profiles: modelProfiles, window: window)
-            let delegate = ModelProfileSettingsWindowDelegate(profiles: modelProfiles)
-            modelSettingsDelegate = delegate
-            window.delegate = delegate
             window.center()
             settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
-    }
-
-    private func showModelProfiles() {
-        if modelProfiles.tab != .models { modelProfiles.navigate { self.modelProfiles.tab = .models } }
-        showSettings()
     }
 
     private func configureMainMenu() {

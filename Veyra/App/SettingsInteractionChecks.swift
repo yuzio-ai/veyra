@@ -26,9 +26,10 @@ enum SettingsInteractionChecks {
         let shortcuts = ShortcutStore(registrar: registrar, defaults: defaults)
         shortcuts.start()
         defer { shortcuts.stop() }
-        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle), shortcuts: shortcuts))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 1),
-                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle), shortcuts: shortcuts)
+            .background(Color(nsColor: .windowBackgroundColor)))
+        let window = SettingsWindow.make(hosting: hosting)
+        window.appearance = NSAppearance(named: .aqua)
         window.isReleasedWhenClosed = false
         window.title = L10n.text("Veyra Settings")
         window.contentView = hosting
@@ -37,7 +38,23 @@ enum SettingsInteractionChecks {
         defer { window.close() }
         try await wait { store.configurationState == .valid && fields(in: hosting).count == 3 }
         hosting.layoutSubtreeIfNeeded()
-        window.setContentSize(hosting.fittingSize)
+        window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
+        try require(window.toolbar == nil, "single-page settings have no tabs")
+        window.setContentSize(NSSize(width: SettingsLayout.width, height: 440))
+        try await pause()
+        hosting.layoutSubtreeIfNeeded()
+        guard let scroll = scrollView(in: hosting), let document = scroll.documentView else {
+            throw CheckError.failed("settings scroll view exists")
+        }
+        try require(document.bounds.height > scroll.contentView.bounds.height, "short settings window scrolls")
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: document.bounds.height - scroll.contentView.bounds.height))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try await pause()
+        try PreviewSupport.saveBitmap(hosting, to: directory.appendingPathComponent("settings-native-scroll.png"))
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
+        window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
+        try await pause()
         let pathFields = fields(in: hosting)
         let homeField = pathFields[0], executableField = pathFields[1]
         try require(homeField.accessibilityLabel() == L10n.text("Data directory"), "directory accessibility label")
@@ -99,7 +116,7 @@ enum SettingsInteractionChecks {
         window.makeFirstResponder(nil)
         try await pause()
         hosting.layoutSubtreeIfNeeded()
-        window.setContentSize(hosting.fittingSize)
+        window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
         try require(homeField.stringValue == "invalid/relative-path", "invalid draft remains editable")
         try require(defaults.string(forKey: "codexHome") == chosen.path, "invalid draft is not persisted")
         try PreviewSupport.saveBitmap(hosting, to: directory.appendingPathComponent("settings-native-invalid.png"))
@@ -141,30 +158,22 @@ enum SettingsInteractionChecks {
         try await wait { dshField.stringValue == dshDirectory.path }
         _ = await store.commitDshPath("", restoringAutomatic: true)
         try require(store.dshHomePath.isEmpty, "dsh restore returns to automatic paths")
-        // A Codex request must disable only its own paths, leaving dsh usable.
-        let busyHosting = NSHostingView(rootView: MonitorSettings(store: store, updates: .preview(.idle),
-            shortcuts: shortcuts, codexControlsEnabled: false))
-        window.contentView = busyHosting
-        try await pause()
-        let busyFields = fields(in: busyHosting)
-        try require(busyFields.count == 3, "busy settings path fields exist")
-        try require(!busyFields[0].isEditable && !busyFields[1].isEditable, "Codex paths respect disabled state")
-        try require(busyFields[2].isEditable && busyFields[2].isEnabled, "dsh path remains usable while Codex is busy")
-        let enabledDshEditor = try focus(busyFields[2], in: window)
-        replace(enabledDshEditor, with: dshDirectory.path)
-        enabledDshEditor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
-        try await wait { defaults.string(forKey: "dshHome") == dshDirectory.path }
         let closeDirectory = home.appendingPathComponent("dsh close fixture")
         try files.createDirectory(at: closeDirectory, withIntermediateDirectories: true)
-        replace(try focus(busyFields[2], in: window), with: closeDirectory.path)
+        replace(try focus(dshField, in: window), with: closeDirectory.path)
         window.close()
         try await wait { defaults.string(forKey: "dshHome") == closeDirectory.path }
-        let checks = ["dsh-valid-close-commit", "dsh-independent-of-codex-busy", "disabled-codex-paths", "dsh-path-commit", "dsh-invalid-draft", "dsh-close-and-reopen", "dsh-restore", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
+        let checks = ["single-page-settings", "settings-overflow-scroll", "dsh-valid-close-commit", "dsh-path-commit", "dsh-invalid-draft", "dsh-close-and-reopen", "dsh-restore", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
                       "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore",
                       "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur"]
         try JSONSerialization.data(withJSONObject: ["passed": checks], options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("settings-native-checks.json"))
         print("Passed \(checks.count) native Settings interaction checks")
+    }
+
+    private static func scrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
     }
 
     private static func fields(in view: NSView) -> [NSTextField] {

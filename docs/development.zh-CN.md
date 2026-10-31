@@ -122,9 +122,8 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
   --preview-menu quotas --preview-appearance dark --preview-reduce-transparency
 
-# 自动检查顶部、中部、底部、快速滚动和同一弹窗动态收缩
-'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
-  --preview-menu multiple --show-menu --exercise-menu-to "$PWD/build/menu-check"
+# 自动检查滚动、动态收缩、Escape 和焦点恢复；固定入口负责创建键盘宿主
+/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py previews menu --native-only --language zh
 
 # 启动后点击菜单栏，导出真实菜单布局位图并打印窗口编号和尺寸
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' \
@@ -133,16 +132,16 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 
 布局位图不包含完整的 WindowServer 玻璃合成。最终验收需要打开真实菜单，在浅色、深色、减少透明度和增加对比度环境下检查顶部、中部、底部、快速滚动、回弹及窗口动态收缩。
 
-固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`no-quota`、`cooldown`、`custom-model`、`task-family`、`family-expanded`、`family-context`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`。
+固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`no-quota`、`cooldown`、`task-family`、`family-expanded`、`family-context`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`。
 
-`custom-model` 使用自定义 provider，用于确认此时隐藏 ChatGPT 额度与重置次数，并停止额度请求。
+额度预览不依赖模型或服务商配置；不同配置不再控制额度显示与轮询。
 
 套餐徽标场景为 `plan-prolite`、`plan-business`、`plan-enterprise`、`plan-unknown`，均包含溢出列表。
 映射依据、未知值处理和验证范围见[套餐显示名称映射](plan-display-names.md)。
 
-重置次数场景包括 `reset-credits`（多批次）、`reset-credits-expired`（已到期）、`reset-credits-unknown`（明细不足与未知有效期）、`reset-credits-zero`、`reset-credits-unavailable`、`reset-credits-only`（没有额度窗口）和 `reset-credits-overflow`（96 个批次，可配合 `--exercise-menu-to` 验证大屏滚动）。
+重置次数场景包括 `reset-credits`（多批次）、`reset-credits-expired`（已到期）、`reset-credits-unknown`（明细不足与未知有效期）、`reset-credits-zero`、`reset-credits-unavailable`、`reset-credits-only`（没有额度窗口）和 `reset-credits-overflow`（96 个批次，可通过 `--preview-menu reset-credits-overflow` 手动检查滚动）。
 
-菜单场景共 33 个、通用设置夹具 14 个，各按浅色、深色和两种增加对比度渲染，共 188 张。另有供应商设置 27 个场景、供应商菜单 15 个场景，各按六种外观渲染，共 252 张。完整 `--render-previews` 每种语言生成 440 张，中英文合计 880 张。`--preview-settings-only` 省略前 33 个菜单场景；场景数量应以 `PreviewSupport` 和 `ModelProfilePreviews` 的枚举及列表为准。
+`--render-previews` 渲染菜单及通用设置固定夹具，覆盖浅色、深色和增加对比度。`--preview-settings-only` 只渲染设置。场景定义以 `AppArguments.MenuScenario`、`PreviewSupport.SettingsScenario` 和输出的 `layouts.json` 为准。无效或已移除的场景与外观、重复的取值选项、冲突的主模式，以及缺少主模式的预览选项，均在启动界面前失败，不会回退到真实监控。
 
 核心测试覆盖额度窗口、缓存、累计 token、日志增量读取、文件替换与截断、父子任务、状态合并、进程证据、只读 SQLite、RPC 初始化与断管重连，以及诊断输出的隐私边界。尺寸测试覆盖自然高度、溢出上限、窗口边距、展开与收起及多屏尺寸变化。任务家族的专项结果见[父子任务卡片验收](task-family-validation.md)。
 
@@ -164,7 +163,7 @@ python3 scripts/measure_energy.py \
   --scenario panel --output build/energy/panel.json
 ```
 
-脚本为 Codex 与 dsh 分别创建临时数据目录，不继承真实数据目录或账号环境变量。预检和测量进程均通过 `-codexHome`、`-codexExecutable`、`-dshHome` 显式覆盖已保存的手动路径，不修改用户原有设置。测量进程使用 `--energy-benchmark`，关闭更新检查与全局快捷键，并使用固定供应商状态，避免访问真实供应商库或钥匙串。诊断预检必须确认应用支持此隔离模式；旧构建会明确失败，需先重新构建。
+脚本为 Codex 与 dsh 分别创建临时数据目录，不继承真实数据目录或账号环境变量。预检和测量进程均通过 `-codexHome`、`-codexExecutable`、`-dshHome` 显式覆盖已保存的手动路径，不修改用户原有设置。测量进程使用 `--energy-benchmark`，关闭更新检查与全局快捷键。诊断预检必须确认应用支持此隔离模式；旧构建会明确失败，需先重新构建。
 
 进程创建后立即注册清理。就绪等待与退出等待均有时限；测量进程忽略 SIGTERM 时会升级为 SIGKILL，并通过非阻塞 `wait4` 保留生命周期 CPU 统计。预检中断、启动失败、采样失败及脚本收到 SIGINT/SIGTERM 时也会回收子进程。测量进程提前退出会报错，不生成本次结果；测量秒数必须为正数。
 
@@ -173,52 +172,25 @@ python3 scripts/measure_energy.py \
 `active` 和 `panel` 场景包含三个持有真实文件句柄的模拟运行任务，并持续追加用量。`panel` 使用相同内容的原生调试窗口，不能替代真实菜单的玻璃与交互验收。脚本会先用目标应用的诊断确认运行任务数；夹具位于忽略的 `build/` 临时目录，结束后清理。测试方法、实测结果和限制见[能耗优化验收记录](energy-validation.md)，结构化汇总见 [energy-measurements.json](energy-measurements.json)。
 
 
-### 模型配置验证
+### 设置与菜单验证
 
-新增 `CodexModelProfilesTests`、`CodexModelProfilesStoreTests` 与 `CodexModelConfigurationIntegrationTests`，分别验证配置补丁与恢复记录、编辑与菜单共享状态、真实 Codex 的隔离配置接口。集成测试只使用临时 `CODEX_HOME`，不读取账号或调用模型接口；未安装 Codex 时标记跳过。
+`previews settings` 渲染中英文设置夹具并执行原生交互检查，覆盖路径输入、关闭与重开、快捷键录制、单页窗口和缩小窗口后的滚动。结果为 `settings-native-checks.json`。`previews menu` 另外验证六种固定外观下的真实弹窗滚动、动态收缩、开关和 Escape，结果保存在对应语言目录的 `native-*/menu-check.json`。
 
-统一入口的 `previews settings` 和 `previews menu` 都补充 `models-*` 固定夹具：普通、空列表、字段错误、接口不可用、长列表和成功提示，覆盖中英文、浅深色、高对比度与不透明回退。布局位图不证明原生菜单交互或系统辅助功能行为；快速入口另覆盖供应商长名称、忙碌、配置不可用和策略覆盖。实际菜单测试仍使用固定夹具入口分别记录。模型方案的新增 Core 文件和可观察状态均加入独立测试 target。
-
-模型固定夹具另外执行原生文本输入、保存、无效地址校验、关闭拦截及取消/放弃检查，结果为 `model-profile-native-checks.json`。`previews menu` 再执行六种固定外观下的真实 `--preview-menu multiple` 弹窗，检查滚动、动态收缩、开关和 Esc 后自动退出，结果保存在对应语言目录的 `native-*/menu-check.json`。这些命令只使用固定夹具；真实数据启动与外部辅助功能读取仍保留单独的审批边界，规则文件没有扩大通用命令权限。
+`test` 覆盖配置变化不影响额度和轮询、登录及账户变化、路径变化、服务可用性变化、请求合并和服务端等待时间。隔离诊断验证已移除的命令快速失败、不输出 Key 且不启动界面。自动验证不访问真实账号或钥匙串。
 
 ### 更新检查验证
 
-`update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 和 `--exercise-menu-to` 检查实际菜单与滚动。设置页渲染包含未检查、检查中、有新版、已是最新、失败、限流及检查失败但仍有缓存新版七种更新状态，以及自动/手动路径、检测中、未找到、无效路径、无效草稿和长路径场景；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
+`update-available` 菜单预览显示固定的新版本提示，可搭配 `--preview-appearance`、`--preview-reduce-transparency` 手动检查实际菜单与滚动；自动交互检查使用固定验证入口。设置页渲染包含未检查、检查中、有新版、已是最新、失败、限流及检查失败但仍有缓存新版七种更新状态，以及自动/手动路径、检测中、未找到、无效路径、无效草稿和长路径场景；使用 `--render-previews ... --preview-settings-only` 单独渲染。预览与诊断不执行 GitHub 更新请求，更新测试使用假网络、独立偏好设置与可控时钟。
 
 新增的更新状态文件与 Core 源码一同加入独立 XCTest target；调整成员关系后更新 `project.pbxproj` 的成员例外，并运行 `scripts/verify_configuration.py` 核对。
 
-供应商入口使用 SwiftUI 排版与原生透明按钮，原生菜单图标为 16pt。固定夹具检查整行点击区域、完整辅助功能名称、菜单当前项、禁用状态与快捷切换。`previews menu --native-only --language en` 可仅执行六种固定外观的原生弹窗检查，其缓存范围与完整预览分开，不能替代完整中英文布局证据。此选项只复用现有固定夹具命令，不扩大真实启动或辅助功能读取权限。
+`previews menu --native-only --language en` 可仅执行六种固定外观的原生弹窗检查。其缓存范围与完整预览分开，不能替代完整中英文布局证据。
 
-布局预览与原生菜单夹具均通过 LaunchServices 启动独立的 Debug 应用实例，传入固定预览参数和隔离 `CODEX_HOME`，以支持布局夹具内的原生键盘检查。菜单键盘检查要求应用已激活、弹窗是 key window，且供应商按钮已成为 first responder，再通过原生窗口发送合成 Escape 事件。纯 dsh 场景也检查真实 key window 和 Escape 关闭。菜单专项先等待独立身份的固定宿主激活，再启动预览；宿主只向预览 PID 交出激活权限。结果同时记录 `appWasActive`、`windowWasKey`、`openedFromBackground`、`previousApplicationRestored`；缺少任一焦点证据不能算通过。这仍是合成事件证据，不代表硬件键盘或 VoiceOver 人工验收。
+GUI 夹具的许可、进程回执、隔离数据和布局先写入临时验证目录，避免 Documents 的访问检查阻塞启动；完成或失败后将证据归档到仓库的本次输出目录。布局预览与原生菜单夹具均通过 LaunchServices 启动独立的 Debug 应用实例，传入固定预览参数和隔离 `CODEX_HOME`，以支持布局夹具内的原生键盘检查。菜单键盘检查要求应用已激活、弹窗是 key window，且任务用量展开按钮已成为 first responder，再通过原生窗口发送合成 Escape 事件。纯 dsh 场景也检查真实 key window 和 Escape 关闭。菜单专项先等待独立身份的固定宿主激活，再启动预览；宿主只向预览 PID 交出激活权限。结果同时记录 `appWasActive`、`windowWasKey`、`openedFromBackground`、`previousApplicationRestored`；缺少任一焦点证据不能算通过。这仍是合成事件证据，不代表硬件键盘或 VoiceOver 人工验收。
 
 每次夹具启动都有独立许可和进程回执。超时或中断先撤销许可；迟到的应用实例会在初始化 AppKit 前退出。已运行的实例只有在 PID、进程组、可执行文件路径和本次启动标识全部匹配时才会回收。LaunchServices 启动器返回零不能证明应用检查通过，运行器还要求有效的 `layouts.json` 或 `menu-check.json`。这些检查不启动已安装应用，不扩大通用命令权限。
 
 
-## 五家 API 预置与钥匙串
-
-供应商设置使用统一侧栏，包含官方 OpenAI、固定五家预置和自定义连接；旧连接保留原有身份并在同一侧栏编辑。保存使用 `saveWorkspace()`，模型列表由用户点击刷新后通过 `refreshWorkspaceModels()` 获取，不打包模型目录或固定默认模型。新增共享 Core 文件仍需同步更新 `membershipExceptions`。历史预置目录记录见 [此前来源](provider-presets-sources.md)。
-
-`verify_local.py test` 使用内存凭据实现，不接触登录钥匙串。`previews menu` 包括新版设置、原生 SecureField 输入与清空、保存不启用、启用、未保存修改保护和快捷菜单检查。正式交付还需 `verify_local.py release-build`。
-
-真实钥匙串能力单独使用稳定签名构建验收：
-
-```sh
-./scripts/build.sh
-/usr/bin/python3 -I -B scripts/verify_provider_credentials.py --app build/Build/Products/Release/Veyra.app
-```
-
-该检查创建独立测试钥匙串和临时 Codex 目录，使用固定假 Key，仅向本地 Responses 模拟服务发送请求。验收由五家模拟响应动态生成的目录、退出界面后的无界面取钥、独立进程再次取钥、锁定和缺失错误；检查用户钥匙串搜索列表未改变。签名应用的隔离模式负责解析响应并生成目录，使用接口未预置的新模型 ID。结果在 `build/provider-credentials/<UTC时间>/result.json`。unsigned 测试通过不代表签名钥匙串能力通过。
-
-当前设置行为及验证边界见 [Provider Settings V2 验证](provider-settings-v2-validation.md)；此前自动获取模型和钥匙串行为分别见 [历史模型发现验证](provider-model-discovery-validation.md) 与 [历史钥匙串验证](provider-presets-keychain-validation.md)。这些记录描述各自快照，不能替代当前源码的验证。真实供应商调用需要用户主动操作，自动验收只使用本地模拟服务。
-
-### 文件钥匙串兼容边界
-
-当前凭据保存在本机文件钥匙串，访问依赖签名应用的 ACL；测试使用独立钥匙串文件。非交互查询使用 `kSecUseAuthenticationContext` 与 `LAContext.interactionNotAllowed`，不再重复设置已废弃的 `kSecUseAuthenticationUIFail`。但 `LAContext` 不替代文件钥匙串的全部交互控制：取钥辅助进程仍在创建 NSApplication 前调用 `SecKeychainSetUserInteractionAllowed(false)`，避免锁定或 ACL 拒绝时弹出系统对话框。
-
-`SecKeychainOpen`、默认钥匙串与锁定状态查询、夹具钥匙串的创建/锁定/删除及 ACL 创建仍是有意保留的兼容接口。编译器会报告废弃警告，不隐藏这些警告。迁移到 Data Protection 钥匙串会改变存储位置和访问规则，不能通过替换常量完成；后续迁移需单独设计现有凭据兼容与签名访问验证，不自动搬运用户 Key。
-
-依据为 Apple 的 [SecItem 头文件](https://github.com/apple-oss-distributions/security/blob/main/keychain/headers/SecItem.h)、[查询路由实现](https://github.com/apple-oss-distributions/security/blob/main/OSX/libsecurity_keychain/lib/SecItem.cpp)及[文件钥匙串交互控制](https://github.com/apple-oss-distributions/security/blob/main/OSX/libsecurity_keychain/lib/StorageManager.cpp)。修改非交互策略后，必须对稳定签名构建重新运行独立钥匙串验收，覆盖正常读取、锁定、缺失、ACL 拒绝、移动 App 与独立进程再次取钥；unsigned 测试不替代这些证据。
-
 ### 纯 dsh 体验验证
 
-使用 `/usr/bin/python3 -I -B scripts/verify_local.py previews menu --dsh-only` 渲染中英文的纯 dsh、空闲、未确认、故障、无数据源、另一来源故障及设置能力说明。该模式跳过无关的供应商图库，保留六种原生菜单外观检查；原生检查还验证纯 dsh 下隐藏额度和供应商入口、任务数与 Escape 关闭。输出包含布局位图及 `menu-check.json`，不访问真实账号。它与完整预览使用独立证据，不能替代完整预览。
+使用 `/usr/bin/python3 -I -B scripts/verify_local.py previews menu --dsh-only` 渲染中英文的纯 dsh、空闲、未确认、故障、无数据源、另一来源故障及通用设置夹具。保留六种原生菜单外观检查，验证纯 dsh 下隐藏额度、任务数与 Escape 关闭。输出包含布局位图及 `menu-check.json`，不访问真实账号。它与完整预览使用独立证据，不能替代完整预览。

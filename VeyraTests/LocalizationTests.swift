@@ -90,7 +90,7 @@ final class LocalizationTests: XCTestCase {
                 XCTAssertEqual(store.menuTaskCount, "0")
                 XCTAssertTrue(store.menuLabel.contains(L10n.text("Some sources are unavailable. Running count may be incomplete.")))
                 store.taskError = nil
-                store.modelConfig = CodexModelConfig(model: "fixture", provider: "fixture-provider")
+                store.previewCodexServicesAvailable = false
                 XCTAssertEqual(store.menuLabel, language == "en" ? "Running 0" : "运行 0")
                 store.dshWarning = "fixture warning"
                 XCTAssertEqual(store.menuTaskCount, "0")

@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import Observation
 
 // Settings owns its rhythm; native controls own their drawing and focus appearance.
 enum SettingsLayout {
@@ -18,25 +17,22 @@ struct MonitorSettings: View {
     @Bindable var store: MonitorStore
     @Bindable var updates: UpdateStore
     var shortcuts: ShortcutStore?
-    var profiles: CodexModelProfilesStore?
-    var codexControlsEnabled = true
     @State private var previewShortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar())
 
     var body: some View {
-        Group {
-            if let profiles {
-                ModelSettingsContainer(store: store, updates: updates, shortcuts: shortcuts ?? previewShortcuts, profiles: profiles)
-            } else { general }
+        ScrollView {
+            content
         }
+        .frame(width: SettingsLayout.width)
+        .frame(idealHeight: 720)
         .task { await store.detectConfiguration() }
     }
 
-    private var general: some View {
+    private var content: some View {
         VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing / 2) {
             ShortcutSettingsSection(shortcuts: shortcuts ?? previewShortcuts)
             Divider()
             CodexSettingsSection(store: store)
-                .disabled(!codexControlsEnabled)
             Divider()
             DshSettingsSection(store: store)
             Divider()
@@ -45,47 +41,6 @@ struct MonitorSettings: View {
         .padding(.horizontal, SettingsLayout.horizontalPadding)
         .padding(.vertical, SettingsLayout.verticalPadding)
         .frame(width: SettingsLayout.width)
-    }
-}
-
-private struct ModelSettingsContainer: View {
-    let store: MonitorStore
-    let updates: UpdateStore
-    let shortcuts: ShortcutStore
-    @Bindable var profiles: CodexModelProfilesStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if profiles.tab == .models {
-                if store.canUseCodexServices { CodexModelProfilesView(profiles: profiles) }
-                else {
-                    VStack(spacing: 16) {
-                        Text("Codex is optional for dsh monitoring.").font(.headline)
-                        Text("Model settings require a local Codex executable and data directory.")
-                            .foregroundStyle(.secondary)
-                        Button("Open General Settings") { profiles.tab = .general }
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                ScrollView {
-                    MonitorSettings(store: store, updates: updates, shortcuts: shortcuts,
-                                    codexControlsEnabled: !profiles.busy)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .frame(minWidth: 900, idealWidth: 1100, maxWidth: .infinity, minHeight: 600, idealHeight: 740, maxHeight: .infinity)
-        .task(id: store.canUseCodexServices) {
-            if store.canUseCodexServices { await profiles.load(location: store.location) }
-        }
-        .task(id: store.location) {
-            if store.canUseCodexServices { await profiles.load(location: store.location) }
-        }
-        .alert("Save changes to this provider?", isPresented: $profiles.showUnsavedPrompt) {
-            Button("Save") { Task { await profiles.resolveNavigation(save: true) } }
-            Button("Discard changes", role: .destructive) { Task { await profiles.resolveNavigation(save: false) } }
-            Button("Cancel", role: .cancel) { profiles.cancelNavigation() }
-        } message: { Text("Your changes have not been saved. Saving does not switch Codex's default configuration.") }
     }
 }
 
@@ -404,7 +359,7 @@ private struct NativePathField: NSViewRepresentable {
 @MainActor
 enum SettingsWindow {
     static func make<Content: View>(hosting: NSHostingView<Content>,
-                                    contentSize: NSSize = NSSize(width: 1100, height: 780)) -> NSWindow {
+                                    contentSize: NSSize = NSSize(width: SettingsLayout.width, height: 720)) -> NSWindow {
         // Track the content minimum without deriving a maximum from the form's layout.
         hosting.sizingOptions = [.minSize]
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: contentSize),
@@ -413,70 +368,7 @@ enum SettingsWindow {
         window.identifier = NSUserInterfaceItemIdentifier("veyra.settings")
         window.isReleasedWhenClosed = false
         window.contentView = hosting
-        window.contentMinSize = NSSize(width: 900, height: 600)
+        window.contentMinSize = NSSize(width: SettingsLayout.width, height: 440)
         return window
-    }
-}
-
-@MainActor
-final class SettingsToolbarController: NSObject, NSToolbarDelegate {
-    private let profiles: CodexModelProfilesStore
-    private let toolbar = NSToolbar(identifier: "veyra.settings.toolbar")
-    private let general = NSToolbarItem.Identifier("veyra.settings.general")
-    private let models = NSToolbarItem.Identifier("veyra.settings.models")
-
-    init(profiles: CodexModelProfilesStore, window: NSWindow) {
-        self.profiles = profiles
-        super.init()
-        toolbar.delegate = self
-        toolbar.displayMode = .iconAndLabel
-        toolbar.allowsUserCustomization = false
-        if #available(macOS 15.0, *) { toolbar.allowsDisplayModeCustomization = false }
-        toolbar.centeredItemIdentifiers = [general, models]
-        window.titleVisibility = .visible
-        window.toolbarStyle = .expanded
-        window.toolbar = toolbar
-        observeState()
-    }
-
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [general, models] }
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [general, models] }
-    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [general, models] }
-
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        guard identifier == general || identifier == models else { return nil }
-        let item = NSToolbarItem(itemIdentifier: identifier)
-        item.label = identifier == general ? L10n.text("General") : L10n.text("Models")
-        item.paletteLabel = item.label
-        item.toolTip = item.label
-        item.image = NSImage(systemSymbolName: identifier == general ? "gearshape" : "cpu", accessibilityDescription: item.label)
-        item.target = self
-        item.action = #selector(selectTab(_:))
-        item.autovalidates = false
-        return item
-    }
-
-    @objc private func selectTab(_ sender: NSToolbarItem) {
-        let tab: VeyraSettingsTab = sender.itemIdentifier == general ? .general : .models
-        if !profiles.busy && !profiles.showUnsavedPrompt && profiles.tab != tab {
-            profiles.navigate { [weak profiles] in profiles?.tab = tab }
-        }
-        // AppKit selects the clicked item before invoking its action. Restore the actual
-        // page while navigation is blocked or waiting for the unsaved-changes decision.
-        synchronizeState()
-    }
-
-    private func synchronizeState() {
-        toolbar.selectedItemIdentifier = profiles.tab == .general ? general : models
-        let enabled = !profiles.busy && !profiles.showUnsavedPrompt
-        for item in toolbar.items { item.isEnabled = enabled }
-    }
-
-    private func observeState() {
-        withObservationTracking {
-            synchronizeState()
-        } onChange: { [weak self] in
-            Task { @MainActor in self?.observeState() }
-        }
     }
 }

@@ -86,21 +86,3 @@ for case let text as XMLElement in try darkLogo.nodes(forXPath: "//*[local-name(
     text.attribute(forName: "fill")?.stringValue = "#F4F3EF"
 }
 try render(darkLogo.xmlData, destination: "assets/brand/veyra-logo-preview-dark.png", square: false, size: 1200)
-
-// Provider marks for the built-in presets. Single-color artwork stays black on
-// transparent in the PNG; the app marks those images as templates at runtime.
-let providerMarks = [
-    ("deepseek-color", "DeepSeekProvider"),
-    ("kimi-color", "KimiProvider"),
-    ("zai", "GLMProvider"),
-    ("minimax-color", "MiniMaxProvider")
-]
-for (source, destination) in providerMarks {
-    let svg = try Data(contentsOf: root.appendingPathComponent("assets/brand/provider-logos/\(source).svg"))
-    try render(svg, destination: "Veyra/Resources/\(destination).png", square: true, size: 512)
-}
-
-// Xiaomi publishes its mark only as a raster app icon, so it joins the same
-// crop-and-pad pass instead of an SVG render.
-let xiaomiMark = try Data(contentsOf: root.appendingPathComponent("assets/brand/provider-logos/xiaomi-mi-512.png"))
-try render(xiaomiMark, destination: "Veyra/Resources/MiMoProvider.png", square: true, size: 512)

@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 /// Owns only the monitor's sidecar; never attaches, resumes, or writes a Codex task.
-actor AppServerClient: CodexModelConfigurationTransport {
+actor AppServerClient {
     private var process: Process?
     private var input: FileHandle?
     private var output: FileHandle?
@@ -13,7 +13,6 @@ actor AppServerClient: CodexModelConfigurationTransport {
     private var pending: [Int64: CheckedContinuation<JSONValue, Error>] = [:]
     private var timeouts: [Int64: Task<Void, Never>] = [:]
     private var nextID: Int64 = 0
-    private var configRequests: Set<Int64> = []
     private var generation = UUID()
     private var location: CodexLocation?
     private var authStamp: String?
@@ -26,38 +25,6 @@ actor AppServerClient: CodexModelConfigurationTransport {
          clientVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown") {
         self.requestTimeout = requestTimeout
         self.clientVersion = clientVersion
-    }
-
-    func readConfiguration(location: CodexLocation) async throws -> CodexConfigSnapshot {
-        let response = try await configurationRequest("config/read", params: .object([
-            "includeLayers": .bool(true), "cwd": .string("/")
-        ]), location: location)
-        return try CodexConfigSnapshot(response: response, home: location.home)
-    }
-
-    func writeConfiguration(location: CodexLocation, edits: [CodexConfigEdit], expectedVersion: String) async throws -> CodexConfigWriteReceipt {
-        let response = try await configurationRequest("config/batchWrite", params: .object([
-            "edits": .array(edits.map(\.rpc)), "expectedVersion": .string(expectedVersion),
-            "filePath": .string(location.home.appendingPathComponent("config.toml").path), "reloadUserConfig": .bool(false)
-        ]), location: location)
-        guard let version = response["version"].string else { throw ModelProfileFailure.unsupported }
-        return CodexConfigWriteReceipt(version: version, overridden: response["overriddenMetadata"].object != nil)
-    }
-
-    private func configurationRequest(_ method: String, params: JSONValue, location newLocation: CodexLocation) async throws -> JSONValue {
-        defer { shutdown() }
-        do {
-            if location != newLocation { shutdown() }
-            location = newLocation
-            if process == nil { try await start(at: newLocation) }
-            return try await request(method, params: params)
-        } catch let error as ModelProfileFailure { throw error }
-        catch {
-            #if DEBUG
-            print("[configuration] \(method) failed: \(QuotaFailure.classify(error).rawValue)")
-            #endif
-            throw ModelProfileFailure.unavailable
-        }
     }
 
     func fetch(location newLocation: CodexLocation) async -> QuotaRefresh {
@@ -156,7 +123,6 @@ actor AppServerClient: CodexModelConfigurationTransport {
     private func request(_ method: String, params: JSONValue? = nil) async throws -> JSONValue {
         nextID += 1
         let id = nextID
-        if method.hasPrefix("config/") { configRequests.insert(id) }
         var message: [String: JSONValue] = ["id": .number(Double(id)), "method": .string(method)]
         if let params { message["params"] = params }
         return try await withCheckedThrowingContinuation { continuation in
@@ -198,11 +164,7 @@ actor AppServerClient: CodexModelConfigurationTransport {
             guard let id = value["id"].integer, pending[id] != nil else { continue }
             if value["error"].object != nil {
                 // Neither message nor data is retained: both can contain private account data.
-                if configRequests.contains(id) {
-                    finish(id: id, result: .failure(ModelProfileFailure.rpc(value["error"])))
-                } else {
-                    finish(id: id, result: .failure(QuotaFailureDetails(rpcError: value["error"])))
-                }
+                finish(id: id, result: .failure(QuotaFailureDetails(rpcError: value["error"])))
             } else if object["result"] != nil {
                 finish(id: id, result: .success(value["result"]))
             } else {
@@ -214,7 +176,6 @@ actor AppServerClient: CodexModelConfigurationTransport {
     }
 
     private func finish(id: Int64, result: Result<JSONValue, Error>) {
-        configRequests.remove(id)
         timeouts.removeValue(forKey: id)?.cancel()
         pending.removeValue(forKey: id)?.resume(with: result)
     }

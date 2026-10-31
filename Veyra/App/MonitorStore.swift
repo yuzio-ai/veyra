@@ -19,7 +19,6 @@ final class MonitorStore {
     /// dsh degrades silently by design: failures surface only here and never
     /// touch the Codex error/warning state.
     var dshWarning: String? { didSet { updateMenuLabel() } }
-    var modelConfig: CodexModelConfig? { didSet { updateMenuLabel() } }
     var quotaBusy = false
     var tasksBusy = false
     var panelVisible = false
@@ -54,8 +53,7 @@ final class MonitorStore {
     @ObservationIgnored private var quotaWakeAt: Date?
     @ObservationIgnored private var lastQuotaAttemptAt: Date?
     @ObservationIgnored private var automaticQuotaEnabled = false
-    @ObservationIgnored private var providerRevision = 0
-    @ObservationIgnored var onConfigurationChange: (@MainActor (CodexLocation) -> Void)?
+    @ObservationIgnored private var serviceRevision = 0
     @ObservationIgnored private var revision = 0
     @ObservationIgnored private var lifecycleRevision = 0
     @ObservationIgnored private var detectionRevision = 0
@@ -63,7 +61,6 @@ final class MonitorStore {
     @ObservationIgnored private let inspectConfiguration: @Sendable (String, String) async -> CodexConfigurationReport
     @ObservationIgnored private let validatePath: @Sendable (String, CodexPathField) async -> CodexPathError?
     @ObservationIgnored private var authStamp: String?
-    @ObservationIgnored private var configurationFileStamp: String?
     @ObservationIgnored private var suspended = false
     @ObservationIgnored private var attemptedLocalRead = false
     /// Reader outputs stay separated so one backend's failure never rewrites
@@ -120,7 +117,7 @@ final class MonitorStore {
     var dshLocation: DshLocation { .resolve(homePath: dshHomePath) }
     var canUseCodexServices: Bool { isPreview ? previewCodexServicesAvailable : codexServicesAvailable }
     var previewCodexServicesAvailable = true { didSet { updateMenuLabel() } }
-    var showsQuota: Bool { canUseCodexServices && modelConfig?.usesCustomProvider != true }
+    var showsQuota: Bool { canUseCodexServices }
     var hasSourceWarning: Bool { taskError != nil || taskWarning != nil || dshWarning != nil || codexServiceWarning != nil }
     var sourceDetectionFinished: Bool { codexReadState != .detecting && dshReadState != .detecting }
     var noSourcesFound: Bool { codexReadState == .notFound && dshReadState == .notFound && !canUseCodexServices }
@@ -179,12 +176,12 @@ final class MonitorStore {
     func calibrateQuota() async {
         guard !isPreview, !suspended else { return }
         let location = location
-        configurationDidChange()
+        refreshServiceAvailability()
         guard showsQuota else { return }
         let initialAuth = checkAuthentication(at: location.home)
         if let calibrationTask { await calibrationTask.value; return }
         guard calibrationPolicy.allowsRequest(at: now()) else { return }
-        let version = revision, providerVersion = providerRevision, started = now()
+        let version = revision, serviceVersion = serviceRevision, started = now()
         lastQuotaAttemptAt = started
         calibrationPolicy.began(at: started)
         nextCalibrationAt = calibrationPolicy.nextAllowedAt
@@ -192,13 +189,13 @@ final class MonitorStore {
         let task = Task { [weak self, fetchQuota] in
             let result = await fetchQuota(location)
             guard let self, version == self.revision else { return }
-            self.configurationDidChange()
-            // Limits belong to the account/home, even if this response's provider
-            // is no longer visible. Never let a provider round trip bypass them.
+            self.refreshServiceAvailability()
+            // Keep account-level cooldowns even when service availability changes
+            // while the request is pending.
             self.calibrationPolicy.finished(result, startedAt: started, now: self.now())
             self.nextCalibrationAt = self.calibrationPolicy.nextAllowedAt
             let currentAuth = AppServerClient.authenticationStamp(at: location.home)
-            if providerVersion == self.providerRevision, self.showsQuota {
+            if serviceVersion == self.serviceRevision, self.showsQuota {
                 if currentAuth != initialAuth {
                     self.quotaState.invalidateAccount()
                     self.quotaState.error = L10n.text("Your sign-in has changed. Sync quota again.")
@@ -217,7 +214,7 @@ final class MonitorStore {
         let version = revision, dshVersion = dshRevision, location = location
         var ancestors = taskAncestors
         guard !suspended else { return }
-        configurationDidChange()
+        refreshServiceAvailability()
         if !attemptedLocalRead { tasksBusy = true; attemptedLocalRead = true }
         checkAuthentication(at: location.home)
         // dsh reads never throw: failures arrive as a warning plus empty tasks.
@@ -267,39 +264,22 @@ final class MonitorStore {
         scheduleQuotaRefresh()
     }
 
-    /// Re-read the small config even when the task database is unavailable.
-    /// Called immediately after Veyra applies a provider change too.
-    func configurationDidChange() {
+    /// Check service paths independently of local task database availability.
+    func refreshServiceAvailability() {
         let available = inspectServices(location)
         let expectsServices = !executablePath.isEmpty || previouslyHadCodexServices
             || (!homePath.isEmpty && location.executable != nil)
         codexServiceWarning = !available && expectsServices
-            ? L10n.text("Codex quota and provider settings are unavailable. Check its paths in Settings.") : nil
+            ? L10n.text("Codex quota is unavailable. Check its paths in Settings.") : nil
         if available { previouslyHadCodexServices = true }
         let availabilityChanged = available != codexServicesAvailable
         if availabilityChanged {
             codexServicesAvailable = available
-            providerRevision += 1
+            serviceRevision += 1
             quotaState = QuotaDisplayState(); publishQuota()
             quotaPollingTask?.cancel(); quotaPollingTask = nil; quotaWakeAt = nil
         }
-        let attributes = try? FileManager.default.attributesOfItem(atPath: location.home.appendingPathComponent("config.toml").path)
-        let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        let stamp = "\(attributes?[.systemFileNumber] ?? "missing"):\(modified):\(attributes?[.size] ?? 0)"
-        let config = CodexModelConfig.load(home: location.home)
-        guard config != modelConfig || stamp != configurationFileStamp || availabilityChanged else { return }
-        configurationFileStamp = stamp
-        let changedProvider = (config?.provider ?? "openai") != (modelConfig?.provider ?? "openai")
-            || config?.openAIBaseURL != modelConfig?.openAIBaseURL
-        if modelConfig != config { modelConfig = config }
-        onConfigurationChange?(location)
-        guard changedProvider || availabilityChanged else { return }
-        providerRevision += 1
-        // Keep an in-flight account request coalesced until it returns; its data
-        // will be discarded, but its cooldown/Retry-After still applies.
-        quotaState = QuotaDisplayState(); publishQuota()
-        lastQuotaAttemptAt = nil
-        quotaPollingTask?.cancel(); quotaPollingTask = nil; quotaWakeAt = nil
+        guard availabilityChanged else { return }
         scheduleQuotaRefresh()
     }
 
@@ -434,16 +414,14 @@ final class MonitorStore {
         defaults.set(executablePath, forKey: "codexExecutable")
         quotaState = QuotaDisplayState(); quota = quotaState
         calibrationPolicy = QuotaCalibrationPolicy(); nextCalibrationAt = nil; authStamp = nil
-        configurationFileStamp = nil
-        lastQuotaAttemptAt = nil; providerRevision += 1
+        lastQuotaAttemptAt = nil; serviceRevision += 1
         tasks = tasks.filter { $0.backend == .dsh }
         codexReadAt = nil; tasksUpdatedAt = dshReadAt
         taskError = nil; taskWarning = nil; codexReadState = .detecting
         codexTasks = []
         taskAncestors = []
         quotaBusy = false; tasksBusy = false
-        modelConfig = nil
-        configurationDidChange()
+        refreshServiceAvailability()
         attemptedLocalRead = false
         // Join any old local read, then immediately read the new location once it has drained.
         let version = revision, lifecycle = lifecycleRevision

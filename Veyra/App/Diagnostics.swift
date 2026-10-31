@@ -106,12 +106,12 @@ enum Diagnostics {
                         print("Keyboard focus unavailable: app=\(ProcessInfo.processInfo.processIdentifier), front=\(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1), active=\(NSApp.isActive), policy=\(NSApp.activationPolicy().rawValue), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), visible=\(reopened.isVisible), appKey=\(NSApp.keyWindow?.windowNumber ?? -1), popover=\(reopened.windowNumber)")
                         throw MenuCheckError.keyboardFocusUnavailable
                     }
-                    let provider = reopened.contentView.flatMap { providerButton(in: $0) }
-                    let focused = provider.map { reopened.makeFirstResponder($0) } ?? false
+                    let control = reopened.contentView.flatMap { menuControl(in: $0) }
+                    let focused = control.map { reopened.makeFirstResponder($0) } ?? false
                     let keyboardAppWasActive = NSApp.isActive
                     let keyboardWindowWasKey = reopened.isKeyWindow
-                    print("Keyboard fixture: active=\(NSApp.isActive), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), provider=\(provider != nil), focused=\(focused)")
-                    guard provider != nil, focused else {
+                    print("Keyboard fixture: active=\(NSApp.isActive), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), control=\(control != nil), focused=\(focused)")
+                    guard control != nil, focused else {
                         throw MenuCheckError.keyboardFocusUnavailable
                     }
                     if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
@@ -124,19 +124,19 @@ enum Diagnostics {
                         throw MenuCheckError.focusNotRestored
                     }
                     records.append(["position": "controls", "toggleAndEscapePassed": true,
-                                    "keyboardDispatch": "native-window", "keyboardFirstResponder": "provider-button",
+                                    "keyboardDispatch": "native-window", "keyboardFirstResponder": "task-disclosure",
                                     "appWasActive": keyboardAppWasActive,
                                     "windowWasKey": keyboardWindowWasKey,
                                     "openedFromBackground": true, "previousApplicationRestored": true,
                                     "restoredVisibilityBeforeToggle": restoredVisibilityBeforeToggle])
-                    // Pure dsh uses the same native popover, with no Codex provider control.
+                    // Pure dsh uses the same native popover and keyboard controls.
                     PreviewSupport.configure(MonitorStore.shared, scenario: .dshOnly)
                     try await Task.sleep(for: .milliseconds(700))
                     let dshPreviousApplication = try await prepareBackgroundMenu(in: directory)
                     toggleMenu?()
                     guard await waitFor({ menuWindow?()?.isVisible == true }),
                           let dshWindow = menuWindow?(), let dshView = dshWindow.contentView,
-                          providerButton(in: dshView) == nil,
+                          menuControl(in: dshView) != nil,
                           !MonitorStore.shared.showsQuota, MonitorStore.shared.menuTaskCount == "2" else {
                         throw MenuCheckError.invalidDshState
                     }
@@ -156,7 +156,7 @@ enum Diagnostics {
                     guard await waitFor({ NSWorkspace.shared.frontmostApplication?.processIdentifier == dshPreviousApplication }) else {
                         throw MenuCheckError.focusNotRestored
                     }
-                    records.append(["position": "dsh-only", "providerHidden": true, "quotaHidden": true,
+                    records.append(["position": "dsh-only", "quotaHidden": true,
                                     "runningCount": "2", "escapePassed": true,
                                     "openedFromBackground": true, "previousApplicationRestored": true,
                                     "appWasActive": dshAppWasActive, "windowWasKey": dshWindowWasKey])
@@ -190,9 +190,9 @@ enum Diagnostics {
         return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
     }
 
-    private static func providerButton(in view: NSView) -> NSButton? {
-        if let button = view as? NSButton, button.accessibilityIdentifier() == "models.quickSwitch" { return button }
-        return view.subviews.lazy.compactMap { providerButton(in: $0) }.first
+    private static func menuControl(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton, button.accessibilityIdentifier().hasPrefix("monitor.tokens.") { return button }
+        return view.subviews.lazy.compactMap { menuControl(in: $0) }.first
     }
 
     private static func waitFor(_ condition: () -> Bool) async -> Bool {

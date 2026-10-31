@@ -13,6 +13,7 @@ import plistlib
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -236,7 +237,7 @@ def commands(options, output):
                                      str(ROOT / 'scripts/accessibility_snapshot.swift'), '-o', str(STATE / 'accessibility-snapshot')], 120)]
     if options.mode == 'previews':
         locales = ('en', 'zh') if options.language == 'both' else (options.language,)
-        extra = ['--preview-settings-only'] if options.target == 'settings' else (['--preview-dsh-only', '--exercise-settings'] if options.dsh_only else [])
+        extra = ['--preview-settings-only', '--exercise-settings'] if options.target == 'settings' else (['--preview-dsh-only', '--exercise-settings'] if options.dsh_only else [])
         plan = [('previews-' + locale, gui_preview_command(
                     ['--render-previews', str(output / locale)] + extra + language(locale), 'previews-' + locale, output), 300)
                 for locale in locales]
@@ -400,7 +401,9 @@ def execute(name, command, timeout, output, env):
 
 def run(options):
     output = OUTPUT / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
-    plan = commands(options, output)
+    # GUI fixtures must not block on Documents/Desktop privacy prompts before AppKit starts.
+    runtime_output = STATE / 'previews' / output.name if options.mode == 'previews' else output
+    plan = commands(options, runtime_output)
     if options.dry_run:
         # A preview may first need a Debug build; it never silently runs XCTest.
         if options.mode == 'previews':
@@ -436,8 +439,10 @@ def run(options):
         if options.mode == 'launch' and not cached(stamp_path('release-build'), release_fingerprint, [app('Release')]):
             raise RuntimeError('Run release-build first; launch requires a current verified Release app')
         output.mkdir(parents=True)
+        if runtime_output != output:
+            runtime_output.mkdir(parents=True)
         if options.mode in ('test', 'previews'):
-            env['CODEX_HOME'] = str(output / 'fixture-codex-home')
+            env['CODEX_HOME'] = str(runtime_output / 'fixture-codex-home')
             Path(env['CODEX_HOME']).mkdir()
         elif options.mode == 'launch' and 'CODEX_HOME' in os.environ:
             # Preserve the user's explicit home without forwarding other account variables.
@@ -454,7 +459,9 @@ def run(options):
             if options.mode == 'previews' and options.target == 'menu':
                 prepare_focus_host_app()
             for name, command, timeout in plan:
-                execute(name, command, timeout, output, env)
+                execute(name, command, timeout, runtime_output, env)
+            if runtime_output != output:
+                shutil.copytree(runtime_output, output, dirs_exist_ok=True)
             if source_digest() != source or toolchain_digest(environment()) != toolchain:
                 raise RuntimeError('Inputs changed during verification; result is inconclusive and will not be reused')
             if options.mode == 'previews':
@@ -464,9 +471,15 @@ def run(options):
                     layouts = json.loads((output / locale / 'layouts.json').read_text())
                     if not layouts or not list((output / locale).glob('*.png')):
                         raise RuntimeError(f'Preview evidence is missing for {locale}')
+                    if options.target == 'settings':
+                        settings = json.loads((output / locale / 'settings-native-checks.json').read_text())
+                        required = {'single-page-settings', 'settings-overflow-scroll', 'return-commit',
+                                    'focus-loss-commit', 'close-and-reopen', 'shortcut-recording', 'dsh-path-commit'}
+                        if not required.issubset(settings.get('passed', [])):
+                            raise RuntimeError(f'Native single-page settings evidence is missing for {locale}')
                     if options.dsh_only:
                         required = {'dsh-only-light', 'dsh-idle-light', 'dsh-unknown-light', 'dsh-error-light',
-                                    'no-sources-light', 'mixed-error-light', 'settings-missing-light', 'settings-dsh-models-light'}
+                                    'no-sources-light', 'mixed-error-light', 'settings-missing-light'}
                         if not required.issubset({row.get('name') for row in layouts}):
                             raise RuntimeError(f'dsh capability preview evidence is missing for {locale}')
                         settings = json.loads((output / locale / 'settings-native-checks.json').read_text())
@@ -480,7 +493,7 @@ def run(options):
                                    and row.get('previousApplicationRestored') is True for row in records):
                             raise RuntimeError(f'Native menu interaction evidence is missing for {style}')
                         if not any(row.get('position') == 'dsh-only'
-                                and row.get('providerHidden') is True and row.get('quotaHidden') is True
+                                and row.get('quotaHidden') is True
                                 and row.get('escapePassed') is True and row.get('appWasActive') is True
                                 and row.get('windowWasKey') is True and row.get('openedFromBackground') is True
                                 and row.get('previousApplicationRestored') is True for row in records):
@@ -496,6 +509,8 @@ def run(options):
             result['status'] = 'failed'
             raise
         finally:
+            if runtime_output != output and result['status'] != 'passed':
+                shutil.copytree(runtime_output, output, dirs_exist_ok=True)
             (output / 'result.json').write_text(json.dumps(result, indent=2))
         print(f'PASS {options.mode}: {output}')
     return 0

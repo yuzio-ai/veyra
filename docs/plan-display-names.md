@@ -56,8 +56,7 @@
 - `QuotaPolicyTests` 覆盖 28 个已观察值、未来未知值、空值、规范化和原始身份保留。
 
 菜单预览场景为 `plan-prolite`、`plan-business`、`plan-enterprise`、`plan-unknown`。
-各场景包含溢出任务列表，可搭配 `--exercise-menu-to` 检查滚动；`--render-previews` 会渲染
-浅色、深色和两种增加对比度布局。真实菜单材质检查另需使用 `--preview-menu`，
+各场景包含溢出任务列表，可手动检查滚动。自动交互检查使用 `verify_local.py previews menu --native-only`，由固定入口创建键盘宿主。`--render-previews` 会渲染浅色、深色和两种增加对比度布局。真实菜单材质检查另需使用 `--preview-menu`，
 搭配 `--preview-appearance` 和 `--preview-reduce-transparency`，参见开发文档。
 
 后续更新映射时，应重新核对官方客户端的明确显示表，同时更新此文档和回归用例。

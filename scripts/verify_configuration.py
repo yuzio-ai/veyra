@@ -57,7 +57,6 @@ SWIFT_VERSION = "6.0"
 SWIFT_CONCURRENCY = "complete"
 TEST_MEMBERSHIP_EXCEPTIONS = {
     "App/MonitorStore.swift",
-    "App/CodexModelProfilesStore.swift",
     "App/UpdateStore.swift",
     "Resources/Localizable.xcstrings",
 }

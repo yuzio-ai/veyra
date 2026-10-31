@@ -8,9 +8,6 @@ struct MonitorPanel: View {
     var screenOverride: PanelScreenMetrics?
     var onSizingChange: ((PanelSizing) -> Void)?
     var openSettings: (() -> Void)?
-    var profiles: CodexModelProfilesStore?
-    var openModelProfiles: (() -> Void)?
-    var closeMenu: (() -> Void)?
     @State private var showUnknown = false
     @State private var expandedTaskIDs: Set<String> = []
     @State private var contentHeight: CGFloat = 1
@@ -22,17 +19,12 @@ struct MonitorPanel: View {
 
     init(store: MonitorStore, updates: UpdateStore? = nil, screenOverride: PanelScreenMetrics? = nil,
          initiallyExpandedTaskIDs: Set<String> = [], initiallyShowUnknown: Bool = false,
-         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil,
-         profiles: CodexModelProfilesStore? = nil, openModelProfiles: (() -> Void)? = nil,
-         closeMenu: (() -> Void)? = nil) {
+         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil) {
         self.store = store
         self.updates = updates
         self.screenOverride = screenOverride
         self.onSizingChange = onSizingChange
         self.openSettings = openSettings
-        self.profiles = profiles
-        self.openModelProfiles = openModelProfiles
-        self.closeMenu = closeMenu
         _expandedTaskIDs = State(initialValue: initiallyExpandedTaskIDs)
         _showUnknown = State(initialValue: initiallyShowUnknown)
     }
@@ -40,9 +32,7 @@ struct MonitorPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             MonitorPanelHeader(hasTaskError: store.hasSourceWarning, detecting: store.noSourcesFound || (!store.hasTaskSnapshot && !store.sourceDetectionFinished),
-                               profiles: store.canUseCodexServices ? profiles : nil,
-                               openSettings: { openSettings?() }, openModelProfiles: { openModelProfiles?() },
-                               closeMenu: { closeMenu?() })
+                               openSettings: { openSettings?() })
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self, of: { ceil($0.size.height) }) { headerHeight = $0 }
                 .accessibilityIdentifier("monitor.header")
@@ -81,7 +71,6 @@ struct MonitorPanel: View {
                 store.setPanelVisible(visible)
                 if visible, !store.isPreview {
                     Task { await updates?.checkAutomatically() }
-                    if store.canUseCodexServices { Task { await profiles?.load(location: store.location) } }
                 }
             })
                 .allowsHitTesting(false)
@@ -91,12 +80,6 @@ struct MonitorPanel: View {
         .onChange(of: sizing, initial: true) { _, value in onSizingChange?(value) }
         .onChange(of: store.tasks.map(\.id)) { _, ids in
             expandedTaskIDs.formIntersection(ids)
-        }
-        .task(id: store.canUseCodexServices) {
-            if !store.isPreview, store.canUseCodexServices { await profiles?.load(location: store.location) }
-        }
-        .task(id: store.location) {
-            if !store.isPreview, store.canUseCodexServices { await profiles?.load(location: store.location) }
         }
     }
 
@@ -309,10 +292,7 @@ private struct TaskProjectHeader: View {
 private struct MonitorPanelHeader: View {
     let hasTaskError: Bool
     var detecting = false
-    var profiles: CodexModelProfilesStore?
     let openSettings: () -> Void
-    let openModelProfiles: () -> Void
-    let closeMenu: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -322,26 +302,14 @@ private struct MonitorPanelHeader: View {
                 Spacer()
                 MonitorPanelActions(openSettings: openSettings)
             }
-            HStack(spacing: 12) {
-                HStack(spacing: 5) {
-                    Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    Circle().fill(hasTaskError ? .orange : (detecting ? .secondary : monitorAccent)).frame(width: 5, height: 5)
-                        .accessibilityHidden(true)
-                    Text("Local activity").foregroundStyle(.secondary)
-                }
-                .font(.system(size: 11)).fixedSize()
-                if let profiles {
-                    ModelProfileQuickSwitch(profiles: profiles, manage: openModelProfiles,
-                                            closeMenu: closeMenu, showsNotice: false)
-                } else {
-                    Spacer(minLength: 0)
-                }
+            HStack(spacing: 5) {
+                Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Circle().fill(hasTaskError ? .orange : (detecting ? .secondary : monitorAccent)).frame(width: 5, height: 5)
+                    .accessibilityHidden(true)
+                Text("Local activity").foregroundStyle(.secondary)
             }
-            .frame(minHeight: 32)
-            if let profiles, profiles.error != nil || profiles.configurationReloadError != nil || profiles.message != nil || profiles.snapshot?.overridden == true {
-                ModelProfilesNotice(profiles: profiles)
-            }
+            .font(.system(size: 11)).fixedSize()
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
     }
@@ -615,7 +583,7 @@ private struct TaskTokenSummary: View {
     }
 }
 
-/// Use the same SwiftUI-label/native-focus pattern as the provider menu entry.
+/// Keep the SwiftUI label with a native keyboard-focusable disclosure control.
 private struct TaskTokenDisclosure: NSViewRepresentable {
     let identifier: String
     let label: String
@@ -649,7 +617,7 @@ private struct TaskTokenDisclosure: NSViewRepresentable {
     }
 }
 
-private final class TaskTokenNativeButton: NSButton {
+private final class TaskTokenNativeButton: MonitorNativeButton {
     var spokenValue = ""
     override var acceptsFirstResponder: Bool { true }
     override func accessibilityValue() -> Any? { spokenValue }

@@ -73,7 +73,7 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-release-tests ./scripts/test.sh --unsigned
 ./scripts/build.sh --unsigned
 ```
 
-Codex 自动化会话使用[固定验证入口](development.zh-CN.md#codex-固定验证入口)的 `test` 和 `release-build`，它们同样采用无签名构建。需要本机签名验证时，先在未入库的 `Local.xcconfig` 配置开发团队，再运行不带 `--unsigned` 的构建；独立钥匙串验收必须使用稳定签名产物。
+Codex 自动化会话使用[固定验证入口](development.zh-CN.md#codex-固定验证入口)的 `test` 和 `release-build`，它们同样采用无签名构建。需要本机签名验证时，先在未入库的 `Local.xcconfig` 配置开发团队，再运行不带 `--unsigned` 的构建。
 
 测试脚本运行 XCTest 和诊断集成检查。检查实际菜单栏在中英文、深浅色、辅助显示选项及滚动场景下的表现，具体命令见[开发检查](development.zh-CN.md#开发检查)。无签名 Release 仅用于源码与产物结构验证；最终上传的是后续从 Organizer 导出的公证 App。
 

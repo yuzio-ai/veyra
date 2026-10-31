@@ -4,29 +4,10 @@ import AppKit
 /// Deterministic fixtures, selected only by explicit developer command-line arguments.
 @MainActor
 enum PreviewSupport {
-    enum Scenario: String, CaseIterable {
-        case loading, empty, single, longTitle = "long-title", multiple, quotas, error, expanded, unknown
-        case edgeCases = "edge-cases", taskProjects = "task-projects"
-        case noQuota = "no-quota", cooldown
-        case customModel = "custom-model"
-        case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
-        case tokenBreakdown = "token-breakdown", tokenEdges = "token-edges"
-        case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
-        case dshOnly = "dsh-only", dshIdle = "dsh-idle", dshUnknown = "dsh-unknown"
-        case dshError = "dsh-error", noSources = "no-sources", mixedError = "mixed-error"
-        case refreshing
-        case updateAvailable = "update-available"
-        case resetCredits = "reset-credits", resetCreditsExpired = "reset-credits-expired"
-        case resetCreditsUnknown = "reset-credits-unknown", resetCreditsZero = "reset-credits-zero"
-        case resetCreditsUnavailable = "reset-credits-unavailable", resetCreditsOverflow = "reset-credits-overflow"
-        case resetCreditsOnly = "reset-credits-only"
-        case planProLite = "plan-prolite", planBusiness = "plan-business", planEnterprise = "plan-enterprise"
-        case planUnknown = "plan-unknown"
-    }
+    typealias Scenario = AppArguments.MenuScenario
 
     enum SettingsScenario: String, CaseIterable {
         case automatic, manual, detecting, missing, invalidDirectory, invalidExecutable, invalidDraft, longPath
-        case dshModels = "dsh-models"
     }
 
     static func settingsStore(_ scenario: SettingsScenario) -> MonitorStore {
@@ -35,16 +16,16 @@ enum PreviewSupport {
         let state: CodexConfigurationState
         switch scenario {
         case .detecting: state = .detecting
-        case .missing, .dshModels: state = .notFound
+        case .missing: state = .notFound
         case .invalidDirectory: state = .invalid(.home)
         case .invalidExecutable: state = .invalid(.executable)
         default: state = .valid
         }
-        let location = CodexLocation(home: home, executable: [.missing, .dshModels].contains(scenario) ? nil : executable)
+        let location = CodexLocation(home: home, executable: (scenario == .missing) ? nil : executable)
         let store = MonitorStore(defaults: UserDefaults(suiteName: "veyra-settings-preview")!,
                                  inspectConfiguration: { _, _ in CodexConfigurationReport(location: location, state: state) })
         store.isPreview = true
-        store.previewCodexServicesAvailable = ![.missing, .dshModels].contains(scenario)
+        store.previewCodexServicesAvailable = !(scenario == .missing)
         store.dshHomePath = "/Users/preview/.dsh"
         store.dshReadState = .available
         store.homePath = ""
@@ -75,9 +56,13 @@ enum PreviewSupport {
         let arguments = CommandLine.arguments
         guard menuScenario != nil, let index = arguments.firstIndex(of: "--preview-appearance"),
               arguments.indices.contains(index + 1) else { return nil }
-        return ["light": .aqua, "dark": .darkAqua,
-                "light-increased": .accessibilityHighContrastAqua,
-                "dark-increased": .accessibilityHighContrastDarkAqua][arguments[index + 1]]
+        guard let appearance = AppArguments.PreviewAppearance(rawValue: arguments[index + 1]) else { return nil }
+        return switch appearance {
+        case .light: .aqua
+        case .dark: .darkAqua
+        case .lightIncreased: .accessibilityHighContrastAqua
+        case .darkIncreased: .accessibilityHighContrastDarkAqua
+        }
     }
     static var menuIncreasedContrast: Bool {
         menuAppearance == .accessibilityHighContrastAqua || menuAppearance == .accessibilityHighContrastDarkAqua
@@ -101,7 +86,6 @@ enum PreviewSupport {
     static func configure(_ store: MonitorStore, scenario: Scenario) {
         store.isPreview = true
         store.quota = QuotaDisplayState()
-        store.modelConfig = nil
         store.taskError = nil
         store.taskWarning = nil
         store.dshWarning = nil
@@ -201,10 +185,6 @@ enum PreviewSupport {
             store.quota.apply(QuotaRefresh(account: store.quota.account, snapshot: snapshot))
         }
         if scenario == .noQuota { store.quota = QuotaDisplayState() }
-        if scenario == .customModel {
-            store.quota = QuotaDisplayState()
-            store.modelConfig = CodexModelConfig(model: "kimi-k3", provider: "moonshot")
-        }
         if scenario == .cooldown {
             store.quota.error = QuotaFailure.rateLimited.message
             store.nextCalibrationAt = referenceDate.addingTimeInterval(300)
@@ -234,7 +214,6 @@ enum PreviewSupport {
                              tokens: TokenUsage(), activity: .running)
             ]
         case .tokenBreakdown:
-            store.modelConfig = CodexModelConfig(model: "fixture", provider: "fixture-provider")
             store.tasks = [
                 TaskSnapshot(id: "token-parent", title: "任务明细 · 固定夹具", model: "example-coding-model",
                     source: .desktop, parentID: nil, startedAt: referenceDate.addingTimeInterval(-9_960),
@@ -256,7 +235,6 @@ enum PreviewSupport {
                     progress: TaskProgress(kind: .tool, text: L10n.text("Running command")))
             ]
         case .tokenEdges:
-            store.modelConfig = CodexModelConfig(model: "fixture", provider: "fixture-provider")
             store.tasks = [
                 TaskSnapshot(id: "token-zero", title: "Zero input and output", model: nil, source: .desktop,
                     parentID: nil, startedAt: referenceDate, updatedAt: referenceDate,
@@ -281,10 +259,6 @@ enum PreviewSupport {
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
             store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
                            task(3, parentID: "demo-2"), task(4, parentID: "missing-parent")]
-        case .customModel:
-            store.tasks = [TaskSnapshot(id: "demo-1", title: "代码审查 · veyra 未提交更改", model: "kimi-k3", source: .desktop,
-                                        parentID: nil, startedAt: referenceDate.addingTimeInterval(-9), updatedAt: referenceDate,
-                                        tokens: TokenUsage(input: 5_230_000, output: 57_500, total: 5_290_000), activity: .running)]
         case .dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError,
              .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
              .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
@@ -345,45 +319,12 @@ enum PreviewSupport {
             .environment(\.monitorReferenceDate, referenceDate)
     }
 
-    /// Renders the provider settings list in both appearances so layout and
-    /// dark-mode regressions are reviewable without screen recording permission.
-    static func renderProviders(to directory: URL) {
-        Task { @MainActor in
-            do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                for (name, appearance) in [("providers-light", NSAppearance.Name.aqua), ("providers-dark", .darkAqua)] {
-                    let profiles = CodexModelProfilesStore.preview("preset-current")
-                    let monitor = MonitorStore()
-                    monitor.isPreview = true
-                    let hosting = NSHostingView(rootView: MonitorSettings(store: monitor, updates: .preview(.idle), profiles: profiles)
-                        .frame(width: 820, height: 660).background(Color(nsColor: .windowBackgroundColor)))
-                    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 660),
-                                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
-                    window.appearance = NSAppearance(named: appearance)
-                    window.contentView = hosting
-                    window.setContentSize(NSSize(width: 820, height: 660))
-                    window.setFrameTopLeftPoint(NSPoint(x: 60, y: 900))
-                    window.orderFront(nil)
-                    try await Task.sleep(for: .milliseconds(250))
-                    hosting.layoutSubtreeIfNeeded()
-                    try saveBitmap(hosting, to: directory.appendingPathComponent(name + ".png"))
-                    window.orderOut(nil)
-                }
-                NSApp.terminate(nil)
-            } catch {
-                FileHandle.standardError.write(Data("Provider preview failed: \(error)\n".utf8))
-                exit(1)
-            }
-        }
-    }
-
     static func render(to directory: URL) {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 if CommandLine.arguments.contains("--exercise-settings-only") {
                     try await SettingsInteractionChecks.run(to: directory)
-                    try await ModelProfileWindowChecks.run(to: directory)
                     NSApp.terminate(nil)
                     return
                 }
@@ -440,7 +381,7 @@ enum PreviewSupport {
                     }
                 }
                 // Fixed settings fixtures never expose the user's configured paths.
-                let settingsCases = dshOnly ? [(SettingsScenario.missing, UpdateStore.PreviewState.idle), (.dshModels, .idle)]
+                let settingsCases = dshOnly ? [(SettingsScenario.missing, UpdateStore.PreviewState.idle)]
                     : UpdateStore.PreviewState.allCases.map { (SettingsScenario.automatic, $0) }
                         + SettingsScenario.allCases.filter { $0 != .automatic }.map { ($0, UpdateStore.PreviewState.idle) }
                 for (settingsScenario, updateState) in settingsCases {
@@ -448,12 +389,8 @@ enum PreviewSupport {
                     for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
                                                ("light-increased", .accessibilityHighContrastAqua),
                                                ("dark-increased", .accessibilityHighContrastDarkAqua)] {
-                        let unavailableProfiles = CodexModelProfilesStore.preview()
-                        unavailableProfiles.tab = .models
-                        let hosting = NSHostingView(rootView: MonitorSettings(store: settingsStore, updates: .preview(updateState),
-                            profiles: settingsScenario == .dshModels ? unavailableProfiles : nil)
-                            .frame(width: settingsScenario == .dshModels ? 900 : SettingsLayout.width,
-                                   height: settingsScenario == .dshModels ? 630 : nil)
+                        let hosting = NSHostingView(rootView: MonitorSettings(store: settingsStore, updates: .preview(updateState))
+                            .frame(width: SettingsLayout.width, height: 720)
                             .environment(\.monitorReferenceDate, referenceDate)
                             .background(Color(nsColor: .windowBackgroundColor)))
                         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 1),
@@ -474,7 +411,7 @@ enum PreviewSupport {
                                 field.delegate?.controlTextDidEndEditing?(Notification(name: NSControl.textDidEndEditingNotification, object: field))
                             }
                         }
-                        guard abs(hosting.bounds.width - (settingsScenario == .dshModels ? 900 : SettingsLayout.width)) < 1,
+                        guard abs(hosting.bounds.width - SettingsLayout.width) < 1,
                               hosting.bounds.height > 100 else {
                             throw PreviewError.invalidLayout("settings-\(name)")
                         }
@@ -487,7 +424,6 @@ enum PreviewSupport {
                         retainedWindow = nil
                     }
                 }
-                if !dshOnly { results += try await ModelProfilePreviews.render(to: directory) }
                 if CommandLine.arguments.contains("--exercise-settings") {
                     try await SettingsInteractionChecks.run(to: directory)
                 }
