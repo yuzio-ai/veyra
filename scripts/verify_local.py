@@ -67,7 +67,8 @@ def arguments(argv=None):
         if mode in ('test', 'release-build', 'previews'):
             child.add_argument('--force', action='store_true', help='Ignore a previous successful verification')
         if mode == 'test':
-            child.add_argument('--only-testing', help='VeyraTests/TestClass[/testMethod]; never counts as a full suite')
+            child.add_argument('--only-testing', action='append', metavar='SELECTOR',
+                               help='VeyraTests/TestClass[/testMethod]; repeatable; never counts as a full suite')
         if mode == 'previews':
             child.add_argument('target', choices=('menu', 'settings'))
             child.add_argument('--language', choices=('en', 'zh', 'both'), default='both')
@@ -78,7 +79,7 @@ def arguments(argv=None):
         if mode == 'ax-read':
             child.add_argument('pid', type=int)
     result = parser.parse_args(argv)
-    if getattr(result, 'only_testing', None) and not SELECTOR.fullmatch(result.only_testing):
+    if any(not SELECTOR.fullmatch(selector) for selector in getattr(result, 'only_testing', None) or ()):
         parser.error('--only-testing must be VeyraTests/TestClass[/testMethod]')
     if result.mode == 'previews' and result.dsh_only and (result.target != 'menu' or result.native_only):
         parser.error('--dsh-only requires previews menu and cannot be combined with --native-only')
@@ -241,8 +242,8 @@ def gui_preview_command(arguments, name, output):
 def commands(options, output):
     if options.mode == 'test':
         command = ['/bin/zsh', '-f', str(ROOT / 'scripts/test.sh'), '--unsigned']
-        if options.only_testing:
-            command += ['--only-testing', options.only_testing]
+        for selector in options.only_testing or ():
+            command += ['--only-testing', selector]
         return [('tests-diagnostics-configuration', command, 900)]
     if options.mode == 'release-build':
         return [('release-build', ['/bin/zsh', '-f', str(ROOT / 'scripts/build.sh'), '--unsigned'], 900),
@@ -318,22 +319,49 @@ def stop_preview_fixture(directory, executable, token):
         return
     if group != pid or executable_path(pid) != executable:
         raise RuntimeError('Native fixture process identity changed; refusing to signal it')
-    arguments = subprocess.run(['/bin/ps', '-p', str(pid), '-o', 'args='],
-                               capture_output=True, text=True, timeout=5).stdout
-    words = arguments.split()
-    if '--preview-lease' not in words or words[words.index('--preview-lease') + 1:][:1] != [token]:
-        # Revoking a lease can make the app exit between identity lookup and ps.
-        # Accept only a proven exit; a live process with different arguments is
-        # still refused, including a PID reused during this check.
+    # The focus host watches its lease and exits on revocation. Let this
+    # cooperative shutdown finish before attempting an unnecessary kill.
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
         try:
             os.getpgid(pid)
         except ProcessLookupError:
             return
-        raise RuntimeError('Native fixture launch token changed; refusing to signal it')
+        time.sleep(0.02)
+    # Recheck after waiting: never signal a reused PID or changed executable.
+    try:
+        group = os.getpgid(pid)
+    except ProcessLookupError:
+        return
+    if group != pid or executable_path(pid) != executable:
+        raise RuntimeError('Native fixture process identity changed; refusing to signal it')
+    # `ps` is the last identity witness. Restricted automation sandboxes can
+    # refuse to execute it (EPERM); the lease was already revoked, and the
+    # receipt token, leader group and executable path above already tie this PID
+    # to our fixture, so degrade to those checks instead of stranding a live
+    # menu-bar app (and masking the original failure with a cleanup exception).
+    try:
+        arguments = subprocess.run(['/bin/ps', '-p', str(pid), '-o', 'args='],
+                                   capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        arguments = None
+    if arguments is not None:
+        words = arguments.split()
+        if '--preview-lease' not in words or words[words.index('--preview-lease') + 1:][:1] != [token]:
+            # Revoking a lease can make the app exit between identity lookup and ps.
+            # Accept only a proven exit; a live process with different arguments is
+            # still refused, including a PID reused during this check.
+            try:
+                os.getpgid(pid)
+            except ProcessLookupError:
+                return
+            raise RuntimeError('Native fixture launch token changed; refusing to signal it')
     try:
         os.killpg(pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
+    except PermissionError as error:
+        raise RuntimeError('Unable to stop verified preview fixture process group after lease revocation') from error
     # LaunchServices owns this process, so waitpid cannot reap it here.
     deadline = time.monotonic() + 5
     while executable_path(pid) == executable:

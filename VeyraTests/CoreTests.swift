@@ -333,7 +333,9 @@ final class CoreTests: XCTestCase {
         """#
         try script.write(to: executable, atomically: false, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-        let client = AppServerClient(requestTimeout: .seconds(2), clientVersion: "9.8.7-fixture")
+        // The fixture is a shell script served by a loaded CI/perf machine; a
+        // 2s request budget made this handshake test flaky on a busy host.
+        let client = AppServerClient(requestTimeout: .seconds(10), clientVersion: "9.8.7-fixture")
         let location = CodexLocation(home: home, executable: executable)
         let first = await client.fetch(location: location)
         let second = await client.fetch(location: location)

@@ -210,6 +210,18 @@ class VerificationTests(unittest.TestCase):
             verify.run(verify.arguments(['test']))
             self.assertEqual(execute.call_count, 2)
 
+    def testRepeatedFocusedSelectorsAllReachTestScript(self):
+        selectors = ['VeyraTests/MonitorStoreTests',
+                     'VeyraTests/CoreTests/testRPCHandshakeRepeatedReadsAndSidecarCleanup']
+        argv = ['test']
+        for selector in selectors:
+            argv += ['--only-testing', selector]
+        with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            verify.run(verify.arguments(argv))
+            _, command, _, _, _ = execute.call_args.args
+            self.assertEqual([command[index + 1] for index, token in enumerate(command) if token == '--only-testing'],
+                             selectors)
+
     def testChangingInputsDuringRunDoesNotCreateSuccess(self):
         def mutate(*args):
             self.fake_execute(*args)
@@ -536,6 +548,35 @@ time.sleep(30)
             with patch.object(verify.subprocess, 'run', side_effect=exited):
                 verify.stop_preview_fixture(directory, executable, token)
             self.assertEqual(process.returncode, -signal.SIGTERM)
+
+    def testCooperativeLeaseExitDoesNotRequireSendingASignal(self):
+        with tempfile.TemporaryDirectory(prefix='veyra-native-cooperative-') as name:
+            directory = Path(name)
+            token = str(uuid.uuid4())
+            (directory / 'active-lease').write_text(token)
+            # The lease watcher mirrors the GUI focus host without requiring
+            # AppKit or a desktop in this regression test.
+            script = ('import os,sys,time; from pathlib import Path; p=Path(sys.argv[1]); '
+                      'exec("while p.exists(): time.sleep(0.01)")')
+            process = subprocess.Popen([sys.executable, '-I', '-B', '-c', script,
+                                        str(directory / 'active-lease'), '--preview-lease', token],
+                                       start_new_session=True)
+            (directory / 'process.json').write_text(json.dumps({'pid': process.pid, 'group': process.pid, 'token': token}))
+            executable = verify.executable_path(process.pid)
+            # A real parent reaps the cooperative child; LaunchServices does
+            # this for the GUI host whose opener waits with -W.
+            import threading
+            reaper = threading.Thread(target=process.wait)
+            reaper.start()
+            try:
+                with patch.object(verify.os, 'killpg', side_effect=PermissionError('signal unavailable')) as signal_group:
+                    verify.stop_preview_fixture(directory, executable, token)
+                    signal_group.assert_not_called()
+            finally:
+                reaper.join(timeout=5)
+                if process.poll() is None:
+                    process.kill(); process.wait(timeout=5)
+            self.assertEqual(process.returncode, 0)
 
     def testLaunchFailureRevokesLeaseAndCannotBecomeSuccess(self):
         with tempfile.TemporaryDirectory(prefix='veyra-native-open-') as name:

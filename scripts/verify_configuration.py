@@ -162,7 +162,7 @@ def parse_configurations(objects, reference):
 
 def parse_targets(objects):
     targets = {}
-    for body in objects.values():
+    for identifier, body in objects.items():
         if "isa = PBXNativeTarget;" not in body:
             continue
         match = PBX_TARGET_RE.search(body)
@@ -170,6 +170,7 @@ def parse_targets(objects):
             continue
         groups = re.findall(r"[0-9A-F]{24}", match.group(2))
         targets[normalized(match.group(3))] = {
+            "id": identifier,
             "configurations": parse_configurations(objects, match.group(1)),
             "synchronizedGroups": groups,
         }
@@ -223,7 +224,7 @@ def check_target(report, label, configurations, required):
                           f"found {actual!r}")
 
 
-def exception_paths(objects, group):
+def exception_paths(objects, group, target):
     body = objects.get(group, "")
     if "exceptions = (" not in body:
         return set()
@@ -231,7 +232,7 @@ def exception_paths(objects, group):
     paths = set()
     for reference in references:
         match = EXCEPTION_SET_RE.search(objects.get(reference, ""))
-        if match is not None:
+        if match is not None and match.group(2) == target:
             paths.update(normalized(part) for part in match.group(1).split(",") if part.strip())
     return paths
 
@@ -404,6 +405,8 @@ def verify(project, app, derived_data):
         "TEST_HOST": "",
         "BUNDLE_LOADER": "",
         "MACOSX_DEPLOYMENT_TARGET": DEPLOYMENT_TARGET,
+        "SWIFT_VERSION": SWIFT_VERSION,
+        "SWIFT_STRICT_CONCURRENCY": SWIFT_CONCURRENCY,
     })
     for configuration in sorted(app_configurations):
         flags = app_configurations[configuration].get("OTHER_LDFLAGS", "")
@@ -416,7 +419,10 @@ def verify(project, app, derived_data):
 
     app_groups = targets.get(APP_TARGET, {}).get("synchronizedGroups", [])
     if app_groups:
-        paths = exception_paths(objects, app_groups[0])
+        # Only exception sets tagged with the test target count: a set attached
+        # to the app target must never satisfy the test-membership invariant.
+        test_target_id = targets.get(TEST_TARGET, {}).get("id", "")
+        paths = exception_paths(objects, app_groups[0], test_target_id)
         # The project is maintained by hand: every shared Core source must be
         # opted into the test target, and removed files must not linger.
         shared_core = {str(path.relative_to(ROOT / "Veyra"))
@@ -425,6 +431,9 @@ def verify(project, app, derived_data):
         report.expect(expected <= paths,
                       "test target opts into every shared Core source and localization resource",
                       f"missing {sorted(expected - paths)}")
+        removed = {path for path in paths if not (ROOT / "Veyra" / path).is_file()}
+        report.expect(not removed, "test target membership has no entries for removed files",
+                      f"stale {sorted(removed)}")
         stale = {path for path in paths if path.startswith("Core/")} - shared_core
         report.expect(not stale, "test target membership has no stale Core entries",
                       f"stale {sorted(stale)}")

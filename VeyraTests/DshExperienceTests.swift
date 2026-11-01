@@ -10,6 +10,18 @@ final class DshExperienceTests: XCTestCase {
         return defaults
     }
 
+    /// A defaults suite whose dsh data directory is a temp folder, so the
+    /// default project resolver never reads the developer's real ~/.dsh.
+    private func isolatedDefaults() -> UserDefaults {
+        let suite = defaults()
+        let dshHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veyra-dsh-experience-home-" + UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dshHome, withIntermediateDirectories: true)
+        suite.set(dshHome.path, forKey: "dshHome")
+        addTeardownBlock { try? FileManager.default.removeItem(at: dshHome) }
+        return suite
+    }
+
     private func task(_ id: String = "dsh:fixture", backend: TaskBackend = .dsh) -> TaskSnapshot {
         TaskSnapshot(id: id, title: "Fixture", model: "fixture-model", source: .desktop, parentID: nil,
                      startedAt: .now, updatedAt: .now, tokens: TokenUsage(input: 10, output: 2, total: 12),
@@ -17,7 +29,13 @@ final class DshExperienceTests: XCTestCase {
     }
 
 
-    private func drain() async { for _ in 0..<100 { await Task.yield() } }
+    /// Detached refresh tasks need wall-clock time, not only a yield budget.
+    private func drain() async {
+        for _ in 0..<40 {
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
     private func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
@@ -32,7 +50,7 @@ final class DshExperienceTests: XCTestCase {
         let running = task()
         let store = MonitorStore(readDsh: { _ in
             DshTaskRead(tasks: [running], fetchedAt: .now, warning: nil, parsedFiles: 1, skippedFiles: 0)
-        }, fetchQuota: { _ in await counter.fetch() }, clock: clock.clock, defaults: defaults(),
+        }, fetchQuota: { _ in await counter.fetch() }, clock: clock.clock, defaults: isolatedDefaults(),
         resolveLocation: { _, _ in absent })
         store.start(); await store.refreshAll(); await drain()
         store.setPanelVisible(true)

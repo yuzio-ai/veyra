@@ -34,13 +34,51 @@ private actor MonitorFixture {
 
 @MainActor
 final class MonitorStoreTests: XCTestCase {
-    private func drain() async { for _ in 0..<40 { await Task.yield() } }
+    /// Give detached refresh tasks real wall-clock time, not only a fixed yield
+    /// count: under load the scheduler can starve them for many yields, which
+    /// made quota-count assertions flaky.
+    private func drain() async {
+        for _ in 0..<20 {
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    /// Poll for a condition that a detached refresh task satisfies, with a
+    /// deadline instead of a fixed sleep budget.
+    private func waitUntil(_ message: String, _ condition: @escaping @MainActor () async -> Bool) async {
+        let deadline = Date().addingTimeInterval(3)
+        while !(await condition()) {
+            if Date() >= deadline {
+                XCTFail("Timed out waiting for \(message)")
+                return
+            }
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
     private func defaults(home: URL) -> UserDefaults {
         let suite = "veyra-test-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(home.path, forKey: "codexHome")
         defaults.set("/usr/bin/true", forKey: "codexExecutable")
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
+    /// A suite whose dsh data directory is a temp folder. Use it only where the
+    /// store actually produces dsh tasks: the default project resolver reads
+    /// that directory, and a test must never inspect the developer's ~/.dsh.
+    /// (Presetting a path would also turn a "dsh not installed" read into the
+    /// configured-but-missing warning, so it is not the default suite.)
+    private func dshIsolatedDefaults(home: URL) -> UserDefaults {
+        let defaults = defaults(home: home)
+        let dshHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("veyra-dsh-" + UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dshHome, withIntermediateDirectories: true)
+        defaults.set(dshHome.path, forKey: "dshHome")
+        addTeardownBlock { try? FileManager.default.removeItem(at: dshHome) }
         return defaults
     }
     private var verifiedQuota: QuotaRefresh {
@@ -296,7 +334,7 @@ final class MonitorStoreTests: XCTestCase {
         store.saveSettings(home: secondHome.home.path, executable: "")
         XCTAssertNil(store.nextCalibrationAt)
         XCTAssertNil(store.quota.snapshot)
-        await drain()
+        await waitUntil("quota refetch for the new location") { await fixture.counts().1 == 2 }
         let counts = await fixture.counts()
         XCTAssertEqual(counts.1, 2)
         XCTAssertNotNil(store.quota.snapshot)
@@ -349,7 +387,7 @@ final class MonitorStoreTests: XCTestCase {
         let store = MonitorStore(
             readLocal: { _ in TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil) },
             readDsh: { _ in Self.dshRead([Self.dshTask()]) },
-            fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
+            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
         await store.refreshAll()
         XCTAssertEqual(Set(store.tasks.map(\.id)), ["cx-1", "dsh:s1"])
         XCTAssertEqual(store.runningTasks.count, 2)
@@ -365,7 +403,7 @@ final class MonitorStoreTests: XCTestCase {
             readDsh: { _ in await broken.get()
                 ? Self.dshRead([], warning: "dsh broken")
                 : Self.dshRead([Self.dshTask()]) },
-            fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
+            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
         await store.refreshAll()
         XCTAssertEqual(Set(store.tasks.map(\.id)), ["cx-1", "dsh:s1"])
         XCTAssertNil(store.dshWarning)
@@ -393,7 +431,7 @@ final class MonitorStoreTests: XCTestCase {
                 return TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
             },
             readDsh: { _ in Self.dshRead([Self.dshTask()]) },
-            fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
+            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
         await store.refreshAll()
         XCTAssertEqual(store.runningTasks.count, 2)
         await fail.set(true)
@@ -410,7 +448,7 @@ final class MonitorStoreTests: XCTestCase {
         let store = MonitorStore(
             readLocal: { _ in TaskReadResult(tasks: [], fetchedAt: .now, warning: nil) },
             readDsh: { _ in Self.dshRead([Self.dshTask()], warning: "dsh broken") },
-            fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
+            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
         await store.refreshAll()
         XCTAssertEqual(store.tasks.map(\.id), ["dsh:s1"])
         XCTAssertEqual(store.dshWarning, "dsh broken")

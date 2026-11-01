@@ -23,6 +23,8 @@ def main():
     cases = [
         (ENTRY + ['test'], 'allow'),
         (ENTRY + ['test', '--only-testing', 'VeyraTests/MonitorStoreTests'], 'allow'),
+        (ENTRY + ['test', '--only-testing', 'VeyraTests/MonitorStoreTests',
+                  '--only-testing', 'VeyraTests/CoreTests'], 'allow'),
         (ENTRY + ['release-build'], 'allow'),
         (ENTRY + ['previews', 'menu'], 'allow'),
         (ENTRY + ['previews', 'settings'], 'allow'),

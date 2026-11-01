@@ -21,14 +21,17 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 
 ### Codex 固定验证入口
 
-在此仓库的 Codex 会话中使用完整绝对路径，不在外层追加环境赋值或日志重定向：
+在此仓库的 Codex 会话中使用完整绝对路径，不在外层追加 `cd`、环境赋值、管道或日志重定向：
 
 ```sh
 /usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test
 /usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test --only-testing VeyraTests/MonitorStoreTests
+/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test --only-testing VeyraTests/MonitorStoreTests/testSavingSettingsClearsCachesAndStartsQuotaForNewLocation --only-testing VeyraTests/CoreTests/testRPCHandshakeRepeatedReadsAndSidecarCleanup
 /usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py previews menu
 /usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py release-build
 ```
+
+前缀规则只匹配这条入口命令本身。`cd repo && … 2>&1 | tail -10` 会变成由 `cd`、入口命令和 `tail` 组成的复合命令，后两段不在任何窄范围规则里，因此每次都要人工授权；放宽到能匹配这种复合写法就等于放行任意 shell。工作目录由会话或 `workdir` 指定，日志由入口写入本次的 `build/local-verification/<时间戳>-<随机 ID>/`，失败信息本身带有日志路径，不需要外层管道裁剪。`--only-testing` 可重复，多个选择器在同一次 `test` 中传给 `test.sh`。
 
 `test` 复用 `test.sh`，串联 XCTest、隔离诊断、验证入口的离线回归和配置检查。`previews menu|settings` 默认生成中英文固定数据预览，可用 `--language en|zh` 限定语言；需要新的 Debug 产物时只构建，不隐式运行 XCTest。`release-build` 复用 `build.sh`，检查无签名通用 Release 产物与辅助功能读取工具的 Swift 6 编译。普通 `build.sh` 与 `test.sh` 仍保留原有签名行为；自动入口使用 `--unsigned`。
 
@@ -43,7 +46,7 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 /usr/bin/python3 -I -B scripts/install_verification_rules.py
 ```
 
-规则只持久放行此绝对路径入口的 `test`、`previews`、`release-build`。规则不会修改沙箱配置或通用命令权限。项目 `.codex/` 需受信任，安装后重启 Codex；静态匹配通过不能证明当前桌面会话已加载规则。仓库搬迁后需审查并更新模板中的绝对路径。规则信任脚本内容，不校验内容哈希；修改验证脚本或规则需审查。
+规则只持久放行此绝对路径入口的 `test`、`previews`、`release-build`。规则不会修改沙箱配置或通用命令权限。项目 `.codex/` 需受信任，安装后重启 Codex；静态匹配通过不能证明当前桌面会话已加载规则。仓库搬迁后需审查并更新模板中的绝对路径。规则信任脚本内容，不校验内容哈希；修改验证脚本或规则需审查。已存在的 `.codex/rules/local-verification.rules` 与模板不一致时安装器拒绝覆盖，需先人工比对再替换，否则旧规则会继续生效。
 
 真实启动与辅助功能读取保留 `prompt` 规则：`verify_local.py launch --language zh|en` 只启动当前已验证的 Release 应用；`verify_local.py ax-read <PID>` 只读取该仓库验证目录下、Bundle ID 为 `ai.yuzio.veyra` 的应用。读取工具不提供点击或字段修改，快照留在本机忽略的 `build/`；macOS 辅助功能权限独立于 Codex 授权。两者不属于普通测试或固定数据预览。
 

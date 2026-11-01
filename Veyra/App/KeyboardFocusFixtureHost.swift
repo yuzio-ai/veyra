@@ -10,6 +10,7 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
     private var lastRequest: String?
     private var observedRequest: String?
     private var announcedReady = false
+    private var readinessTicks = 0
 
     init(directory: URL) { self.directory = directory }
 
@@ -22,7 +23,7 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
         window.center(); window.makeKeyAndOrderFront(nil)
         self.window = window
         NSApp.activate()
-        trace("launched: active=\(NSApp.isActive), key=\(window.isKeyWindow)")
+        traceState("launched")
         timer = Timer.scheduledTimer(timeInterval: 0.05, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
     }
 
@@ -31,6 +32,10 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
         guard let index = arguments.firstIndex(of: "--preview-lease"), arguments.indices.contains(index + 1),
               (try? String(contentsOf: directory.appendingPathComponent("active-lease"), encoding: .utf8)) == arguments[index + 1] else {
             timer?.invalidate(); NSApp.terminate(nil); return
+        }
+        if !announcedReady {
+            readinessTicks += 1
+            if readinessTicks.isMultiple(of: 20) { traceState("awaiting activation") }
         }
         if !announcedReady, NSApp.isActive, window?.isKeyWindow == true {
             do {
@@ -64,5 +69,10 @@ final class KeyboardFocusFixtureHost: NSObject, NSApplicationDelegate {
 
     private func trace(_ message: String) {
         FileHandle.standardOutput.write(Data("Focus host \(message)\n".utf8))
+    }
+
+    private func traceState(_ phase: String) {
+        let front = NSWorkspace.shared.frontmostApplication
+        trace("\(phase): active=\(NSApp.isActive), key=\(window?.isKeyWindow == true), policy=\(NSApp.activationPolicy().rawValue), canKey=\(window?.canBecomeKey == true), visible=\(window?.isVisible == true), onActiveSpace=\(window?.isOnActiveSpace == true), hidden=\(NSApp.isHidden), frontIsSelf=\(front?.processIdentifier == ProcessInfo.processInfo.processIdentifier), frontPresent=\(front != nil)")
     }
 }
