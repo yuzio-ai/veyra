@@ -12,17 +12,37 @@ private final class DshFixture {
     deinit { try? FileManager.default.removeItem(at: home) }
 
     /// `openTurn`: true → openTurnStartSeq number, false → null, nil → row removed.
+    /// `children` mirrors the `subagentCatalog` head window a parent keeps for
+    /// the subagent sessions it spawned.
     @discardableResult
     func write(_ id: String, title: String? = nil, openTurn: Bool? = true, lastPromptAt: Double? = nil,
                createdAt: Double? = 1_799_996_400_000, uncached: Int = 100, output: Int = 10,
-               cacheRead: Int = 40, cacheWrite: Int = 5, model: String? = "kimi-k3") throws -> URL {
+               cacheRead: Int = 40, cacheWrite: Int = 5, model: String? = "kimi-k3",
+               provider: String = "p", effort: String? = nil, subagentLabel: String? = nil,
+               children: [(String, String?)] = []) throws -> URL {
         var rows: [String] = []
         rows.append(#""title":{"ver":1,"seq":1,"val":\#(title.map { #""\#($0)""# } ?? "null")}"#)
+        if let subagentLabel {
+            rows.append(#""subagent":{"ver":2,"seq":1,"val":{"identity":{"mode":"continuable","label":"\#(subagentLabel)","seq":0}}}"#)
+        }
+        if !children.isEmpty {
+            let values = children.map { child, label in
+                var fields = [#""childId":"\#(child)""#]
+                if let label { fields.append(#""label":"\#(label)""#) }
+                return "{" + fields.joined(separator: ",") + "}"
+            }
+            rows.append(#""subagentCatalog":{"ver":2,"seq":1,"val":{"inheritedEventCount":0,"head":{"values":[\#(values.joined(separator: ","))]}}}"#)
+        }
         if let openTurn {
             rows.append(#""turnBoundary":{"ver":2,"seq":1,"val":{"openTurnStartSeq":\#(openTurn ? "12" : "null")}}"#)
         }
         rows.append(#""tokenUsage":{"ver":2,"seq":1,"val":{"totals":{"uncachedInputTokens":\#(uncached),"outputTokens":\#(output),"cacheReadTokens":\#(cacheRead),"cacheWriteTokens":\#(cacheWrite)}}}"#)
-        rows.append(#""modelSelection":{"ver":2,"seq":1,"val":{"lastUsed":\#(model.map { #"{"provider":"p","model":"\#($0)"}"# } ?? "null")}}"#)
+        let lastUsed = model.map { model in
+            var fields = [#""provider":"\#(provider)""#, #""model":"\#(model)""#]
+            if let effort { fields.append(#""reasoningEffort":"\#(effort)""#) }
+            return "{" + fields.joined(separator: ",") + "}"
+        } ?? "null"
+        rows.append(#""modelSelection":{"ver":2,"seq":1,"val":{"lastUsed":\#(lastUsed)}}"#)
         if let lastPromptAt {
             rows.append(#""sessionListMetadata":{"ver":1,"seq":1,"val":{"lastPromptAt":\#(Int(lastPromptAt))}}"#)
         }
@@ -46,7 +66,8 @@ final class DshTaskReaderTests: XCTestCase {
 
     func testOpenTurnWithLiveProcessIsRunning() async throws {
         let fixture = try DshFixture()
-        try fixture.write("s1", title: "Live task", openTurn: true, lastPromptAt: recentMs)
+        try fixture.write("s1", title: "Live task", openTurn: true, lastPromptAt: recentMs,
+                          provider: "deepseek-account", effort: "high")
         let read = await reader(DshProcessEvidence(sessionIDs: ["s1"])).fetch(home: fixture.home)
         XCTAssertEqual(read.tasks.count, 1)
         let task = try XCTUnwrap(read.tasks.first)
@@ -55,8 +76,11 @@ final class DshTaskReaderTests: XCTestCase {
         XCTAssertEqual(task.activity, .running)
         XCTAssertEqual(task.backend, .dsh)
         XCTAssertEqual(task.workingDirectory, "/tmp/work")
-        XCTAssertEqual(task.sourceLabel, "dsh")
+        XCTAssertEqual(task.sourceLabel, "DSH")
+        XCTAssertEqual(task.sourceDetail, "DeepSeek Harness")
         XCTAssertEqual(task.model, "kimi-k3")
+        XCTAssertEqual(task.modelProvider, "deepseek-account")
+        XCTAssertEqual(task.reasoningEffort, "high")
         XCTAssertEqual(task.startedAt, Date(timeIntervalSince1970: recentMs / 1000))
         XCTAssertEqual(task.updatedAt, Date(timeIntervalSince1970: recentMs / 1000))
         XCTAssertEqual(task.tokens.input, 145)
@@ -167,6 +191,92 @@ final class DshTaskReaderTests: XCTestCase {
         try fixture.write("c", openTurn: true, lastPromptAt: recentMs - 30_000)
         let read = await reader(DshProcessEvidence(sessionIDs: ["c"])).fetch(home: fixture.home)
         XCTAssertEqual(read.tasks.map(\.id), ["dsh:c", "dsh:b", "dsh:a"])
+    }
+
+    // MARK: - Subagent families
+
+    func testCataloguedSubagentNestsUnderItsRunningParent() async throws {
+        let fixture = try DshFixture()
+        try fixture.write("parent", title: "审查所有文档", openTurn: true,
+                          lastPromptAt: recentMs - 60_000, children: [("child", "Audit docs")])
+        try fixture.write("child", title: "You are auditing", openTurn: true, lastPromptAt: recentMs,
+                          subagentLabel: "Audit docs")
+        let read = await reader(DshProcessEvidence(sessionIDs: ["parent", "child"])).fetch(home: fixture.home)
+        XCTAssertEqual(Set(read.tasks.map(\.id)), ["dsh:parent", "dsh:child"])
+        XCTAssertTrue(read.ancestors.isEmpty)
+        let child = try XCTUnwrap(read.tasks.first { $0.id == "dsh:child" })
+        XCTAssertEqual(child.parentID, "dsh:parent")
+        guard case .subtask = child.source else { return XCTFail("A catalogued child is a subtask") }
+        XCTAssertEqual(child.agentNickname, "Audit docs")
+        guard case .desktop = try XCTUnwrap(read.tasks.first { $0.id == "dsh:parent" }).source else {
+            return XCTFail("A session no catalog lists stays a main task")
+        }
+        let groups = TaskGroup.make(tasks: read.tasks, ancestors: read.ancestors)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].rows.map(\.id), ["dsh:parent", "dsh:child"])
+        XCTAssertEqual(groups[0].rows.map(\.depth), [0, 1])
+        XCTAssertFalse(groups[0].rows[0].isSubagent)
+        XCTAssertTrue(groups[0].rows[1].isSubagent)
+        XCTAssertEqual(groups[0].rows[1].parentTitle, "审查所有文档")
+        XCTAssertEqual(TaskProjectGroup(project: nil, groups: groups).counts(for: .running),
+                       TaskProjectCounts(main: 1, subtasks: 1))
+    }
+
+    func testFinishedParentStaysAsContextForItsRunningSubagent() async throws {
+        let fixture = try DshFixture()
+        try fixture.write("parent", title: "父任务", openTurn: false, lastPromptAt: recentMs - 600_000,
+                          children: [("child", "Audit docs")])
+        try fixture.write("child", title: "You are auditing", openTurn: true, lastPromptAt: recentMs,
+                          subagentLabel: "Audit docs")
+        let read = await reader(DshProcessEvidence(sessionIDs: ["child"])).fetch(home: fixture.home)
+        XCTAssertEqual(read.tasks.map(\.id), ["dsh:child"])
+        XCTAssertEqual(read.ancestors.map(\.id), ["dsh:parent"])
+        XCTAssertEqual(read.ancestors.first?.title, "父任务")
+        XCTAssertEqual(read.ancestors.first?.backend, .dsh)
+        XCTAssertNil(read.ancestors.first?.parentID, "The finished parent is the family root")
+        let groups = TaskGroup.make(tasks: read.tasks, ancestors: read.ancestors)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].rows.map(\.id), ["dsh:parent", "dsh:child"])
+        XCTAssertNil(groups[0].rows.first?.task)
+        XCTAssertEqual(TaskProjectGroup(project: nil, groups: groups).counts(for: .running),
+                       TaskProjectCounts(main: 0, subtasks: 1))
+    }
+
+    func testChildWithoutItsParentRecordStillCountsAsSubtask() async throws {
+        let fixture = try DshFixture()
+        // The parent catalogued this child but its own record is gone.
+        try fixture.write("child", title: "You are auditing", openTurn: true, lastPromptAt: recentMs,
+                          subagentLabel: "Audit docs")
+        let read = await reader(DshProcessEvidence(sessionIDs: ["child"])).fetch(home: fixture.home)
+        let child = try XCTUnwrap(read.tasks.first)
+        XCTAssertNil(child.parentID, "A deleted parent must not leave a dangling link")
+        XCTAssertTrue(read.ancestors.isEmpty)
+        XCTAssertTrue(TaskGroup.make(tasks: read.tasks, ancestors: read.ancestors)[0].rows[0].isSubagent)
+    }
+
+    func testUnlabelledCataloguedChildIsStillASubtask() async throws {
+        let fixture = try DshFixture()
+        try fixture.write("parent", title: "父任务", openTurn: true, lastPromptAt: recentMs - 60_000,
+                          children: [("child", nil)])
+        try fixture.write("child", title: "Worker", openTurn: true, lastPromptAt: recentMs)
+        let read = await reader(DshProcessEvidence(sessionIDs: ["parent", "child"])).fetch(home: fixture.home)
+        let child = try XCTUnwrap(read.tasks.first { $0.id == "dsh:child" })
+        XCTAssertEqual(child.parentID, "dsh:parent")
+        XCTAssertNil(child.agentNickname)
+        let groups = TaskGroup.make(tasks: read.tasks, ancestors: read.ancestors)
+        XCTAssertEqual(groups[0].rows.map(\.depth), [0, 1])
+        XCTAssertTrue(groups[0].rows[1].isSubagent)
+    }
+
+    func testSelfAndMutualCataloguedChildrenDoNotFormFamilies() async throws {
+        let fixture = try DshFixture()
+        try fixture.write("self", title: "Self", openTurn: true, lastPromptAt: recentMs,
+                          subagentLabel: "Loop", children: [("self", "Loop")])
+        let read = await reader(DshProcessEvidence(sessionIDs: ["self"])).fetch(home: fixture.home)
+        let task = try XCTUnwrap(read.tasks.first)
+        XCTAssertNil(task.parentID)
+        XCTAssertTrue(read.ancestors.isEmpty)
+        XCTAssertEqual(TaskGroup.make(tasks: read.tasks, ancestors: read.ancestors).count, 1)
     }
 }
 

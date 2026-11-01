@@ -146,34 +146,47 @@ struct TaskProjectResolution: Sendable {
 /// changes task activity, counts, or monitoring warnings.
 actor TaskProjectResolver {
     private let reader = TaskProjectContextReader()
+    private let workspaceReader = DshWorkspaceReader()
     private var repositories = TaskRepositoryIdentity()
     private var lastHome: URL?
 
-    func resolve(tasks: [TaskSnapshot], ancestors: [TaskReference], home: URL) -> TaskProjectResolution {
+    func resolve(tasks: [TaskSnapshot], ancestors: [TaskReference], home: URL,
+                 dshHome: URL? = nil) -> TaskProjectResolution {
         if lastHome != home { repositories.reset(); lastHome = home }
         let context = reader.read(home: home)
-        return resolve(tasks: tasks, ancestors: ancestors, context: context, now: Date())
+        // Codex-only sessions never touch the dsh data directory.
+        let workspaces = tasks.contains { $0.backend == .dsh }
+            ? (dshHome.map { workspaceReader.read(home: $0) } ?? .empty) : .empty
+        return resolve(tasks: tasks, ancestors: ancestors, context: context,
+                       workspaces: workspaces, now: Date())
     }
 
     func resolve(tasks: [TaskSnapshot], ancestors: [TaskReference], context: TaskProjectContext,
-                 now: Date) -> TaskProjectResolution {
+                 workspaces: DshWorkspaceCatalog = .empty, now: Date) -> TaskProjectResolution {
         let tasks = tasks.map { task in
             var copy = task
             copy.projectAssignment = assignment(id: task.id, path: task.workingDirectory, projectID: task.projectID,
-                                                source: task.source, backend: task.backend, context: context, now: now)
+                                                source: task.source, backend: task.backend, context: context,
+                                                workspaces: workspaces, now: now)
             return copy
         }
         let ancestors = ancestors.map { reference in
             var copy = reference
-            copy.projectAssignment = assignment(id: reference.id, path: reference.workingDirectory, projectID: reference.projectID,
-                                                source: reference.source, backend: .codex, context: context, now: now)
+            copy.projectAssignment = assignment(id: reference.id, path: reference.workingDirectory,
+                                                projectID: reference.projectID,
+                                                source: reference.source, backend: reference.backend, context: context,
+                                                workspaces: workspaces, now: now)
             return copy
         }
         return TaskProjectResolution(tasks: tasks, ancestors: ancestors)
     }
 
     private func assignment(id: String, path: String?, projectID: String?, source: TaskSource,
-                            backend: TaskBackend, context: TaskProjectContext, now: Date) -> TaskProjectAssignment {
+                            backend: TaskBackend, context: TaskProjectContext,
+                            workspaces: DshWorkspaceCatalog, now: Date) -> TaskProjectAssignment {
+        if backend == .dsh, let workspace = dshWorkspace(id: id, path: path, workspaces: workspaces) {
+            return .project(workspace.project)
+        }
         if backend == .codex {
             // A corrupt desktop mapping may hide an explicit project choice.
             // Do not replace that choice with a directory-based guess.
@@ -213,6 +226,14 @@ actor TaskProjectResolver {
             }
         }
         return unique(matches)
+    }
+
+    /// dsh tasks belong to a dsh workspace, not a Codex project: recorded
+    /// membership wins over a directory guess, because it survives `cd`.
+    private func dshWorkspace(id: String, path: String?, workspaces: DshWorkspaceCatalog) -> DshWorkspace? {
+        let prefix = "dsh:"
+        let sessionID = id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : id
+        return workspaces.workspace(forSession: sessionID) ?? path.flatMap(workspaces.workspace(forPath:))
     }
 
     private func unique(_ matches: [TaskProject]) -> TaskProjectAssignment {

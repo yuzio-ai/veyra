@@ -67,9 +67,12 @@ final class MonitorStore {
     /// the other's tasks; the published `tasks` is their merge.
     @ObservationIgnored private var codexTasks: [TaskSnapshot] = []
     @ObservationIgnored private var dshTasks: [TaskSnapshot] = []
+    /// Kept apart from the published, merged `taskAncestors`: dsh ancestors are
+    /// rebuilt on every read and must not leak into the Codex reader's carry-over.
+    @ObservationIgnored private var codexAncestors: [TaskReference] = []
     @ObservationIgnored private let readLocal: @Sendable (URL) async throws -> TaskReadResult
     @ObservationIgnored private let readDsh: @Sendable (URL) async -> DshTaskRead
-    @ObservationIgnored private let resolveProjects: @Sendable ([TaskSnapshot], [TaskReference], URL) async -> TaskProjectResolution
+    @ObservationIgnored private let resolveProjects: @Sendable ([TaskSnapshot], [TaskReference], URL, URL) async -> TaskProjectResolution
     @ObservationIgnored private let fetchQuota: @Sendable (CodexLocation) async -> QuotaRefresh
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let clock: PollingClock
@@ -80,7 +83,7 @@ final class MonitorStore {
 
     init(readLocal: (@Sendable (URL) async throws -> TaskReadResult)? = nil,
          readDsh: (@Sendable (URL) async -> DshTaskRead)? = nil,
-         resolveProjects: (@Sendable ([TaskSnapshot], [TaskReference], URL) async -> TaskProjectResolution)? = nil,
+         resolveProjects: (@Sendable ([TaskSnapshot], [TaskReference], URL, URL) async -> TaskProjectResolution)? = nil,
          fetchQuota: (@Sendable (CodexLocation) async -> QuotaRefresh)? = nil,
          clock: PollingClock = .continuous(), now: @escaping @MainActor () -> Date = Date.init,
          defaults: UserDefaults = .standard,
@@ -97,7 +100,7 @@ final class MonitorStore {
         let dshReader = DshTaskReader()
         self.readDsh = readDsh ?? { await dshReader.fetch(home: $0) }
         let projectResolver = TaskProjectResolver()
-        self.resolveProjects = resolveProjects ?? { await projectResolver.resolve(tasks: $0, ancestors: $1, home: $2) }
+        self.resolveProjects = resolveProjects ?? { await projectResolver.resolve(tasks: $0, ancestors: $1, home: $2, dshHome: $3) }
         self.fetchQuota = fetchQuota ?? { location in
             let client = AppServerClient()
             let result = await client.fetch(location: location)
@@ -212,7 +215,7 @@ final class MonitorStore {
     }
     private func refreshLocal() async {
         let version = revision, dshVersion = dshRevision, location = location
-        var ancestors = taskAncestors
+        var ancestors = codexAncestors
         guard !suspended else { return }
         refreshServiceAvailability()
         if !attemptedLocalRead { tasksBusy = true; attemptedLocalRead = true }
@@ -223,6 +226,7 @@ final class MonitorStore {
             let result = try await readLocal(location.home)
             guard version == revision else { return }
             codexTasks = result.tasks
+            codexAncestors = result.ancestors
             ancestors = result.ancestors
             codexReadAt = result.fetchedAt
             codexReadState = .available
@@ -255,7 +259,10 @@ final class MonitorStore {
             if dsh.state == .available { dshReadAt = dsh.fetchedAt }
         }
         tasksUpdatedAt = [codexReadAt, dshReadAt].compactMap { $0 }.max()
-        let resolved = await resolveProjects(codexTasks + dshTasks, ancestors, location.home)
+        // A superseded dsh read belongs to a different home: never merge its families.
+        let dshAncestors = dshVersion == dshRevision ? dsh.ancestors : []
+        let resolved = await resolveProjects(codexTasks + dshTasks, ancestors + dshAncestors,
+                                            location.home, dshLocation.home)
         guard version == revision, dshVersion == dshRevision else { return }
         if taskAncestors != resolved.ancestors { taskAncestors = resolved.ancestors }
         if tasks != resolved.tasks { tasks = resolved.tasks }
@@ -419,6 +426,7 @@ final class MonitorStore {
         codexReadAt = nil; tasksUpdatedAt = dshReadAt
         taskError = nil; taskWarning = nil; codexReadState = .detecting
         codexTasks = []
+        codexAncestors = []
         taskAncestors = []
         quotaBusy = false; tasksBusy = false
         refreshServiceAvailability()

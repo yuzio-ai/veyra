@@ -289,7 +289,14 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     var workingDirectory: String?
     var projectID: String?
     var projectAssignment: TaskProjectAssignment = .unavailable
-    var sourceLabel: String { backend == .dsh ? "dsh" : source.label }
+    /// dsh records keep the provider and effort next to the model id; they are
+    /// shown as context instead of being folded into the displayed name.
+    var modelProvider: String?
+    var reasoningEffort: String?
+    /// The badge stays short so the identity row keeps one line; the full
+    /// product name is the badge's help and accessibility text.
+    var sourceLabel: String { backend == .dsh ? "DSH" : source.label }
+    var sourceDetail: String { backend == .dsh ? "DeepSeek Harness" : source.label }
 }
 
 struct TaskReadResult: Sendable {

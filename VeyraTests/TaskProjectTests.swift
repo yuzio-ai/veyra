@@ -225,13 +225,21 @@ final class TaskProjectTests: XCTestCase {
         XCTAssertEqual(mixed.counts(for: .unknown), TaskProjectCounts(main: 1, subtasks: 0))
     }
 
-    func testDshRowNeverUsesCodexSubagentClassification() {
-        let task = task("dsh", source: .subtask, backend: .dsh)
-        let row = TaskGroupRow(reference: TaskReference(id: task.id, title: task.title, parentID: nil),
-                               task: task, parentTitle: nil, depth: 2)
-        XCTAssertFalse(row.isSubagent)
+    func testDshSubagentRowsCountAsSubtasksAndRootsAsMainTasks() {
+        // dsh spawns a session per subagent; the catalog link makes the row a
+        // subtask, so a fan-out never reads as that many independent tasks.
+        let child = task("dsh:child", source: .subtask, backend: .dsh)
+        let row = TaskGroupRow(reference: TaskReference(id: child.id, title: child.title, parentID: "dsh:parent",
+                                                        backend: .dsh),
+                               task: child, parentTitle: "Parent", depth: 1)
+        XCTAssertTrue(row.isSubagent)
         let project = TaskProjectGroup(project: nil, groups: [TaskGroup(id: row.id, rows: [row])])
-        XCTAssertEqual(project.counts(for: .running), TaskProjectCounts(main: 1, subtasks: 0))
+        XCTAssertEqual(project.counts(for: .running), TaskProjectCounts(main: 0, subtasks: 1))
+        let parent = task("dsh:parent", backend: .dsh)
+        let root = TaskGroupRow(reference: TaskReference(id: parent.id, title: parent.title, parentID: nil,
+                                                        backend: .dsh),
+                                task: parent, parentTitle: nil, depth: 0)
+        XCTAssertFalse(root.isSubagent)
     }
 
     func testProjectCountSummaryLocalizesPluralsAndOmitsZeroParts() {

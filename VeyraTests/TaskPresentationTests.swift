@@ -68,17 +68,29 @@ final class TaskPresentationTests: XCTestCase {
         dshTask = TaskSnapshot(id: "dsh:s1", title: "dsh task", model: nil, source: .desktop,
                                parentID: nil, startedAt: nil, updatedAt: .distantPast,
                                tokens: TokenUsage(), activity: .running, backend: .dsh)
-        XCTAssertEqual(dshTask.sourceLabel, "dsh")
+        XCTAssertEqual(dshTask.sourceLabel, "DSH")
+        XCTAssertEqual(dshTask.sourceDetail, "DeepSeek Harness")
+        let provider = "deepseek-account", effort = "high"
+        XCTAssertEqual(TaskText.modelDetail(model: "deepseek-flash", provider: provider, effort: effort),
+                       "deepseek-flash · " + L10n.text("provider \(provider)") + " · " + L10n.text("reasoning \(effort)"))
+        XCTAssertNil(TaskText.modelDetail(model: nil, provider: "deepseek-account", effort: nil))
+        XCTAssertNil(TaskText.modelDetail(model: "kimi-k3", provider: nil, effort: nil))
         let groups = TaskGroup.make(tasks: [task("codex-1"), dshTask], ancestors: [])
         XCTAssertEqual(groups.count, 2)
         let tasksByID = Dictionary(groups.flatMap(\.rows).compactMap { $0.task }.map { ($0.id, $0) },
                                    uniquingKeysWith: { first, _ in first })
         XCTAssertEqual(groups[0].backend(tasksByID: tasksByID), .codex)
         XCTAssertEqual(groups[1].backend(tasksByID: tasksByID), .dsh)
-        // Ancestor-only rows carry no snapshot and belong to Codex by construction.
+        // Ancestor-only rows carry no snapshot, so their reference speaks for the family.
         let context = TaskGroup.make(tasks: [task("child", parent: "ended")],
                                      ancestors: [TaskReference(id: "ended", title: "t", parentID: nil)])
         XCTAssertEqual(context.first?.backend(tasksByID: tasksByID), .codex)
+        var child = task("dsh:child", parent: "dsh:parent")
+        child.backend = .dsh
+        let dshContext = TaskGroup.make(tasks: [child], ancestors: [
+            TaskReference(id: "dsh:parent", title: "p", parentID: nil, backend: .dsh)])
+        XCTAssertEqual(dshContext.first?.backend(tasksByID: tasksByID), .dsh)
+        XCTAssertTrue(dshContext.first?.rows.last?.isSubagent == true)
     }
 
     func testTitleFallbackAndSourceMetadata() {

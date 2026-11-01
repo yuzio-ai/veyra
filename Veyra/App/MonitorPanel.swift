@@ -447,7 +447,11 @@ private struct TaskRow: View {
             TaskIdentityHeader(title: task.title, path: task.agentPath,
                                source: isSubagent ? TaskText.subagentBadge(nickname: task.agentNickname) : task.sourceLabel,
                                sourceIcon: isSubagent ? "arrow.triangle.branch" : task.source.iconName,
-                               model: task.model, activity: task.activity, startedAt: task.startedAt)
+                               sourceDetail: isSubagent ? TaskText.subagentBadge(nickname: task.agentNickname) : task.sourceDetail,
+                               model: task.model,
+                               modelDetail: TaskText.modelDetail(model: task.model, provider: task.modelProvider,
+                                                                 effort: task.reasoningEffort),
+                               activity: task.activity, startedAt: task.startedAt)
             if let progress = task.progress { TaskProgressSection(progress: progress) }
             if expanded, let role = TaskText.nonempty(task.agentRole) {
                 Text(L10n.text("\(L10n.text("Role")): \(role)"))
@@ -470,7 +474,9 @@ private struct TaskIdentityHeader: View {
     let path: String?
     let source: String
     let sourceIcon: String
+    let sourceDetail: String
     let model: String?
+    let modelDetail: String?
     let activity: TaskActivity
     let startedAt: Date?
 
@@ -493,32 +499,40 @@ private struct TaskIdentityHeader: View {
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
-                    TaskIdentityBadges(source: source, sourceIcon: sourceIcon, model: model).fixedSize()
+                    badges.fixedSize()
                     Spacer(minLength: 0)
                     TaskElapsedTime(activity: activity, startedAt: startedAt).fixedSize()
                 }
                 VStack(alignment: .leading, spacing: 5) {
-                    TaskIdentityBadges(source: source, sourceIcon: sourceIcon, model: model)
+                    badges
                     TaskElapsedTime(activity: activity, startedAt: startedAt)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
         }
     }
+
+    private var badges: some View {
+        TaskIdentityBadges(source: source, sourceIcon: sourceIcon, sourceDetail: sourceDetail,
+                           model: model, modelDetail: modelDetail)
+    }
 }
 
 private struct TaskIdentityBadges: View {
     let source: String
     let sourceIcon: String
+    let sourceDetail: String
     let model: String?
+    let modelDetail: String?
 
     var body: some View {
         HStack(spacing: 6) {
             TaskBadge(source, systemImage: sourceIcon)
-                .lineLimit(1).truncationMode(.tail).help(source)
-                .accessibilityLabel(source)
+                .lineLimit(1).truncationMode(.tail).help(sourceDetail)
+                .accessibilityLabel(sourceDetail)
             TaskBadge(model ?? L10n.text("Unknown model"), systemImage: "sparkles")
-                .lineLimit(1).truncationMode(.tail).help(model ?? L10n.text("Unknown model"))
+                .lineLimit(1).truncationMode(.tail).help(modelDetail ?? model ?? L10n.text("Unknown model"))
+                .accessibilityLabel(modelDetail ?? model ?? L10n.text("Unknown model"))
         }
     }
 }

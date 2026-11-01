@@ -1,5 +1,13 @@
 import Foundation
 
+/// One child session listed by a parent's `subagentCatalog` row. `dsh` spawns
+/// a full session per subagent, so this is the only parent link the record
+/// carries; the child's own file never names its parent.
+struct DshSubagentSession: Equatable, Sendable {
+    let id: String
+    let label: String?
+}
+
 /// One parsed `storages/session_projcache/sessions/<id>.json` record. Every
 /// field is optional: the format is unpublished (observed v7, dsh 0.1.5-rc),
 /// so parsing is best-effort and degrades instead of failing (AC-5).
@@ -14,8 +22,15 @@ struct DshSessionMetadata: Equatable, Sendable {
     let turnOpen: Bool?
     let tokens: TokenUsage
     let model: String?
+    /// Provider and effort live beside the model id; neither is a display name.
+    let modelProvider: String?
+    let reasoningEffort: String?
     let formatVersion: Int?
     var workingDirectory: String?
+    /// Sessions this record spawned as subagents. The window is bounded (only
+    /// recent children are listed): an aged-out child loses its parent link
+    /// rather than failing the read.
+    var subagentChildren: [DshSubagentSession] = []
 
     /// Recorded activity only; file timestamps are never used (a migration
     /// could refresh them without any real activity).
@@ -38,12 +53,20 @@ struct DshSessionMetadata: Equatable, Sendable {
         let openSeq = rows["turnBoundary"]["val"]["openTurnStartSeq"]
         let turnOpen: Bool? = rows["turnBoundary"]["val"].object == nil ? nil : openSeq.integer != nil
         let totals = rows["tokenUsage"]["val"]["totals"]
+        let lastUsed = rows["modelSelection"]["val"]["lastUsed"]
         let tokens = TokenUsage(
             input: Self.sum(totals["uncachedInputTokens"].integer, totals["cacheReadTokens"].integer,
                             totals["cacheWriteTokens"].integer),
             output: totals["outputTokens"].integer,
             cachedInput: totals["cacheReadTokens"].integer,
             total: nil)
+        // Subagent children are listed only while they are recent; the entry
+        // names the child session and (usually) its dsh-assigned label.
+        let children = (rows["subagentCatalog"]["val"]["head"]["values"].array ?? []).compactMap { entry in
+            TaskText.nonempty(entry["childId"].string).map {
+                DshSubagentSession(id: $0, label: TaskText.nonempty(entry["label"].string))
+            }
+        }
         return DshSessionMetadata(
             id: id,
             title: rows["title"]["val"].string,
@@ -52,9 +75,12 @@ struct DshSessionMetadata: Equatable, Sendable {
             lastPromptAt: timestamp(rows["sessionListMetadata"]["val"]["lastPromptAt"].double),
             turnOpen: turnOpen,
             tokens: tokens.withTotal(),
-            model: rows["modelSelection"]["val"]["lastUsed"]["model"].string,
+            model: lastUsed["model"].string,
+            modelProvider: TaskText.nonempty(lastUsed["provider"].string),
+            reasoningEffort: TaskText.nonempty(lastUsed["reasoningEffort"].string),
             formatVersion: value["version"].integer.map { Int($0) },
-            workingDirectory: TaskText.nonempty(identity["cwd"].string))
+            workingDirectory: TaskText.nonempty(identity["cwd"].string),
+            subagentChildren: children)
     }
 
     private static func sum(_ parts: Int64?...) -> Int64? {

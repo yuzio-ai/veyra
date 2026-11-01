@@ -69,6 +69,35 @@ final class DshExperienceTests: XCTestCase {
         store.stop(); clock.finish(); await drain()
     }
 
+    func testDshSubagentFamilyReachesThePanelAsOneGroup() async throws {
+        // dsh spawns a session per subagent; the panel must nest it under the
+        // parent task instead of reporting two independent main tasks.
+        let folder = try SQLiteFixture()
+        let absent = CodexLocation(home: folder.home.appendingPathComponent("no-codex"), executable: nil)
+        let child = TaskSnapshot(id: "dsh:child", title: "You are auditing", model: nil, source: .subtask,
+                                 parentID: "dsh:parent", startedAt: .now, updatedAt: .now,
+                                 tokens: TokenUsage(total: 10), activity: .running, backend: .dsh)
+        let parent = TaskReference(id: "dsh:parent", title: "审查所有文档", parentID: nil,
+                                   source: .desktop, backend: .dsh)
+        let store = MonitorStore(readLocal: { _ in
+            TaskReadResult(tasks: [], fetchedAt: .now, warning: nil)
+        }, readDsh: { _ in
+            DshTaskRead(tasks: [child], fetchedAt: .now, warning: nil, parsedFiles: 2, skippedFiles: 0,
+                        ancestors: [parent])
+        }, resolveProjects: { tasks, ancestors, _, _ in
+            TaskProjectResolution(tasks: tasks, ancestors: ancestors)
+        }, defaults: isolatedDefaults(), resolveLocation: { _, _ in absent })
+        store.start(); await store.refreshAll(); await drain()
+        XCTAssertEqual(store.tasks.map(\.id), ["dsh:child"])
+        XCTAssertEqual(store.taskAncestors.map(\.id), ["dsh:parent"])
+        let groups = TaskGroup.make(tasks: store.tasks, ancestors: store.taskAncestors)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.rows.map(\.id), ["dsh:parent", "dsh:child"])
+        XCTAssertEqual(groups.first?.rows.map(\.depth), [0, 1])
+        XCTAssertEqual(groups.first?.rows.last?.task?.parentID, "dsh:parent")
+        store.stop(); await drain()
+    }
+
     func testNoSourcesIsNormalAndAnEmptyReadableDshDirectoryCountsZero() async throws {
         let folder = try SQLiteFixture()
         let absent = CodexLocation(home: folder.home.appendingPathComponent("no-codex"), executable: nil)
@@ -132,6 +161,11 @@ final class DshExperienceTests: XCTestCase {
         let location = CodexLocation(home: folder.home, executable: URL(fileURLWithPath: "/usr/bin/true"))
         let store = MonitorStore(readLocal: { _ in TaskReadResult(tasks: [codex], fetchedAt: .now, warning: nil) },
             readDsh: { _ in DshTaskRead(tasks: [dsh], fetchedAt: .now, warning: nil, parsedFiles: 1, skippedFiles: 0) },
+            // This test owns the dsh path setting itself; do not let the real
+            // project resolver read the developer's ~/.dsh before it is set.
+            resolveProjects: { tasks, ancestors, _, _ in
+                TaskProjectResolution(tasks: tasks, ancestors: ancestors)
+            },
             defaults: settings, resolveLocation: { _, _ in location })
         await store.refreshAll()
         let quota = QuotaSnapshot(windows: [], fetchedAt: .now, accountID: "fixture")

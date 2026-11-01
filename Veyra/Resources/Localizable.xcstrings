@@ -3461,6 +3461,40 @@
           }
         }
       }
+    },
+    "provider %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "provider %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务商 %@"
+          }
+        }
+      }
+    },
+    "reasoning %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "reasoning %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理强度 %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

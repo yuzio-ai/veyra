@@ -24,7 +24,7 @@ Veyra 只读访问 `state_*.sqlite`、`thread_history_*.sqlite` 和会话 JSONL�
 
 ## 项目归属
 
-项目分组只读使用 Codex 任务数据库中的 `cwd`、`project_id`、`projects` 和 `project_roots`。会话归属迁移完成前，兼容同一数据目录下 `.codex-global-state.json` 的项目定义、会话映射、无项目标记及迁移信息；只解析项目所需字段，不保留或输出其他桌面状态。归属迁移完成后停止使用旧会话映射，但仍读取本地主机的明确无项目标记；数据库中已有的项目 ID 优先于旧标记。空 `project_id` 和迁移标记均不作为明确无项目的证据。dsh 使用会话记录的 `record.identity.cwd` 作为目录推断依据。
+项目分组只读使用 Codex 任务数据库中的 `cwd`、`project_id`、`projects` 和 `project_roots`。会话归属迁移完成前，兼容同一数据目录下 `.codex-global-state.json` 的项目定义、会话映射、无项目标记及迁移信息；只解析项目所需字段，不保留或输出其他桌面状态。归属迁移完成后停止使用旧会话映射，但仍读取本地主机的明确无项目标记；数据库中已有的项目 ID 优先于旧标记。空 `project_id` 和迁移标记均不作为明确无项目的证据。dsh 任务先只读 `storages/workspace.json` 的工作区标题、目录与会话列表确定归属：会话 ID 归属优先，其次按工作目录最长前缀匹配；未命中时再使用会话记录的 `record.identity.cwd` 按目录推断。
 
 没有明确归属时，先按路径组件匹配项目目录；再只读检查 `.git` 与 `commondir`，识别同一仓库的不同 worktree。不会启动 Git 子进程、读取 remote URL、修改仓库或根据目录名称猜测。项目和 Git 信息仅缓存在内存，Git 缓存最多保留 30 秒。桌面项目映射损坏时，桌面会话与子任务不按目录猜测归属；CLI、dsh 仍可使用其他可用项目目录独立推断。无法可靠识别时降级为“未归属项目”，不改变任务状态、运行数量或其他来源的监控结果。
 
