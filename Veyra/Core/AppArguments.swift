@@ -8,6 +8,7 @@ enum AppArguments {
         case noQuota = "no-quota", cooldown
         case taskFamily = "task-family", familyExpanded = "family-expanded", familyContext = "family-context"
         case tokenBreakdown = "token-breakdown", tokenEdges = "token-edges"
+        case apiCosts = "api-costs"
         case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
         case dshOnly = "dsh-only", dshIdle = "dsh-idle", dshUnknown = "dsh-unknown"
         case dshError = "dsh-error", noSources = "no-sources", mixedError = "mixed-error"

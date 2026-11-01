@@ -278,6 +278,27 @@ def commands(options, output):
                          str(app('Debug')), str(app('Release'))], 60)]
 
 
+def valid_api_cost_scroll(row):
+    if not (row.get('position') == 'api-costs' and row.get('nativePopover') is True
+            and row.get('appWasActive') is True and row.get('windowWasKey') is True
+            and row.get('expanded') == 5 and row.get('modelCount', 0) >= 12):
+        return False
+    overflow = row.get('overflow', 0)
+    scrolls = row.get('scrolls', [])
+    if not isinstance(overflow, (int, float)) or not overflow > 0 or len(scrolls) != 3:
+        return False
+    height = scrolls[0].get('windowHeight')
+    if not isinstance(height, (int, float)) or not height > 0:
+        return False
+    for sample, position, expected in zip(scrolls, ('top', 'middle', 'bottom'), (0, overflow / 2, overflow)):
+        offset, sample_height = sample.get('offset'), sample.get('windowHeight')
+        if (sample.get('position') != position or not isinstance(offset, (int, float))
+                or not abs(offset - expected) <= 1 or not isinstance(sample_height, (int, float))
+                or not abs(sample_height - height) < 1):
+            return False
+    return True
+
+
 def preview_fixture(command):
     if command[0] != '/usr/bin/open' or '--preview-lease' not in command:
         return None
@@ -554,6 +575,8 @@ def run(options):
                                 and row.get('windowWasKey') is True and row.get('openedFromBackground') is True
                                 and row.get('previousApplicationRestored') is True for row in records):
                             raise RuntimeError(f'Native dsh interaction evidence is missing for {style}')
+                        if not any(valid_api_cost_scroll(row) for row in records):
+                            raise RuntimeError(f'Native API cost scroll evidence is missing or incorrect for {style}')
             if options.mode == 'test' or rebuilt_debug:
                 save_stamp(stamp_path('debug-build'), debug_fingerprint, [app('Debug')], output)
             if options.mode == 'release-build':

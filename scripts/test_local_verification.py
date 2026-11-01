@@ -162,6 +162,10 @@ class VerificationTests(unittest.TestCase):
                             'resolvedAppearance': appearance, 'effectiveAppearance': appearance,
                             'increasedContrast': command[command.index('--preview-appearance') + 1].endswith('-increased'),
                             'reduceTransparency': '--preview-reduce-transparency' in command})
+            records.append({'position': 'api-costs', 'nativePopover': True, 'expanded': 5,
+                            'appWasActive': True, 'windowWasKey': True, 'modelCount': 12, 'overflow': 100,
+                            'scrolls': [{'position': name, 'offset': offset, 'windowHeight': 800}
+                                        for name, offset in [('top', 0), ('middle', 50), ('bottom', 100)]]})
             path.write_text(json.dumps(records))
 
     def testUnchangedSuccessSkipsButForceRuns(self):
@@ -376,6 +380,29 @@ class VerificationTests(unittest.TestCase):
         with patch.object(verify, 'execute', side_effect=inactive):
             with self.assertRaisesRegex(RuntimeError, 'interaction evidence'):
                 verify.run(verify.arguments(['previews', 'menu', '--native-only']))
+
+    def testAPICostScrollCannotPassWithoutActiveWindowOverflowAndMeasuredMovement(self):
+        for invalid in ('missing', 'inactive', 'non-key', 'short-model-list', 'no-overflow',
+                        'missing-position', 'no-movement', 'unstable-height'):
+            with self.subTest(invalid=invalid):
+                def incomplete(name, command, timeout, output, env):
+                    self.fake_execute(name, command, timeout, output, env)
+                    if name.startswith('native-menu-'):
+                        path = Path(command[command.index('--exercise-menu-to') + 1]) / 'menu-check.json'
+                        rows = json.loads(path.read_text())
+                        row = next(r for r in rows if r.get('position') == 'api-costs')
+                        if invalid == 'missing': rows.remove(row)
+                        elif invalid == 'inactive': row['appWasActive'] = False
+                        elif invalid == 'non-key': row['windowWasKey'] = False
+                        elif invalid == 'short-model-list': row['modelCount'] = 2
+                        elif invalid == 'no-overflow': row['overflow'] = 0
+                        elif invalid == 'missing-position': row['scrolls'].pop()
+                        elif invalid == 'no-movement': row['scrolls'][-1]['offset'] = 0
+                        elif invalid == 'unstable-height': row['scrolls'][-1]['windowHeight'] = 900
+                        path.write_text(json.dumps(rows))
+                with patch.object(verify, 'execute', side_effect=incomplete):
+                    with self.assertRaisesRegex(RuntimeError, 'API cost scroll evidence'):
+                        verify.run(verify.arguments(['previews', 'menu', '--native-only', '--force']))
 
     def testNativeMenuRejectsMissingOrIncorrectActualAppearanceEvidence(self):
         for invalid in ('missing', 'wrong-appearance', 'wrong-resolution', 'wrong-contrast', 'wrong-transparency'):

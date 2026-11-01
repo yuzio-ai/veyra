@@ -1,6 +1,244 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "No verified cache-read price for model: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No verified cache-read price for model: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未计入模型：%@，缺少已核实的缓存读取价格。"
+          }
+        }
+      }
+    },
+    "API reference cost (estimated)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API reference cost (estimated)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 参考费用（估算）"
+          }
+        }
+      }
+    },
+    "Calculating…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calculating…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "计算中…"
+          }
+        }
+      }
+    },
+    "Partial estimate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partial estimate"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分估算"
+          }
+        }
+      }
+    },
+    "Converted at official base prices. Not an actual bill or subscription deduction; additional charges excluded.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Converted at official base prices. Not an actual bill or subscription deduction; additional charges excluded."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按官方基础价格折算，不代表实际账单或订阅额度扣减；不含附加计费。"
+          }
+        }
+      }
+    },
+    "Based on the last model; historical model changes may affect the estimate.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Based on the last model; historical model changes may affect the estimate."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按最后模型折算，历史换模型可能有偏差。"
+          }
+        }
+      }
+    },
+    "Standard base prices in USD. Prices checked on %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard base prices in USD. Prices checked on %@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "美元 Standard 基础参考价。价格核对日期：%@。"
+          }
+        }
+      }
+    },
+    "No verified price for model: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No verified price for model: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未计入模型：%@，缺少已核实价格。"
+          }
+        }
+      }
+    },
+    "Some usage has no confirmed model.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some usage has no confirmed model."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分用量没有可确认的模型归属。"
+          }
+        }
+      }
+    },
+    "Some token counts are missing or inconsistent.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some token counts are missing or inconsistent."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分 Token 数量缺失或不一致。"
+          }
+        }
+      }
+    },
+    "Token usage is unavailable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token usage is unavailable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无可用的 Token 用量。"
+          }
+        }
+      }
+    },
+    "Some session history could not be read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some session history could not be read."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分会话历史无法读取。"
+          }
+        }
+      }
+    },
+    "Token counters reset; earlier usage cannot be attributed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token counters reset; earlier usage cannot be attributed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token 计数已重置，较早的用量无法确认归属。"
+          }
+        }
+      }
+    },
+    "Usage changed. Waiting for task refresh.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage changed. Waiting for task refresh."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用量已变化，等待任务刷新。"
+          }
+        }
+      }
+    },
     "%@ tokens total": {
       "extractionState": "manual",
       "localizations": {

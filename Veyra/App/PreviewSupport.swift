@@ -77,6 +77,7 @@ enum PreviewSupport {
         case .familyExpanded: ["demo-1", "demo-2"]
         case .tokenBreakdown: ["token-parent", "token-child", "token-deep"]
         case .tokenEdges: ["token-zero", "token-missing", "token-invalid"]
+        case .apiCosts: ["cost-single", "cost-mixed", "cost-dsh", "cost-partial", "cost-unavailable"]
         case .edgeCases: ["demo-1", "demo-2"]
         case .dshOnly: ["dsh:demo-1"]
         default: []
@@ -213,6 +214,36 @@ enum PreviewSupport {
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
             ]
+        case .apiCosts:
+            let screenshot = TokenUsage(input: 250_229, output: 1_404, cachedInput: 211_840, reasoningOutput: 420, total: 251_633)
+            let million = TokenUsage(input: 1_000_000, output: 0, cachedInput: 0, total: 1_000_000)
+            var single = TaskAPICostEstimate()
+            single.add(TaskCostTokens(usage: screenshot)!, model: "gpt-6.1-sol", backend: .codex)
+            var mixed = TaskAPICostEstimate()
+            let mixedModels = ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-luna", "gpt-6-sol",
+                               "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4",
+                               "gpt-5.4-mini", "gpt-5.4-nano"]
+            for model in mixedModels {
+                mixed.add(TaskCostTokens(usage: million)!, model: model, backend: .codex)
+            }
+            var partial = single
+            partial.note(.unknownModel("unpriced-fixture-model"))
+            let fixtures: [(String, String, String, TokenUsage, TaskAPICostEstimate, TaskBackend)] = [
+                ("cost-single", "API 参考费用 · 截图用量", "gpt-6.1-sol", screenshot, single, .codex),
+                ("cost-mixed", "API 参考费用 · 多模型累计", mixedModels.last!,
+                    TokenUsage(input: Int64(mixedModels.count) * 1_000_000, output: 0, cachedInput: 0,
+                               total: Int64(mixedModels.count) * 1_000_000), mixed, .codex),
+                ("cost-dsh", "API 参考费用 · DeepSeek 峰谷区间", "deepseek-flash", screenshot,
+                    .dsh(usage: screenshot, model: "deepseek-flash"), .dsh),
+                ("cost-partial", "API 参考费用 · 部分估算", "gpt-6.1-sol", screenshot, partial, .codex),
+                ("cost-unavailable", "API 参考费用 · 未知模型", "unpriced-fixture-model", screenshot,
+                    TaskAPICostEstimate(issues: [.unknownModel("unpriced-fixture-model")]), .codex)
+            ]
+            store.tasks = fixtures.map { id, title, model, tokens, cost, backend in
+                TaskSnapshot(id: id, title: title, model: model, source: .desktop, parentID: nil,
+                    startedAt: referenceDate.addingTimeInterval(-36), updatedAt: referenceDate, tokens: tokens,
+                    activity: .running, backend: backend, apiCostSource: .recorded(cost))
+            }
         case .tokenBreakdown:
             store.tasks = [
                 TaskSnapshot(id: "token-parent", title: "任务明细 · 固定夹具", model: "example-coding-model",

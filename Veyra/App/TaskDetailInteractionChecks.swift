@@ -91,7 +91,72 @@ enum TaskDetailInteractionChecks {
             "bothExpandedContentHeight": bothHeight]
         try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("task-detail-checks.json"))
+        try await checkAPICostDisclosure(to: directory)
         try await checkActionStyle(to: directory)
+    }
+
+    private static func checkAPICostDisclosure(to directory: URL) async throws {
+        let store = MonitorStore()
+        PreviewSupport.configure(store, scenario: .apiCosts)
+        store.tasks = [store.tasks[0]]
+        let url = directory.appendingPathComponent("api-cost-fixture.jsonl")
+        let initial = #"{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":250229,"cached_input_tokens":211840,"output_tokens":1404,"reasoning_output_tokens":420,"total_tokens":251633}}}}"# + "\n"
+        try Data(initial.utf8).write(to: url)
+        store.tasks[0].apiCostSource = .codex(url)
+        let host = NSHostingView(rootView: MonitorPanel(store: store,
+            screenOverride: PanelScreenMetrics(visibleHeight: 1_200))
+            .environment(\.monitorOpaquePreview, true)
+            .environment(\.monitorReferenceDate, PreviewSupport.referenceDate))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 1),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func settle() async throws {
+            for _ in 0..<8 {
+                try await Task.sleep(for: .milliseconds(50))
+                host.layoutSubtreeIfNeeded()
+                window.setContentSize(NSSize(width: PanelSizing.width, height: host.fittingSize.height))
+            }
+        }
+        func toggle() throws {
+            guard let button = buttons(host).first(where: { $0.accessibilityIdentifier() == "monitor.tokens.cost-single" }) else {
+                throw CheckError.failed("missing API cost disclosure")
+            }
+            button.performClick(nil)
+        }
+        let before = await TaskAPICostReader.shared.lastReadByteCount
+        try await settle()
+        let collapsed = await TaskAPICostReader.shared.lastReadByteCount
+        guard before == collapsed else { throw CheckError.failed("collapsed cost must not read history") }
+        try toggle(); try await settle()
+        let expanded = await TaskAPICostReader.shared.lastReadByteCount
+        guard expanded == initial.utf8.count else { throw CheckError.failed("expanded cost must load history once") }
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-single.png"))
+        try toggle(); try await settle()
+        let extra = #"{"type":"turn_context","payload":{"model":"gpt-6.1-terra"}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":251229,"cached_input_tokens":211840,"output_tokens":1504,"total_tokens":252733}}}}"# + "\n"
+        let file = try FileHandle(forWritingTo: url)
+        try file.seekToEnd(); try file.write(contentsOf: Data(extra.utf8)); try file.close()
+        store.tasks[0] = TaskSnapshot(id: "cost-single", title: store.tasks[0].title, model: "gpt-6.1-terra",
+            source: .desktop, parentID: nil, startedAt: PreviewSupport.referenceDate,
+            updatedAt: PreviewSupport.referenceDate.addingTimeInterval(1),
+            tokens: TokenUsage(input: 251_229, output: 1_504, cachedInput: 211_840, total: 252_733), activity: .running,
+            apiCostSource: .codex(url))
+        try await settle()
+        let afterCollapse = await TaskAPICostReader.shared.lastReadByteCount
+        guard afterCollapse == expanded else { throw CheckError.failed("collapsed refresh must not scan cost history") }
+        try toggle(); try await settle()
+        let incremental = await TaskAPICostReader.shared.lastReadByteCount
+        guard incremental == extra.utf8.count else { throw CheckError.failed("reexpanded cost must read only appended history") }
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-mixed.png"))
+        let record: [String: Any] = ["fixtureOnly": true,
+            "passed": ["collapsed-no-read", "expanded-history-read", "collapsed-refresh-no-read", "incremental-reexpand"],
+            "initialBytes": expanded, "incrementalBytes": incremental]
+        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+            .write(to: directory.appendingPathComponent("api-cost-disclosure-checks.json"))
     }
 
     /// Production native controls with safe callbacks, including the quit-shaped button.

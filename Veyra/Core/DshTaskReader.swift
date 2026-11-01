@@ -159,6 +159,8 @@ actor DshTaskReader {
                                 updatedAt: updatedAt, tokens: metadata.tokens, activity: activity,
                                 agentNickname: metadata.subagentLabel,
                                 backend: .dsh, workingDirectory: metadata.workingDirectory,
+                                apiCostSource: .recorded(.dsh(usage: metadata.hasCompleteAPICostUsage ? metadata.tokens : TokenUsage(),
+                                                            model: metadata.model)),
                                 modelProvider: metadata.modelProvider,
                                 reasoningEffort: metadata.reasoningEffort)
         }

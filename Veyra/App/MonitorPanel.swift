@@ -467,7 +467,7 @@ private struct TaskRow: View {
                              isSubagent: isSubagent, expanded: $expanded)
                 .padding(.top, 4)
             if expanded {
-                TaskTokenDetails(taskID: task.id, tokens: task.tokens)
+                TaskTokenDetails(task: task)
                     .padding(.top, 4)
             }
         }
@@ -649,8 +649,8 @@ private final class TaskTokenNativeButton: MonitorNativeButton {
 }
 
 private struct TaskTokenDetails: View {
-    let taskID: String
-    let tokens: TokenUsage
+    let task: TaskSnapshot
+    private var tokens: TokenUsage { task.tokens }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -660,9 +660,10 @@ private struct TaskTokenDetails: View {
                 TaskTokenDetailLine(label: "Uncached input", value: tokens.uncachedInput)
                 TaskOutputDetailLine(tokens: tokens)
             }
+            TaskAPICostView(task: task)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("monitor.token-details.\(taskID)")
+        .accessibilityIdentifier("monitor.token-details.\(task.id)")
     }
 }
 
@@ -853,7 +854,7 @@ private struct ResetCreditsCard: View {
 }
 
 private struct MonitorPanelActiveKey: EnvironmentKey { static let defaultValue = false }
-private extension EnvironmentValues {
+extension EnvironmentValues {
     var monitorPanelActive: Bool {
         get { self[MonitorPanelActiveKey.self] }
         set { self[MonitorPanelActiveKey.self] = newValue }

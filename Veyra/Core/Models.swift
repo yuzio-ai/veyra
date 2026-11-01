@@ -289,6 +289,7 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     var workingDirectory: String?
     var projectID: String?
     var projectAssignment: TaskProjectAssignment = .unavailable
+    var apiCostSource: TaskAPICostSource?
     /// dsh records keep the provider and effort next to the model id; they are
     /// shown as context instead of being folded into the displayed name.
     var modelProvider: String?

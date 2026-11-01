@@ -172,6 +172,91 @@ enum Diagnostics {
                                     "runningCount": "2", "escapePassed": true,
                                     "openedFromBackground": true, "previousApplicationRestored": true,
                                     "appWasActive": dshAppWasActive, "windowWasKey": dshWindowWasKey])
+                    // Exercise reference costs in the actual NSPopover, including
+                    // its native material, contrast and reduced-transparency variants.
+                    PreviewSupport.configure(MonitorStore.shared, scenario: .apiCosts)
+                    var costPreviousApplication = try await prepareBackgroundMenu(in: directory)
+                    toggleMenu?()
+                    guard await waitFor({ menuWindow?()?.isVisible == true }),
+                          let initialCostWindow = menuWindow?(), let initialCostView = initialCostWindow.contentView else {
+                        throw MenuCheckError.timedOut
+                    }
+                    var costWindow = initialCostWindow, costView = initialCostView
+                    guard await waitFor({ NSApp.isActive && costWindow.isKeyWindow }) else {
+                        throw MenuCheckError.keyboardFocusUnavailable
+                    }
+                    try await Task.sleep(for: .milliseconds(400))
+                    for id in ["cost-single", "cost-mixed", "cost-dsh", "cost-partial", "cost-unavailable"] {
+                        guard let control = menuControl(in: costView, id: "monitor.tokens." + id) else {
+                            throw MenuCheckError.missingCostControls
+                        }
+                        control.performClick(nil)
+                    }
+                    try await Task.sleep(for: .milliseconds(700))
+                    // Expansion changes the popover's geometry. As in the
+                    // earlier shrink check, a transient dismissal can occur
+                    // while the fixture settles. Reopen the settled content
+                    // through the production controller before measuring it.
+                    let reopenedAfterLayout = !costWindow.isVisible || !costWindow.isKeyWindow || !NSApp.isActive
+                    if reopenedAfterLayout {
+                        if menuWindow?()?.isVisible == true { toggleMenu?() }
+                        guard await waitFor({ menuWindow?()?.isVisible != true }) else { throw MenuCheckError.didNotClose }
+                        costPreviousApplication = try await prepareBackgroundMenu(in: directory)
+                        toggleMenu?()
+                        guard await waitFor({ menuWindow?()?.isVisible == true }),
+                              let reopened = menuWindow?(), let content = reopened.contentView else {
+                            throw MenuCheckError.didNotOpen
+                        }
+                        costWindow = reopened; costView = content
+                        guard await waitFor({ NSApp.isActive && costWindow.isKeyWindow }) else {
+                            throw MenuCheckError.keyboardFocusUnavailable
+                        }
+                        try await Task.sleep(for: .milliseconds(150))
+                    }
+                    for id in ["cost-single", "cost-mixed", "cost-dsh", "cost-partial", "cost-unavailable"] {
+                        guard let control = menuControl(in: costView, id: "monitor.tokens." + id),
+                              String(describing: control.accessibilityValue() ?? "").contains(L10n.text("Expanded")) else {
+                            throw MenuCheckError.missingCostControls
+                        }
+                    }
+                    costView.layoutSubtreeIfNeeded()
+                    guard let costScroll = scrollView(in: costView), let costDocument = costScroll.documentView else {
+                        throw MenuCheckError.timedOut
+                    }
+                    let costOverflow = max(0, costDocument.bounds.height - costScroll.contentView.bounds.height)
+                    guard costOverflow > 0 else { throw MenuCheckError.expectedOverflow }
+                    guard let costSource = MonitorStore.shared.tasks.first(where: { $0.id == "cost-mixed" })?.apiCostSource,
+                          case .recorded(let modelEstimate) = costSource, modelEstimate.lines.count >= 12 else {
+                        throw MenuCheckError.missingCostControls
+                    }
+                    let costWindowHeight = costWindow.frame.height
+                    var costScrolls: [[String: Any]] = []
+                    for (position, offset) in [("top", CGFloat.zero), ("middle", costOverflow / 2), ("bottom", costOverflow)] {
+                        costScroll.contentView.scroll(to: NSPoint(x: 0, y: offset))
+                        costScroll.reflectScrolledClipView(costScroll.contentView)
+                        try await Task.sleep(for: .milliseconds(100))
+                        guard costWindow.isVisible, NSApp.isActive, costWindow.isKeyWindow else {
+                            throw MenuCheckError.keyboardFocusUnavailable
+                        }
+                        guard abs(costWindow.frame.height - costWindowHeight) < 1 else { throw MenuCheckError.unstableHeight }
+                        let actualOffset = costScroll.contentView.bounds.origin.y
+                        guard abs(actualOffset - offset) <= 1 else { throw MenuCheckError.didNotScroll }
+                        costScrolls.append(["position": position, "offset": actualOffset,
+                                            "windowHeight": costWindow.frame.height])
+                        try PreviewSupport.saveBitmap(costView, to: directory.appendingPathComponent("api-cost-" + position + "-layout.png"))
+                    }
+                    records.append(["position": "api-costs", "expanded": 5, "overflow": costOverflow,
+                                    "source": "deterministic-fixtures", "nativePopover": true,
+                                    "modelCount": modelEstimate.lines.count, "scrolls": costScrolls,
+                                    "reopenedAfterLayout": reopenedAfterLayout,
+                                    "appWasActive": NSApp.isActive, "windowWasKey": costWindow.isKeyWindow])
+                    print("API cost before close: visible=\(costWindow.isVisible), key=\(costWindow.isKeyWindow), active=\(NSApp.isActive), currentWindow=\(menuWindow?() === costWindow)")
+                    toggleMenu?()
+                    guard await waitFor({ !costWindow.isVisible
+                        && NSWorkspace.shared.frontmostApplication?.processIdentifier == costPreviousApplication }) else {
+                        print("API cost after close: visible=\(costWindow.isVisible), key=\(costWindow.isKeyWindow), active=\(NSApp.isActive), frontIsHost=\(NSWorkspace.shared.frontmostApplication?.processIdentifier == costPreviousApplication), currentVisible=\(menuWindow?()?.isVisible == true)")
+                        throw MenuCheckError.focusNotRestored
+                    }
                     PreviewSupport.configure(MonitorStore.shared, scenario: .noSources)
                     toggleMenu?()
                     try await Task.sleep(for: .milliseconds(700))
@@ -202,9 +287,10 @@ enum Diagnostics {
         return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
     }
 
-    private static func menuControl(in view: NSView) -> NSButton? {
-        if let button = view as? NSButton, button.accessibilityIdentifier().hasPrefix("monitor.tokens.") { return button }
-        return view.subviews.lazy.compactMap { menuControl(in: $0) }.first
+    private static func menuControl(in view: NSView, id: String? = nil) -> NSButton? {
+        if let button = view as? NSButton, button.accessibilityIdentifier().hasPrefix("monitor.tokens."),
+           id == nil || button.accessibilityIdentifier() == id { return button }
+        return view.subviews.lazy.compactMap { menuControl(in: $0, id: id) }.first
     }
 
     private static func waitFor(_ condition: () -> Bool) async -> Bool {
@@ -255,6 +341,8 @@ enum Diagnostics {
 
     private enum MenuCheckError: Error {
         case missingScrollView, expectedOverflow, unstableHeight, didNotShrink, timedOut
+        case missingCostControls
+        case didNotScroll
         case didNotClose, didNotOpen, escapeDidNotClose
         case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidDshState, invalidLease, appearanceMismatch
     }

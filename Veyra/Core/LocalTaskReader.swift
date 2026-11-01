@@ -91,7 +91,8 @@ enum TaskResolver {
                             updatedAt: rollout.usageDate ?? metadata.updatedAt, tokens: usage, activity: activity,
                             agentPath: metadata.agentPath, agentNickname: metadata.agentNickname, agentRole: metadata.agentRole,
                             progress: metadata.parentID == nil ? nil : rollout.display.progress(for: boundary),
-                            workingDirectory: metadata.workingDirectory, projectID: metadata.projectID)
+                            workingDirectory: metadata.workingDirectory, projectID: metadata.projectID,
+                            apiCostSource: .codex(URL(fileURLWithPath: metadata.rolloutPath)))
     }
 
     static func isExpired(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, now: Date) -> Bool {

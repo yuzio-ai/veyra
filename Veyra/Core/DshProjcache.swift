@@ -27,6 +27,7 @@ struct DshSessionMetadata: Equatable, Sendable {
     let reasoningEffort: String?
     let formatVersion: Int?
     var workingDirectory: String?
+    var hasCompleteAPICostUsage = false
     /// Sessions this record spawned as subagents. The window is bounded (only
     /// recent children are listed): an aged-out child loses its parent link
     /// rather than failing the read.
@@ -80,6 +81,10 @@ struct DshSessionMetadata: Equatable, Sendable {
             reasoningEffort: TaskText.nonempty(lastUsed["reasoningEffort"].string),
             formatVersion: value["version"].integer.map { Int($0) },
             workingDirectory: TaskText.nonempty(identity["cwd"].string),
+            hasCompleteAPICostUsage: ["uncachedInputTokens", "cacheReadTokens", "cacheWriteTokens", "outputTokens"].allSatisfy {
+                guard let number = totals[$0].double, let count = totals[$0].integer else { return false }
+                return count >= 0 && number.rounded(.towardZero) == number
+            },
             subagentChildren: children)
     }
 
