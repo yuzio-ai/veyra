@@ -13,7 +13,7 @@ import tempfile
 import time
 import unittest
 import uuid
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location('verify_local', Path(__file__).with_name('verify_local.py'))
 verify = importlib.util.module_from_spec(spec)
@@ -23,7 +23,7 @@ spec.loader.exec_module(verify)
 INTERRUPTION_RUNNER = r'''
 import importlib.util,sys,time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 source,directory,mode=sys.argv[1:]
 spec=importlib.util.spec_from_file_location('verify',source)
 verify=importlib.util.module_from_spec(spec);spec.loader.exec_module(verify)
@@ -514,6 +514,41 @@ class VerificationTests(unittest.TestCase):
 
 
 class NativeFixtureCleanupTests(unittest.TestCase):
+    def testSuccessfulOpenerConfirmsExitWithoutProcessInspection(self):
+        with tempfile.TemporaryDirectory(prefix='veyra-native-opener-') as name:
+            directory = Path(name)
+            token = str(uuid.uuid4())
+            (directory / 'active-lease').write_text(token)
+            (directory / 'process.json').write_text(json.dumps({'pid': 12345, 'group': 12345, 'token': token}))
+            opener = Mock()
+            opener.wait.return_value = 0
+            with patch.object(verify.os, 'getpgid', side_effect=PermissionError('inspection denied')) as inspect, \
+                    patch.object(verify.os, 'killpg') as signal_group:
+                verify.stop_preview_fixture(directory, directory / 'fixture', token, opener=opener)
+                inspect.assert_not_called()
+                signal_group.assert_not_called()
+            opener.wait.assert_called_once_with(timeout=2)
+            self.assertFalse((directory / 'active-lease').exists())
+            with self.assertRaisesRegex(RuntimeError, 'receipt'):
+                verify.stop_preview_fixture(directory, directory / 'fixture', str(uuid.uuid4()), opener=opener)
+
+    def testUnconfirmedOpenerExitStillRequiresProcessIdentity(self):
+        for result in ('timeout', 'failed'):
+            with self.subTest(result=result), tempfile.TemporaryDirectory(prefix='veyra-native-opener-') as name:
+                directory = Path(name)
+                token = str(uuid.uuid4())
+                (directory / 'process.json').write_text(json.dumps({'pid': 12345, 'group': 12345, 'token': token}))
+                opener = Mock()
+                if result == 'timeout':
+                    opener.wait.side_effect = subprocess.TimeoutExpired('open', 2)
+                else:
+                    opener.wait.return_value = 1
+                with patch.object(verify.os, 'getpgid', side_effect=PermissionError('inspection denied')), \
+                        patch.object(verify.os, 'killpg') as signal_group:
+                    with self.assertRaises(PermissionError):
+                        verify.stop_preview_fixture(directory, directory / 'fixture', token, opener=opener)
+                    signal_group.assert_not_called()
+
     def fixture(self, directory, token):
         # A real detached process models LaunchServices' separate process group.
         worker = '''import json,os,sys,time

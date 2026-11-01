@@ -108,8 +108,12 @@ enum Diagnostics {
                     let restoredVisibilityBeforeToggle = !window.isVisible
                     if restoredVisibilityBeforeToggle {
                         print("Fixture dismissed before toggle check; restoring the shown baseline")
+                        _ = try await prepareBackgroundMenu(in: directory)
                         toggleMenu?()
-                        guard await waitForStable({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
+                        guard await waitForStable({ menuWindow?()?.isVisible == true
+                            && menuWindow?()?.isKeyWindow == true && NSApp.isActive }) else {
+                            throw MenuCheckError.keyboardFocusUnavailable
+                        }
                     }
                     guard let closing = menuWindow?(), closing.isVisible else { throw MenuCheckError.didNotOpen }
                     // Exercise the same controller used by the registered hotkey and status button.

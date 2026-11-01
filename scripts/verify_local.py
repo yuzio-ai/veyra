@@ -323,7 +323,7 @@ def executable_path(pid):
     return Path(os.fsdecode(buffer.value)).resolve()
 
 
-def stop_preview_fixture(directory, executable, token):
+def stop_preview_fixture(directory, executable, token, opener=None):
     # Revoke before reading the receipt. A delayed LaunchServices instance writes
     # its receipt before checking this lease, so it cannot start UI after cleanup.
     (directory / 'active-lease').unlink(missing_ok=True)
@@ -334,6 +334,16 @@ def stop_preview_fixture(directory, executable, token):
     pid = data.get('pid')
     if type(pid) is not int or pid <= 1 or data.get('group') != pid or data.get('token') != token:
         raise RuntimeError('Native fixture process receipt is invalid; refusing to signal it')
+    # The runner owns the `open -W` child. A successful wait confirms the
+    # LaunchServices application has exited without inspecting/signalling a PID
+    # that may already have disappeared or been reused. Give the lease watcher
+    # time to exit normally before falling back to identity-checked termination.
+    if opener is not None:
+        try:
+            if opener.wait(timeout=2) == 0:
+                return
+        except subprocess.TimeoutExpired:
+            pass
     try:
         group = os.getpgid(pid)
     except ProcessLookupError:
@@ -397,6 +407,7 @@ def execute(name, command, timeout, output, env):
     fixture = preview_fixture(command)
     host_fixture = None
     host_process = None
+    process = None
     with log.open('wb') as handle:
         try:
             if fixture and '--exercise-menu-to' in command and '-a' in command:
@@ -435,10 +446,10 @@ def execute(name, command, timeout, output, env):
             if fixture:
                 with finish_worker_cleanup():
                     try:
-                        stop_preview_fixture(*fixture)
+                        stop_preview_fixture(*fixture, opener=process)
                     finally:
                         if host_fixture:
-                            stop_preview_fixture(*host_fixture)
+                            stop_preview_fixture(*host_fixture, opener=host_process)
                         if host_process and host_process.poll() is None:
                             try:
                                 os.killpg(host_process.pid, signal.SIGKILL)
