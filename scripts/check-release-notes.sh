@@ -22,7 +22,7 @@
 #      its order;
 #   4. the sections flagged required in LANGUAGES are always present;
 #   5. every section that survives has content;
-#   6. each language block closes with compare/<previous-tag>...<tag>
+#   6. each language block closes with compare/<previous-release-tag>...<tag>
 #      (commits/<tag> for the first release), and <tag> matches the file name;
 #   7. the asset is always <ASSET_NAME>, never <stem>-<version>.
 #
@@ -35,6 +35,10 @@ set -uo pipefail
 
 # The asset is checked as a literal name; escape it for grep -E.
 ASSET_PATTERN="$(printf '%s' "$ASSET_STEM" | sed 's#[][\.*^$(){}?+|/]#\\&#g')"
+
+# Notes published before the versioned-asset rule existed keep their historical
+# name; docs/release-notes-convention.md documents both of them.
+GRANDFATHERED_ASSET_NOTES=" v1.2.1.md v1.3.0.md "
 
 SKELETON=0
 PROBLEMS=()
@@ -72,6 +76,47 @@ lowest_note_tag() {
         candidate="${candidate##*/}"
         printf '%s %s\n' "$(version_key "${candidate%.md}")" "${candidate%.md}"
     done | LC_ALL=C sort -k1,1 | head -1 | awk '{ print $2 }'
+}
+
+# previous_note_tag <dir> <tag> — the release note immediately older than <tag>,
+# or nothing when <tag> is the oldest note.
+previous_note_tag() {
+    local dir="$1" tag="$2" candidate key target
+    target="$(version_key "$tag")"
+    for candidate in "$dir"/v*.md; do
+        [ -e "$candidate" ] || continue
+        candidate="${candidate##*/}"
+        candidate="${candidate%.md}"
+        [ "$candidate" = "$tag" ] && continue
+        key="$(version_key "$candidate")"
+        [ "$key" \< "$target" ] || continue
+        printf '%s %s\n' "$key" "$candidate"
+    done | LC_ALL=C sort -k1,1 | tail -1 | awk '{ print $2 }'
+}
+
+# previous_release_tag <dir> <tag> — the newest released version older than
+# <tag>. The changelog must compare against exactly that tag, not an arbitrary
+# earlier version. Git tags win because a prepared-but-never-tagged note (such
+# as v1.3.1 here) is not a released predecessor; a note-based predecessor is the
+# fallback for a clone without tags.
+previous_release_tag() {
+    local dir="$1" tag="$2" candidate key target best="" best_key=""
+    target="$(version_key "$tag")"
+    if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+        for candidate in $(git -C "$REPO_ROOT" tag --list 'v[0-9]*' 2>/dev/null); do
+            key="$(version_key "$candidate")"
+            [ "$key" \< "$target" ] || continue
+            if [ -z "$best_key" ] || [ "$best_key" \< "$key" ]; then
+                best="$candidate"
+                best_key="$key"
+            fi
+        done
+        if [ -n "$best" ]; then
+            printf '%s' "$best"
+            return 0
+        fi
+    fi
+    previous_note_tag "$dir" "$tag"
 }
 
 # strip_comments <file> — drop HTML comments, so authoring hints never read as
@@ -190,19 +235,27 @@ check_sections() {
     done
 }
 
-# validate_changelog <url> <lang> <tag> <is-first-release>
+# validate_changelog <url> <lang> <tag> <is-first-release> <notes-dir>
 validate_changelog() {
-    local url="$1" lang="$2" tag="$3" first="$4"
+    local url="$1" lang="$2" tag="$3" first="$4" dir="$5"
     if [ -z "$url" ]; then
         problem "[$lang] missing the closing changelog line"
         return 0
     fi
     [ "$SKELETON" -eq 1 ] && return 0
-    local expected="https://github.com/$REPO_SLUG/compare/<previous-tag>...$tag"
-    local pattern="^https://github\.com/$REPO_SLUG/compare/v[0-9][0-9.]*\.\.\.$tag\$"
+    local expected pattern previous previous_pattern
     if [ "$first" -eq 1 ]; then
-        expected="https://github.com/$REPO_SLUG/compare/<previous-tag>...$tag (or commits/$tag for the first release)"
+        expected="https://github.com/$REPO_SLUG/compare/<previous-release-tag>...$tag (or commits/$tag for the first release)"
         pattern="^https://github\.com/$REPO_SLUG/(compare/v[0-9][0-9.]*\.\.\.$tag|commits/$tag)\$"
+    else
+        previous="$(previous_release_tag "$dir" "$tag")"
+        if [ -z "$previous" ]; then
+            problem "[$lang] cannot determine the release before $tag; the changelog must be compare/<previous-release-tag>...$tag"
+            return 0
+        fi
+        expected="https://github.com/$REPO_SLUG/compare/$previous...$tag"
+        previous_pattern="${previous//./\\.}"
+        pattern="^https://github\.com/$REPO_SLUG/compare/$previous_pattern\.\.\.$tag\$"
     fi
     if ! printf '%s' "$url" | grep -qE "$pattern"; then
         problem "[$lang] changelog link must be $expected — got: $url"
@@ -342,8 +395,10 @@ check_file() { # check_file <path>
 
     # ── closing changelog lines ──
     local tag="${base%.md}"
+    local notes_dir
+    notes_dir="$(dirname "$file")"
     local first=0
-    if [ "$tag" = "$(lowest_note_tag "$(dirname "$file")")" ]; then
+    if [ "$tag" = "$(lowest_note_tag "$notes_dir")" ]; then
         first=1
     fi
     local marker_url marker_line
@@ -353,7 +408,7 @@ check_file() { # check_file <path>
         marker_line_and_url "${LANG_MARKER[$i]}"
         marker_line="$MARKER_LINE"
         marker_url="$MARKER_URL"
-        validate_changelog "$marker_url" "$lang" "$tag" "$first"
+        validate_changelog "$marker_url" "$lang" "$tag" "$first" "$notes_dir"
         if [ "$LANG_COUNT" -ge 2 ] && [ -n "$marker_line" ]; then
             if [ -n "${A[$i]}" ] && [ "$marker_line" -le "${A[$i]}" ]; then
                 problem "[$lang] the changelog line must close the ${LANG_HEADING[$i]} block, after the ${LANG_HEADING[$i]} anchor"
@@ -366,10 +421,17 @@ check_file() { # check_file <path>
     done
 
     # ── asset name ──
+    # Cover every "<stem>-<version>" spelling, including the "v" prefix
+    # (Veyra-v1.4.0-macos.zip) that a plain "-<digit>" pattern misses.
     local bad_asset
-    if bad_asset="$(grep -m1 -oE "$ASSET_PATTERN-[0-9][0-9A-Za-z._-]*" "$STRIPPED")"; then
-        problem "the asset is called $ASSET_NAME — found $bad_asset"
-    fi
+    case "$GRANDFATHERED_ASSET_NOTES" in
+        *" $base "*) ;;
+        *)
+            if bad_asset="$(grep -m1 -oE "$ASSET_PATTERN-v?[0-9][0-9A-Za-z._-]*" "$STRIPPED")"; then
+                problem "the asset is called $ASSET_NAME — found $bad_asset"
+            fi
+            ;;
+    esac
 
     # ── actually filled in ───────────────────────
     if [ "$SKELETON" -eq 0 ]; then

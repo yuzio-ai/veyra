@@ -97,34 +97,47 @@ fi
 # --- [2/9] Version, build, identity, category, menu-bar mode ----------------
 pbxproj="Veyra.xcodeproj/project.pbxproj"
 if [[ -z "$expected_version" ]]; then
-    pbx_versions=(${(f)"$(grep -oE 'MARKETING_VERSION = [0-9.]+' "$pbxproj" | sed 's/.*= //' | sort -u)"})
+    pbx_versions=()
+    pbx_raw="$(grep -oE 'MARKETING_VERSION = [0-9.]+' "$pbxproj" | sed 's/.*= //' | sort -u)" || true
+    [[ -n "$pbx_raw" ]] && pbx_versions=("${(@f)pbx_raw}")
     if (( ${#pbx_versions} == 1 )); then
         expected_version="${pbx_versions[1]}"
     fi
 fi
 if [[ -z "$expected_build" ]]; then
-    pbx_builds=(${(f)"$(grep -oE 'CURRENT_PROJECT_VERSION = [0-9]+' "$pbxproj" | sed 's/.*= //' | sort -u)"})
+    pbx_builds=()
+    pbx_raw="$(grep -oE 'CURRENT_PROJECT_VERSION = [0-9]+' "$pbxproj" | sed 's/.*= //' | sort -u)" || true
+    [[ -n "$pbx_raw" ]] && pbx_builds=("${(@f)pbx_raw}")
     if (( ${#pbx_builds} == 1 )); then
         expected_build="${pbx_builds[1]}"
     fi
 fi
 
-app_version="$(plist CFBundleShortVersionString)"
-app_build="$(plist CFBundleVersion)"
-app_bundle_id="$(plist CFBundleIdentifier)"
-app_category="$(plist LSApplicationCategoryType)"
-app_ui_element="$(plist LSUIElement)"
-min_system="$(plist LSMinimumSystemVersion)"
-team_id="$(codesign -dv --verbose=4 "$app_path" 2>&1 | sed -n 's/^TeamIdentifier=//p' | head -1)"
+# Capture every probe with `|| true`: `set -e` must not abort the run before the
+# matching check prints its FAIL (spctl/stapler/lipo/codesign and PlistBuddy all
+# exit non-zero for exactly the conditions this script exists to report).
+app_version="$(plist CFBundleShortVersionString)" || true
+app_build="$(plist CFBundleVersion)" || true
+app_bundle_id="$(plist CFBundleIdentifier)" || true
+app_category="$(plist LSApplicationCategoryType)" || true
+app_ui_element="$(plist LSUIElement)" || true
+min_system="$(plist LSMinimumSystemVersion)" || true
+team_id="$(codesign -dv --verbose=4 "$app_path" 2>&1 | sed -n 's/^TeamIdentifier=//p' | head -1)" || true
 
 print -r -- "  info: version=${app_version:-<missing>} build=${app_build:-<missing>} bundle-id=${app_bundle_id:-<missing>} team=${team_id:-<missing>}"
-if [[ -z "$expected_version" ]] || [[ "$app_version" == "$expected_version" ]]; then
-    pass "CFBundleShortVersionString = ${app_version:-<missing>}${expected_version:+ (expected $expected_version)}"
+# An underivable expectation is a failure, never a silent pass: the version and
+# build checks must not degrade into no-ops when project.pbxproj is ambiguous.
+if [[ -z "$expected_version" ]]; then
+    fail "cannot derive expected version from $pbxproj; pass --version"
+elif [[ "$app_version" == "$expected_version" ]]; then
+    pass "CFBundleShortVersionString = $app_version (expected $expected_version)"
 else
     fail "CFBundleShortVersionString is '$app_version', expected '$expected_version'"
 fi
-if [[ -z "$expected_build" ]] || [[ "$app_build" == "$expected_build" ]]; then
-    pass "CFBundleVersion = ${app_build:-<missing>}${expected_build:+ (expected $expected_build)}"
+if [[ -z "$expected_build" ]]; then
+    fail "cannot derive expected build from $pbxproj; pass --build"
+elif [[ "$app_build" == "$expected_build" ]]; then
+    pass "CFBundleVersion = $app_build (expected $expected_build)"
 else
     fail "CFBundleVersion is '$app_build', expected '$expected_build'"
 fi
@@ -152,7 +165,8 @@ else
 fi
 
 # --- [4/9] Universal binary ---------------------------------------------------
-archs="$(lipo -archs "$app_path/Contents/MacOS/Veyra" 2>/dev/null)"
+archs="$(lipo -archs "$app_path/Contents/MacOS/Veyra" 2>/dev/null)" || true
+archs="${archs:-<unreadable>}"
 arch_words=(${=archs})
 if (( ${arch_words[(I)arm64]} && ${arch_words[(I)x86_64]} )); then
     pass "universal binary: $archs"
@@ -168,7 +182,7 @@ else
 fi
 
 # --- [6/9] Distribution signing identity and Hardened Runtime -----------------
-signature="$(codesign -dv --verbose=4 "$app_path" 2>&1)"
+signature="$(codesign -dv --verbose=4 "$app_path" 2>&1)" || true
 if grep -q '^Authority=Developer ID Application:' <<< "$signature"; then
     pass "signed with Developer ID Application"
 else
@@ -187,7 +201,7 @@ else
 fi
 
 # --- [7/9] Gatekeeper notarization assessment ---------------------------------
-spctl_output="$(spctl --assess --type execute --verbose=4 "$app_path" 2>&1)"
+spctl_output="$(spctl --assess --type execute --verbose=4 "$app_path" 2>&1)" || true
 if grep -q 'accepted' <<< "$spctl_output" && grep -q 'Notarized Developer ID' <<< "$spctl_output"; then
     pass "Gatekeeper assessment accepted (Notarized Developer ID)"
 else
@@ -195,7 +209,7 @@ else
 fi
 
 # --- [8/9] Stapled notarization ticket ----------------------------------------
-stapler_output="$(xcrun stapler validate "$app_path" 2>&1)"
+stapler_output="$(xcrun stapler validate "$app_path" 2>&1)" || true
 if grep -qi 'The validate action worked' <<< "$stapler_output"; then
     pass "stapler validate (offline notarization ticket present)"
 else
@@ -209,13 +223,22 @@ if [[ -n "$zip_path" ]]; then
     elif [[ -e "$zip_path" ]]; then
         fail "ZIP output already exists, refusing to overwrite: $zip_path"
     else
-        mkdir -p "${zip_path:h}"
-        ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
-        checksum="$(shasum -a 256 "$zip_path" | awk '{print $1}')"
-        pass "packaged $zip_path"
-        print -r -- ""
-        print -r -- "SHA-256: $checksum"
-        print -r -- "  copy this value into the release notes for ${app_version:-<version>}"
+        # Package to a sibling temporary path so a failed ditto never leaves a
+        # half-written ZIP that the next run would refuse to overwrite.
+        partial_zip="${zip_path}.partial.$$"
+        if ! mkdir -p "${zip_path:h}"; then
+            fail "cannot create the output directory for $zip_path"
+        elif ditto -c -k --sequesterRsrc --keepParent "$app_path" "$partial_zip" \
+            && mv -f "$partial_zip" "$zip_path"; then
+            checksum="$(shasum -a 256 "$zip_path" | awk '{print $1}')" || true
+            pass "packaged $zip_path"
+            print -r -- ""
+            print -r -- "SHA-256: ${checksum:-<unavailable>}"
+            print -r -- "  copy this value into the release notes for ${app_version:-<version>}"
+        else
+            rm -f "$partial_zip"
+            fail "ditto failed to package $zip_path"
+        fi
     fi
 fi
 
