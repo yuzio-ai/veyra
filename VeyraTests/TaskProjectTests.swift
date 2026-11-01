@@ -24,7 +24,7 @@ final class TaskProjectTests: XCTestCase {
     }
     private func write(_ value: String, _ url: URL) throws { try value.write(to: url, atomically: true, encoding: .utf8) }
 
-    func testExplicitProjectsWinAndMigrationIgnoresLegacyIncludingProjectless() async {
+    func testMigrationIgnoresOldAssignmentsButPreservesExplicitProjectless() async {
         let a = project("a", roots: ["/repo"]), b = project("b", roots: ["/repo"])
         var context = TaskProjectContext(projects: ["a": a, "b": b], aliases: ["old": "a"],
                                          assignments: ["legacy": "old", "db": "a"], projectless: ["none", "cli"])
@@ -38,7 +38,7 @@ final class TaskProjectTests: XCTestCase {
         let after = await resolver.resolve(tasks: [task("legacy", source: .desktop), task("cli", path: "/repo"),
                                                    task("desktop", path: "/repo", source: .desktop)],
                                            ancestors: [], context: context, now: date)
-        XCTAssertEqual(after.tasks.map(\.projectAssignment), [.unassigned, .project(a), .unassigned])
+        XCTAssertEqual(after.tasks.map(\.projectAssignment), [.unavailable, .unassigned, .project(a)])
     }
 
     func testPartialMigrationUsesPerThreadAuthorityAndDoesNotRestoreOldAssignments() async {
@@ -50,7 +50,30 @@ final class TaskProjectTests: XCTestCase {
             task("pending", projectID: "b", source: .desktop),
             task("migrated", projectID: "b", source: .desktop), task("cleared", source: .desktop)],
             ancestors: [], context: context, now: date)
-        XCTAssertEqual(result.tasks.map(\.projectAssignment), [.project(a), .project(b), .unassigned])
+        XCTAssertEqual(result.tasks.map(\.projectAssignment), [.project(a), .project(b), .unavailable])
+    }
+
+    func testMigratedMissingMembershipInfersProjectWhileExplicitChoicesRemainAuthoritative() async {
+        let p = project(roots: ["/repo"])
+        for completed in [false, true] {
+            let context = TaskProjectContext(projects: [p.id: p],
+                membershipHosts: ["remote-marker": "remote"],
+                projectless: ["explicit", "reassigned", "remote-marker"],
+                assignmentsMigrated: completed, pendingAssignmentIDs: completed ? nil : ["pending"])
+            let result = await TaskProjectResolver().resolve(tasks: [
+                task("missing", path: "/repo/src", source: .desktop),
+                task("explicit", path: "/repo/src", source: .desktop),
+                task("reassigned", path: "/elsewhere", projectID: p.id, source: .desktop),
+                task("remote-marker", path: "/repo", source: .desktop),
+                task("unknown", source: .desktop),
+                task("deleted-project", path: "/repo", projectID: "deleted", source: .desktop)],
+                ancestors: [TaskReference(id: "ancestor", title: "Ancestor", parentID: nil,
+                    workingDirectory: "/repo", source: .desktop)], context: context, now: date)
+            XCTAssertEqual(result.tasks.map(\.projectAssignment), [
+                .project(p), .unassigned, .project(p), .project(p), .unavailable, .unassigned])
+            XCTAssertEqual(result.ancestors.first?.projectAssignment, .project(p))
+            XCTAssertTrue(result.tasks.allSatisfy { $0.activity == .running && $0.backend == .codex })
+        }
     }
 
     func testLongestRootPathBoundariesAmbiguityAndDshInference() async {

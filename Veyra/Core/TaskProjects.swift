@@ -179,10 +179,11 @@ actor TaskProjectResolver {
             // Do not replace that choice with a directory-based guess.
             if source != .cli, context.desktopStateUnreadable { return .unassigned }
             let migrated = context.assignmentsMigrated(for: id)
+            // Ignore entries belonging to a remote host even if its thread ID is present locally.
+            let local = context.membershipHosts[id].map { $0 == "local" } ?? true
+            let explicitlyProjectless = local && context.projectless.contains(id)
             if !migrated {
-                // Ignore entries belonging to a remote host even if its thread ID is present locally.
-                let local = context.membershipHosts[id].map { $0 == "local" } ?? true
-                if local, context.projectless.contains(id) { return .unassigned }
+                if explicitlyProjectless { return .unassigned }
                 if local, let assignment = context.assignments[id] {
                     return context.project(assignment).map(TaskProjectAssignment.project) ?? .unassigned
                 }
@@ -190,10 +191,9 @@ actor TaskProjectResolver {
             if let projectID {
                 return context.project(projectID).map(TaskProjectAssignment.project) ?? .unassigned
             }
-            if migrated, source == .desktop {
-                // A migrated desktop NULL is the authoritative projectless choice.
-                return .unassigned
-            }
+            if explicitlyProjectless { return .unassigned }
+            // Migration selects which assignment source to trust. It does not
+            // turn absent membership into an explicit opt-out from inference.
         }
         guard let path = TaskRepositoryIdentity.canonicalPath(path) else { return .unavailable }
         var matches: [TaskProject] = [], longest = -1

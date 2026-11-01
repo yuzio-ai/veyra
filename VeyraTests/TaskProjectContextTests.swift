@@ -3,15 +3,18 @@ import XCTest
 
 final class TaskProjectContextTests: XCTestCase {
     private func state(_ fixture: SQLiteFixture, migrated: Bool = false, catalogMigrated: Bool = false,
-                       name: String = "Legacy", assignment: String = "old", projectless: [String] = []) throws {
+                       name: String = "Legacy", assignment: String = "old", projectless: [String] = [],
+                       pending: [String]? = nil) throws {
         let host = "local:" + fixture.home.path
+        var migration: [String: Any] = ["projectsMigrated": catalogMigrated, "threadAssignmentsMigrated": migrated]
+        if let pending { migration["pendingThreadAssignmentIds"] = pending }
         let state: [String: Any] = [
             "local-projects": ["old": ["id": "old", "name": name, "rootPaths": ["/repo", "/other"]]],
             "thread-project-assignments": ["thread": ["projectKind": "local", "projectId": assignment]],
             "projectless-thread-ids": projectless,
             "thread-project-membership-host-ids": ["thread": "local"],
             "app-server-project-id-by-legacy-project-id-by-host": [host: ["old": "new"]],
-            "app-server-projects-migration-by-host": [host: ["projectsMigrated": catalogMigrated, "threadAssignmentsMigrated": migrated]],
+            "app-server-projects-migration-by-host": [host: migration],
             "unrelated-private-state": ["ignored": "not retained"]]
         try JSONSerialization.data(withJSONObject: state).write(to: fixture.home.appendingPathComponent(".codex-global-state.json"), options: .atomic)
     }
@@ -43,7 +46,9 @@ final class TaskProjectContextTests: XCTestCase {
         try state(fixture, migrated: true, catalogMigrated: true, projectless: ["thread"])
         context = reader.read(home: fixture.home)
         XCTAssertTrue(context.assignmentsMigrated)
-        XCTAssertTrue(context.assignments.isEmpty); XCTAssertTrue(context.projectless.isEmpty)
+        XCTAssertTrue(context.assignments.isEmpty)
+        XCTAssertEqual(context.projectless, ["thread"])
+        XCTAssertEqual(context.membershipHosts["thread"], "local")
         try fixture.execute("DELETE FROM projects; DELETE FROM project_roots")
         XCTAssertTrue(reader.read(home: fixture.home).projects.isEmpty, "Do not resurrect deleted migrated projects from legacy state")
     }
@@ -103,6 +108,39 @@ final class TaskProjectContextTests: XCTestCase {
         XCTAssertEqual(result.tasks.first?.workingDirectory, "/child")
         XCTAssertEqual(result.ancestors.first?.projectID, "p")
         XCTAssertEqual(result.ancestors.first?.workingDirectory, "/parent")
+    }
+
+    func testNullDesktopMembershipAndExplicitProjectlessStayDistinctAcrossMigrationAndRefresh() async throws {
+        let fixture = try SQLiteFixture(); try fixture.threads(); try database(fixture)
+        try fixture.execute("ALTER TABLE threads ADD COLUMN cwd TEXT; ALTER TABLE threads ADD COLUMN project_id TEXT")
+        for id in ["missing", "explicit"] {
+            let path = try fixture.log(id)
+            var data = try Data(contentsOf: path)
+            data.append(Data("{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"t\"}}\n".utf8))
+            try data.write(to: path)
+            try fixture.execute("INSERT INTO threads VALUES ('\(id)', '\(path.path)', 'Fixture', 'vscode', 'm', 1788400000, 0, '/repo/src', NULL)")
+        }
+        let read = try await LocalTaskReader { _ in ProcessEvidence(threadIDs: ["missing", "explicit"]) }.fetch(home: fixture.home)
+        XCTAssertEqual(read.tasks.count, 2)
+        XCTAssertTrue(read.tasks.allSatisfy { $0.source == .desktop && $0.projectID == nil && $0.activity == .running })
+        let resolver = TaskProjectResolver()
+        for completed in [false, true] {
+            try state(fixture, migrated: completed, catalogMigrated: true, projectless: ["explicit"],
+                      pending: completed ? nil : ["thread"])
+            let resolved = await resolver.resolve(tasks: read.tasks, ancestors: read.ancestors, home: fixture.home)
+            let assignments = Dictionary(uniqueKeysWithValues: resolved.tasks.map { ($0.id, $0.projectAssignment) })
+            XCTAssertEqual(assignments["missing"], .project(TaskProject(id: "new", name: "Database", roots: ["/repo", "/second"])))
+            XCTAssertEqual(assignments["explicit"], .unassigned)
+            let groups = TaskProjectGroup.make(groups: TaskGroup.make(tasks: resolved.tasks, ancestors: resolved.ancestors))
+            XCTAssertEqual(groups.map(\.project?.id), ["new", nil])
+            XCTAssertEqual(groups.map(\.runningCount), [1, 1])
+        }
+        try state(fixture, migrated: true, catalogMigrated: true)
+        let refreshed = await resolver.resolve(tasks: read.tasks, ancestors: read.ancestors, home: fixture.home)
+        XCTAssertTrue(refreshed.tasks.allSatisfy {
+            if case .project(let project) = $0.projectAssignment { return project.id == "new" }
+            return false
+        })
     }
 
     @MainActor

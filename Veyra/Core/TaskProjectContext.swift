@@ -95,6 +95,11 @@ final class TaskProjectContextReader {
         context.aliases = desktop.aliases[host] ?? [:]
         context.assignmentsMigrated = migration?.threadAssignmentsMigrated == true
         context.pendingAssignmentIDs = migration?.pendingThreadAssignmentIds
+        // A NULL project_id does not record whether membership is missing or
+        // deliberately cleared. Retain explicit opt-outs across migration;
+        // a newer database project_id can supersede them in the resolver.
+        context.projectless = desktop.projectless
+        context.membershipHosts = desktop.membershipHosts
         for project in desktop.projects.values where migration?.projectsMigrated != true {
             let id = context.aliases[project.id] ?? project.id
             context.projects[id] = TaskProject(id: id, name: project.name, roots: project.rootPaths)
@@ -109,8 +114,6 @@ final class TaskProjectContextReader {
             context.assignments = desktop.assignments.compactMapValues {
                 $0.projectKind == "local" ? $0.projectId : nil
             }
-            context.projectless = desktop.projectless
-            context.membershipHosts = desktop.membershipHosts
         }
         return context
     }
