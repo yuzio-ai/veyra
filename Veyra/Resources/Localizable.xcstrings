@@ -400,19 +400,19 @@
         }
       }
     },
-    "Account quota": {
+    "Codex quota": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Account quota"
+            "value": "Codex quota"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "账户额度"
+            "value": "Codex 额度"
           }
         }
       }
@@ -498,6 +498,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "自动检查更新"
+          }
+        }
+      }
+    },
+    "Automatically checks for updates at most once every 24 hours.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically checks for updates at most once every 24 hours."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 24 小时最多自动检查一次更新。"
           }
         }
       }
@@ -621,23 +638,6 @@
         }
       }
     },
-    "Checks for a new version at most once a day.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Checks for a new version at most once a day."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "每天最多自动检查一次新版本。"
-          }
-        }
-      }
-    },
     "Choose an executable file. Not applied.": {
       "extractionState": "manual",
       "localizations": {
@@ -753,23 +753,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codex"
-          }
-        }
-      }
-    },
-    "Codex configuration is valid": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Codex configuration is valid"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Codex 配置有效"
           }
         }
       }
@@ -906,6 +889,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "未检测到 Codex，仍可监控 dsh。"
+          }
+        }
+      }
+    },
+    "Codex paths verified": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex paths verified"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex 路径检查通过"
           }
         }
       }
@@ -1059,6 +1059,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "数据目录"
+          }
+        }
+      }
+    },
+    "Data directory is readable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data directory is readable"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数据目录可读取"
           }
         }
       }
@@ -1420,6 +1437,23 @@
         }
       }
     },
+    "Key %u": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key %u"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按键 %u"
+          }
+        }
+      }
+    },
     "Keyboard Shortcut": {
       "extractionState": "manual",
       "localizations": {
@@ -1471,36 +1505,19 @@
         }
       }
     },
-    "Local activity": {
+    "Monitor tasks on this Mac without installing Codex.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Local activity"
+            "value": "Monitor tasks on this Mac without installing Codex."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "本机活动"
-          }
-        }
-      }
-    },
-    "Monitor local dsh tasks without installing Codex.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Monitor local dsh tasks without installing Codex."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无需安装 Codex，即可监控本地 dsh 任务。"
+            "value": "监控本机任务，无需安装 Codex。"
           }
         }
       }
@@ -1603,6 +1620,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "账号暂未返回可用额度窗口。"
+          }
+        }
+      }
+    },
+    "Only tasks on this Mac are shown. Cloud tasks and tasks on other devices are not included.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only tasks on this Mac are shown. Cloud tasks and tasks on other devices are not included."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅显示本机任务，不包含云端及其他设备。"
           }
         }
       }
@@ -2180,7 +2214,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "运行任务"
+            "value": "正在运行"
           }
         }
       }
@@ -2746,6 +2780,23 @@
         }
       }
     },
+    "This Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机"
+          }
+        }
+      }
+    },
     "This shortcut is already in use. Choose another combination.": {
       "extractionState": "manual",
       "localizations": {
@@ -3258,6 +3309,23 @@
         }
       }
     },
+    "Use your local Codex sign-in to monitor quotas and tasks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use your local Codex sign-in to monitor quotas and tasks."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用本机 Codex 登录信息，监控额度与任务。"
+          }
+        }
+      }
+    },
     "Veyra Settings": {
       "extractionState": "manual",
       "localizations": {
@@ -3271,23 +3339,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Veyra 设置"
-          }
-        }
-      }
-    },
-    "Veyra uses your local Codex sign-in and task data.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Veyra uses your local Codex sign-in and task data."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Veyra 使用本机 Codex 的登录状态与任务数据。"
           }
         }
       }
@@ -3407,23 +3458,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "dsh 数据目录"
-          }
-        }
-      }
-    },
-    "dsh data directory is available": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "dsh data directory is available"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "dsh 数据目录可用"
           }
         }
       }

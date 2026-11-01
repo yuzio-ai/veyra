@@ -28,7 +28,7 @@ struct UpdateSettingsSection: View {
                             .toggleStyle(.switch).labelsHidden()
                             .accessibilityIdentifier("updates.automatic")
                     }
-                    Text("Checks for a new version at most once a day.")
+                    Text("Automatically checks for updates at most once every 24 hours.")
                         .font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

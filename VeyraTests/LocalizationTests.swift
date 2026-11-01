@@ -35,6 +35,7 @@ final class LocalizationTests: XCTestCase {
         for language in ["en", "zh-Hans"] {
             L10n.$languageOverride.withValue(language) {
                 let chinese = language == "zh-Hans"
+                XCTAssertEqual(L10n.text("Codex quota"), chinese ? "Codex 额度" : "Codex quota")
                 for (minutes, english, translated) in [
                     (10_080, "Weekly quota", "每周额度"), (1_440, "24h quota", "24h额度"),
                     (300, "5h quota", "5h额度"), (15, "15min quota", "15分钟额度")

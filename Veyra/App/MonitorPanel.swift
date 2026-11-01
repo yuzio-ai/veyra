@@ -31,8 +31,7 @@ struct MonitorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MonitorPanelHeader(hasTaskError: store.hasSourceWarning, detecting: store.noSourcesFound || (!store.hasTaskSnapshot && !store.sourceDetectionFinished),
-                               openSettings: { openSettings?() })
+            MonitorPanelHeader(openSettings: { openSettings?() })
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self, of: { ceil($0.size.height) }) { headerHeight = $0 }
                 .accessibilityIdentifier("monitor.header")
@@ -97,7 +96,7 @@ struct MonitorPanel: View {
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                sectionTitle("Account quota")
+                sectionTitle("Codex quota")
                     .help(store.runningTasks.isEmpty ? L10n.text("Auto sync every hour while idle") : L10n.text("Auto sync every minute while tasks run"))
                 if let plan = store.quota.account?.planDisplayName {
                     Text(plan).font(.system(size: 9, weight: .semibold, design: .rounded))
@@ -183,11 +182,10 @@ struct MonitorPanel: View {
                         .accessibilityIdentifier("monitor.tasksProgress")
                 }
                 Spacer()
-                MonitorActionButton(systemName: "arrow.clockwise", label: L10n.text("Refresh"),
-                                    help: L10n.text("Refresh local tasks"), identifier: "monitor.refresh") {
-                    Task { await store.refreshAll() }
-                }
-                .disabled(store.tasksBusy)
+                MonitorTaskSourceStatus(
+                    hasTaskError: store.hasSourceWarning,
+                    detecting: store.noSourcesFound || (!store.hasTaskSnapshot && !store.sourceDetectionFinished)
+                )
             }
             .zIndex(1)
             if store.runningTasks.isEmpty {
@@ -290,28 +288,35 @@ private struct TaskProjectHeader: View {
 }
 
 private struct MonitorPanelHeader: View {
-    let hasTaskError: Bool
-    var detecting = false
     let openSettings: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 11) {
-                VeyraIcon(size: 28)
-                VeyraWordmark(width: 56)
-                Spacer()
-                MonitorPanelActions(openSettings: openSettings)
-            }
-            HStack(spacing: 5) {
-                Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                Circle().fill(hasTaskError ? .orange : (detecting ? .secondary : monitorAccent)).frame(width: 5, height: 5)
-                    .accessibilityHidden(true)
-                Text("Local activity").foregroundStyle(.secondary)
-            }
-            .font(.system(size: 11)).fixedSize()
+        HStack(spacing: 11) {
+            VeyraIcon(size: 28)
+            VeyraWordmark(width: 56)
+            Spacer()
+            MonitorPanelActions(openSettings: openSettings)
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
+    }
+}
+
+private struct MonitorTaskSourceStatus: View {
+    let hasTaskError: Bool
+    let detecting: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text("This Mac").foregroundStyle(.secondary)
+            Circle().fill(hasTaskError ? .orange : (detecting ? .secondary : monitorAccent))
+                .frame(width: 5, height: 5)
+                .accessibilityHidden(true)
+        }
+        .font(.system(size: 11)).fixedSize()
+        .help("Only tasks on this Mac are shown. Cloud tasks and tasks on other devices are not included.")
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Only tasks on this Mac are shown. Cloud tasks and tasks on other devices are not included.")
+        .accessibilityIdentifier("monitor.taskSource")
     }
 }
 

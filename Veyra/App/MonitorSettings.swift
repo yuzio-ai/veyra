@@ -51,7 +51,7 @@ private struct CodexSettingsSection: View {
         VStack(alignment: .leading, spacing: SettingsLayout.contentSpacing) {
             VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
                 Text("Codex").font(.headline)
-                Text("Veyra uses your local Codex sign-in and task data.")
+                Text("Use your local Codex sign-in to monitor quotas and tasks.")
                     .font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -79,15 +79,15 @@ private struct DshSettingsSection: View {
         switch store.dshReadState {
         case .detecting: L10n.text("Detecting dsh…")
         case .notFound: L10n.text("dsh data not found. Choose its data directory if needed.")
-        case .available: store.dshWarning ?? L10n.text("dsh data directory is available")
+        case .available: store.dshWarning ?? L10n.text("Data directory is readable")
         case .failed: store.dshWarning ?? L10n.text("Unable to read dsh session records. Check its data directory.")
         }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsLayout.contentSpacing) {
             VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
-                Text(verbatim: "dsh").font(.headline)
-                Text("Monitor local dsh tasks without installing Codex.")
+                Text(verbatim: "DeepSeek Harness").font(.headline)
+                Text("Monitor tasks on this Mac without installing Codex.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
@@ -222,7 +222,7 @@ private struct CodexStatusRow: View {
     private var message: String {
         switch store.configurationState {
         case .detecting: L10n.text("Detecting Codex…")
-        case .valid: store.hasManualPaths ? L10n.text("Codex configuration is valid") : L10n.text("Codex detected automatically")
+        case .valid: store.hasManualPaths ? L10n.text("Codex paths verified") : L10n.text("Codex detected automatically")
         case .notFound: L10n.text("Codex not detected. dsh monitoring remains available.")
         case .invalid(.home): L10n.text("Codex data directory is unavailable")
         case .invalid(.executable): L10n.text("Codex executable is invalid")
