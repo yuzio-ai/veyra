@@ -463,11 +463,6 @@ private struct TaskRow: View {
                                                                  effort: task.reasoningEffort),
                                activity: task.activity, startedAt: task.startedAt)
             if let progress = task.progress { TaskProgressSection(progress: progress) }
-            if expanded, let role = TaskText.nonempty(task.agentRole) {
-                Text(L10n.text("\(L10n.text("Role")): \(role)"))
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-            }
             if task.backend == .codex {
                 TaskContextUsageView(taskID: task.id, usage: task.contextUsage)
                     .padding(.top, 4)
@@ -560,7 +555,7 @@ private struct TaskElapsedTime: View {
         Group {
             if activity == .running {
                 MonitorTimeline(interval: 1) { now in
-                    Label(DisplayFormat.duration(since: startedAt, now: referenceDate ?? now), systemImage: "clock")
+                    Label(L10n.text("This turn \(DisplayFormat.duration(since: startedAt, now: referenceDate ?? now))"), systemImage: "clock")
                 }
             } else { Label("Unknown status", systemImage: "clock") }
         }
@@ -591,23 +586,48 @@ private struct TaskTokenSummary: View {
     @Binding var expanded: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "cylinder")
-            Text(isSubagent ? L10n.text("Subtask tokens") : L10n.text("Task tokens"))
-                .font(.system(size: 11, weight: .medium))
-            Spacer(minLength: 4)
-            Text(DisplayFormat.tokens(tokens.total.flatMap { $0 >= 0 ? $0 : nil }))
-                .font(.system(size: 14, weight: .medium)).monospacedDigit().fixedSize()
-            Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            TaskTokenSummaryLabel(tokens: tokens, isSubagent: isSubagent, expanded: expanded, stacked: false)
+            TaskTokenSummaryLabel(tokens: tokens, isSubagent: isSubagent, expanded: expanded, stacked: true)
         }
         .frame(maxWidth: .infinity, minHeight: 22)
         .accessibilityHidden(true)
         .overlay {
             TaskTokenDisclosure(identifier: "monitor.tokens.\(taskID)",
                 label: L10n.text("\(title), total token breakdown"),
-                value: L10n.text("\(TaskTokenText.totalHelp(tokens)), \(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))"),
-                help: TaskTokenText.totalHelp(tokens)) { expanded.toggle() }
+                value: L10n.text("\(TaskTokenText.totalHelp(tokens)), \(TaskTokenText.cacheHit(tokens, precise: true)), \(expanded ? L10n.text("Expanded") : L10n.text("Collapsed"))"),
+                help: L10n.text("\(TaskTokenText.totalHelp(tokens)), \(TaskTokenText.cacheHit(tokens, precise: true))")) { expanded.toggle() }
+        }
+    }
+}
+
+private struct TaskTokenSummaryLabel: View {
+    let tokens: TokenUsage
+    let isSubagent: Bool
+    let expanded: Bool
+    let stacked: Bool
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: "cylinder").font(.system(size: 11))
+                Text("Cumulative tokens")
+                    .font(.system(size: 11, weight: .medium)).fixedSize()
+                Spacer(minLength: 2)
+                Text(DisplayFormat.tokens(tokens.total.flatMap { $0 >= 0 ? $0 : nil }))
+                    .font(.system(size: 14, weight: .medium)).monospacedDigit().fixedSize()
+                if !stacked {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(TaskTokenText.cacheHit(tokens)).font(.system(size: 11))
+                        .foregroundStyle(.secondary).monospacedDigit().fixedSize()
+                }
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+            }
+            if stacked {
+                Text(TaskTokenText.cacheHit(tokens)).font(.system(size: 11))
+                    .foregroundStyle(.secondary).monospacedDigit()
+            }
         }
     }
 }
@@ -663,7 +683,12 @@ private struct TaskTokenDetails: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TaskCacheShare(percent: tokens.cachedInputPercent)
+            if let role = TaskText.nonempty(task.agentRole) {
+                Text(L10n.text("\(L10n.text("Role")): \(role)"))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+            TaskUsageSectionTitle(title: "Usage details", symbol: "chart.bar")
             VStack(spacing: 6) {
                 TaskTokenDetailLine(label: "Cache read", value: tokens.cachedInput)
                 TaskTokenDetailLine(label: "Uncached input", value: tokens.uncachedInput)
@@ -678,46 +703,6 @@ private struct TaskTokenDetails: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("monitor.token-details.\(task.id)")
-    }
-}
-
-private struct TaskCacheShare: View {
-    let percent: Double?
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.monitorPreviewContrast) private var previewContrast
-
-    private var value: String {
-        percent.map { $0.formatted(.number.precision(.fractionLength(1))) + "%" } ?? "—"
-    }
-
-    var body: some View {
-        VStack(spacing: 5) {
-            HStack {
-                Text("Input cache share").foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Text(value).monospacedDigit()
-            }
-            .font(.system(size: 11))
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.primary.opacity(0.08))
-                    if let percent, percent > 0 {
-                        Capsule().fill(Color(nsColor: .systemBlue))
-                            .frame(width: geometry.size.width * min(100, max(0, percent)) / 100)
-                    }
-                }
-                .overlay {
-                    if (previewContrast ?? contrast) == .increased {
-                        Capsule().strokeBorder(.secondary, lineWidth: 1)
-                    }
-                }
-            }
-            .frame(height: 4)
-            .accessibilityHidden(true)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(L10n.text("Input cache share"))
-        .accessibilityValue(value)
     }
 }
 
@@ -741,7 +726,7 @@ private struct TaskOutputDetailLine: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("Output (reasoning)").foregroundStyle(.secondary)
+            Text("Output (including reasoning)").foregroundStyle(.secondary)
             Spacer(minLength: 0)
             TaskOutputNumbers(output: TaskTokenText.count(tokens.output),
                               reasoning: L10n.text("(\(TaskTokenText.count(tokens.includedReasoningOutput)))"))

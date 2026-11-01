@@ -134,6 +134,10 @@ final class LocalizationTests: XCTestCase {
                 XCTAssertTrue(TaskTokenText.totalHelp(inconsistent).contains(chinese
                     ? "来源总量与明细合计不一致。" : "The source total differs from the sum of the details."))
                 XCTAssertFalse(TaskTokenText.totalHelp(usage).contains("\n"))
+                XCTAssertEqual(TaskTokenText.cacheHit(usage), chinese ? "缓存命中 93.6%" : "Cache hit 93.6%")
+                XCTAssertEqual(TaskTokenText.cacheHit(TokenUsage()), chinese ? "缓存命中 —" : "Cache hit —")
+                XCTAssertEqual(TaskTokenText.cacheHit(TokenUsage(input: 0, cachedInput: 0)),
+                               chinese ? "缓存命中 —" : "Cache hit —")
                 XCTAssertEqual(TaskSessionText.duration(1_300), chinese ? "1.3秒" : "1.3 seconds")
                 XCTAssertEqual(TaskSessionText.duration(0), chinese ? "0.0秒" : "0.0 seconds")
                 XCTAssertEqual(TaskSessionText.duration(61_000), chinese ? "1分 1秒" : "1m 1s")

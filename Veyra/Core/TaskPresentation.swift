@@ -142,6 +142,14 @@ enum TaskText {
 
 /// Exact, localized counts are shared by detail rows, help and accessibility.
 enum TaskTokenText {
+    static func cacheHit(_ usage: TokenUsage, precise: Bool = true) -> String {
+        let percent = usage.cachedInputPercent.map {
+            $0.formatted(.number.locale(L10n.languageOverride.map(Locale.init(identifier:)) ?? .current)
+                .precision(.fractionLength(precise ? 1 : 0))) + "%"
+        } ?? "—"
+        return L10n.text("Cache hit \(percent)")
+    }
+
     static func count(_ value: Int64?) -> String {
         guard let value, value >= 0 else { return "—" }
         return value.formatted(.number.locale(L10n.languageOverride.map(Locale.init(identifier:)) ?? .current))
