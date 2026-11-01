@@ -64,7 +64,7 @@ final class TaskPresentationTests: XCTestCase {
     func testGroupBackendFollowsFirstSnapshotAndDefaultsToCodex() {
         var dshTask = task("dsh:s1")
         XCTAssertEqual(dshTask.backend, .codex)
-        XCTAssertEqual(dshTask.sourceLabel, L10n.text("Desktop"))
+        XCTAssertEqual(dshTask.sourceLabel, "Codex")
         dshTask = TaskSnapshot(id: "dsh:s1", title: "dsh task", model: nil, source: .desktop,
                                parentID: nil, startedAt: nil, updatedAt: .distantPast,
                                tokens: TokenUsage(), activity: .running, backend: .dsh)

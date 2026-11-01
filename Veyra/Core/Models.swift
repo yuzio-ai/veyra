@@ -260,8 +260,8 @@ enum TaskSource: Sendable {
 
     var label: String {
         switch self {
-        case .cli: "CLI"
-        case .desktop: L10n.text("Desktop")
+        case .cli: "Codex CLI"
+        case .desktop: "Codex"
         case .subtask: L10n.text("Subtask")
         }
     }

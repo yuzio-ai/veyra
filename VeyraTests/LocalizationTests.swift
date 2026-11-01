@@ -152,6 +152,8 @@ final class LocalizationTests: XCTestCase {
                                chinese ? "1 个已完成轮次样本" : "1 completed-turn sample")
                 XCTAssertEqual(TaskSessionText.basedOn(11), chinese ? "基于11轮" : "Based on 11 turns")
                 XCTAssertEqual(TaskSessionText.basedOn(1), chinese ? "基于1轮" : "Based on 1 turn")
+                XCTAssertEqual(TaskSource.desktop.label, "Codex")
+                XCTAssertEqual(TaskSource.cli.label, "Codex CLI")
                 XCTAssertEqual(L10n.text("API cost (reference)"), chinese ? "API 费用（参考）" : "API cost (reference)")
                 XCTAssertEqual(L10n.text("Tool call time (cumulative)"), chinese ? "工具调用用时（累计）" : "Tool call time (cumulative)")
                 XCTAssertEqual(L10n.text("First token latency (average)"), chinese ? "首 Token 延时（平均）" : "First token latency (average)")
