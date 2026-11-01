@@ -117,9 +117,11 @@ final class LocalizationTests: XCTestCase {
         for language in ["en", "zh-Hans"] {
             L10n.$languageOverride.withValue(language) {
                 let chinese = language == "zh-Hans"
-                XCTAssertEqual(TaskText.subagentBadge(nickname: " Schrodinger "),
+                XCTAssertEqual(TaskText.subagentBadge(nickname: " Schrodinger "), "Schrodinger")
+                XCTAssertEqual(TaskText.subagentDetail(nickname: " Schrodinger "),
                                chinese ? "子代理：Schrodinger" : "Subagent: Schrodinger")
                 XCTAssertEqual(TaskText.subagentBadge(nickname: " "), chinese ? "子代理" : "Subagent")
+                XCTAssertEqual(TaskText.subagentDetail(nickname: " "), chinese ? "子代理" : "Subagent")
                 XCTAssertEqual(TaskTokenText.count(nil), "—")
                 XCTAssertEqual(TaskTokenText.count(-1), "—")
                 XCTAssertEqual(TaskTokenText.count(1_501_590), "1,501,590")

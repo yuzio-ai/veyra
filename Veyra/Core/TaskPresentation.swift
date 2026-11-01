@@ -112,6 +112,10 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
 
 enum TaskText {
     static func subagentBadge(nickname: String?) -> String {
+        nonempty(nickname) ?? L10n.text("Subagent")
+    }
+
+    static func subagentDetail(nickname: String?) -> String {
         nonempty(nickname).map { L10n.text("Subagent: \($0)") } ?? L10n.text("Subagent")
     }
 

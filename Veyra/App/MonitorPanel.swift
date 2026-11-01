@@ -457,7 +457,7 @@ private struct TaskRow: View {
             TaskIdentityHeader(title: task.title, path: task.agentPath,
                                source: isSubagent ? TaskText.subagentBadge(nickname: task.agentNickname) : task.sourceLabel,
                                sourceIcon: isSubagent ? "arrow.triangle.branch" : task.source.iconName,
-                               sourceDetail: isSubagent ? TaskText.subagentBadge(nickname: task.agentNickname) : task.sourceDetail,
+                               sourceDetail: isSubagent ? TaskText.subagentDetail(nickname: task.agentNickname) : task.sourceDetail,
                                model: task.model,
                                modelDetail: TaskText.modelDetail(model: task.model, provider: task.modelProvider,
                                                                  effort: task.reasoningEffort),
