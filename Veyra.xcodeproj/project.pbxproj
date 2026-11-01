@@ -23,6 +23,7 @@
 				Core/AppUpdate.swift,
 				Core/CodexConfiguration.swift,
 				Core/CodexLocation.swift,
+				Core/ContextWindowUsage.swift,
 				Core/DshLocation.swift,
 				Core/DshProjcache.swift,
 				Core/DshTaskReader.swift,
@@ -45,6 +46,7 @@
 				Core/TaskPresentation.swift,
 				Core/TaskProjectContext.swift,
 				Core/TaskProjects.swift,
+				Core/TaskSessionStatistics.swift,
 				Resources/Localizable.xcstrings,
 			);
 			target = 279DDEE9C1A8F87AE4AC93D5 /* VeyraTests */;

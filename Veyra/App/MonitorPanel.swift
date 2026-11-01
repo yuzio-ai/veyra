@@ -10,6 +10,7 @@ struct MonitorPanel: View {
     var openSettings: (() -> Void)?
     @State private var showUnknown = false
     @State private var expandedTaskIDs: Set<String> = []
+    @State private var infoPresenter: TaskInfoPresenter
     @State private var contentHeight: CGFloat = 1
     @State private var headerHeight: CGFloat = 0
     @State private var footerHeight: CGFloat = 0
@@ -19,13 +20,15 @@ struct MonitorPanel: View {
 
     init(store: MonitorStore, updates: UpdateStore? = nil, screenOverride: PanelScreenMetrics? = nil,
          initiallyExpandedTaskIDs: Set<String> = [], initiallyShowUnknown: Bool = false,
-         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil) {
+         onSizingChange: ((PanelSizing) -> Void)? = nil, openSettings: (() -> Void)? = nil,
+         infoPresenter: TaskInfoPresenter? = nil) {
         self.store = store
         self.updates = updates
         self.screenOverride = screenOverride
         self.onSizingChange = onSizingChange
         self.openSettings = openSettings
         _expandedTaskIDs = State(initialValue: initiallyExpandedTaskIDs)
+        _infoPresenter = State(initialValue: infoPresenter ?? TaskInfoPresenter())
         _showUnknown = State(initialValue: initiallyShowUnknown)
     }
 
@@ -75,11 +78,13 @@ struct MonitorPanel: View {
                 .allowsHitTesting(false)
         }
         .environment(\.monitorPanelActive, store.panelVisible || store.isPreview)
+        .environment(\.taskInfoPresenter, infoPresenter)
         .foregroundStyle(.primary)
         .onChange(of: sizing, initial: true) { _, value in onSizingChange?(value) }
         .onChange(of: store.tasks.map(\.id)) { _, ids in
             expandedTaskIDs.formIntersection(ids)
         }
+        .onDisappear { infoPresenter.dismiss(restoringFocus: false) }
     }
 
     private var sizing: PanelSizing {
@@ -463,6 +468,10 @@ private struct TaskRow: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
+            if task.backend == .codex {
+                TaskContextUsageView(taskID: task.id, usage: task.contextUsage)
+                    .padding(.top, 4)
+            }
             TaskTokenSummary(taskID: task.id, title: task.title, tokens: task.tokens,
                              isSubagent: isSubagent, expanded: $expanded)
                 .padding(.top, 4)
@@ -661,6 +670,11 @@ private struct TaskTokenDetails: View {
                 TaskOutputDetailLine(tokens: tokens)
             }
             TaskAPICostView(task: task)
+            if task.backend == .codex {
+                Divider().padding(.vertical, 2)
+                TaskSessionStatisticsView(taskID: task.id, source: task.apiCostSource,
+                    updatedAt: task.rolloutModifiedAt ?? task.updatedAt, tokens: task.tokens, fixture: task.sessionStatistics)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("monitor.token-details.\(task.id)")

@@ -102,6 +102,8 @@ enum TaskDetailInteractionChecks {
         let url = directory.appendingPathComponent("api-cost-fixture.jsonl")
         let initial = #"{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}"# + "\n"
             + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":250229,"cached_input_tokens":211840,"output_tokens":1404,"reasoning_output_tokens":420,"total_tokens":251633}}}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"cost-single","turn_id":"previous","started_at_ms":1000,"completed_at_ms":5000,"item":{"type":"CommandExecution","id":"tool"}}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"previous","time_to_first_token_ms":1300}}"# + "\n"
         try Data(initial.utf8).write(to: url)
         store.tasks[0].apiCostSource = .codex(url)
         let host = NSHostingView(rootView: MonitorPanel(store: store,
@@ -128,12 +130,17 @@ enum TaskDetailInteractionChecks {
             button.performClick(nil)
         }
         let before = await TaskAPICostReader.shared.lastReadByteCount
+        let statisticsBefore = await TaskSessionStatisticsReader.shared.lastReadByteCount
         try await settle()
         let collapsed = await TaskAPICostReader.shared.lastReadByteCount
         guard before == collapsed else { throw CheckError.failed("collapsed cost must not read history") }
+        let statisticsCollapsed = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsBefore == statisticsCollapsed else { throw CheckError.failed("collapsed statistics must not read history") }
         try toggle(); try await settle()
         let expanded = await TaskAPICostReader.shared.lastReadByteCount
         guard expanded == initial.utf8.count else { throw CheckError.failed("expanded cost must load history once") }
+        let statisticsExpanded = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsExpanded == initial.utf8.count else { throw CheckError.failed("expanded statistics must load history once") }
         try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-single.png"))
         try toggle(); try await settle()
         let extra = #"{"type":"turn_context","payload":{"model":"gpt-6.1-terra"}}"# + "\n"
@@ -147,13 +154,28 @@ enum TaskDetailInteractionChecks {
             apiCostSource: .codex(url))
         try await settle()
         let afterCollapse = await TaskAPICostReader.shared.lastReadByteCount
+        let statisticsAfterCollapse = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsAfterCollapse == statisticsExpanded else { throw CheckError.failed("collapsed refresh must not scan statistics") }
         guard afterCollapse == expanded else { throw CheckError.failed("collapsed refresh must not scan cost history") }
         try toggle(); try await settle()
         let incremental = await TaskAPICostReader.shared.lastReadByteCount
         guard incremental == extra.utf8.count else { throw CheckError.failed("reexpanded cost must read only appended history") }
+        let statisticsIncremental = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsIncremental == extra.utf8.count else { throw CheckError.failed("reexpanded statistics must read only appended history") }
+        let timingOnly = #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"cost-single","turn_id":"current","started_at_ms":4000,"completed_at_ms":8000,"item":{"type":"McpToolCall","id":"second-tool"}}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"current","time_to_first_token_ms":3000}}"# + "\n"
+        let timingFile = try FileHandle(forWritingTo: url)
+        try timingFile.seekToEnd(); try timingFile.write(contentsOf: Data(timingOnly.utf8)); try timingFile.close()
+        // A file revision alone must refresh statistics, even without another token_count.
+        store.tasks[0].rolloutModifiedAt = PreviewSupport.referenceDate.addingTimeInterval(2)
+        try await settle()
+        let liveTimingBytes = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard liveTimingBytes == timingOnly.utf8.count else { throw CheckError.failed("active statistics must refresh on timing-only append") }
         try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-mixed.png"))
         let record: [String: Any] = ["fixtureOnly": true,
-            "passed": ["collapsed-no-read", "expanded-history-read", "collapsed-refresh-no-read", "incremental-reexpand"],
+            "passed": ["collapsed-no-read", "expanded-history-read", "collapsed-refresh-no-read", "incremental-reexpand",
+                       "statistics-collapsed-no-read", "statistics-expanded-history-read", "statistics-collapsed-refresh-no-read",
+                       "statistics-incremental-reexpand", "statistics-timing-only-live-update"],
             "initialBytes": expanded, "incrementalBytes": incremental]
         try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("api-cost-disclosure-checks.json"))

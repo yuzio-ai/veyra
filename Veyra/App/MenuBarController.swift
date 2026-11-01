@@ -7,6 +7,7 @@ import Observation
 final class MenuBarController: NSObject, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
+    private let infoPresenter = TaskInfoPresenter()
     private let store: MonitorStore
     private var previousApplication: NSRunningApplication?
     private var stopped = false
@@ -37,7 +38,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             }, openSettings: { [weak self] in
                 self?.hide(restoringFocus: false)
                 openSettings()
-            })
+            }, infoPresenter: infoPresenter)
             .environment(\.monitorReferenceDate, PreviewSupport.menuScenario == nil ? nil : PreviewSupport.referenceDate)
             .environment(\.monitorOpaquePreview, PreviewSupport.menuReduceTransparency)
             .environment(\.monitorPreviewContrast, PreviewSupport.menuIncreasedContrast ? .increased : nil)
@@ -93,9 +94,11 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
     func hide(restoringFocus: Bool = true) {
         guard popover.isShown else { return }
+        let infoHadFocus = infoPresenter.window?.isKeyWindow == true
+        infoPresenter.dismiss(restoringFocus: false)
         let previous = previousApplication
         previousApplication = nil
-        let shouldRestore = restoringFocus && popover.contentViewController?.view.window?.isKeyWindow == true
+        let shouldRestore = restoringFocus && (infoHadFocus || popover.contentViewController?.view.window?.isKeyWindow == true)
         popover.performClose(nil)
         if shouldRestore, let previous, !previous.isTerminated,
            NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
@@ -105,6 +108,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        infoPresenter.dismiss(restoringFocus: false)
         statusItem.button?.highlight(false)
         updateStatusImage(force: true)
         previousApplication = nil

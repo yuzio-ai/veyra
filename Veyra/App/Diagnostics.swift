@@ -95,6 +95,13 @@ enum Diagnostics {
                     guard window.frame.height < originalHeight else { throw MenuCheckError.didNotShrink }
                     try PreviewSupport.saveBitmap(view, to: directory.appendingPathComponent("shrunk-layout.png"))
                     records.append(["position": "shrunk", "windowHeight": window.frame.height])
+                    // Cover a closed baseline on every run, including when AppKit
+                    // did not dismiss the transient menu during the layout checks.
+                    let forcedRecovery = window.isVisible
+                    if forcedRecovery {
+                        toggleMenu?()
+                        guard await waitForStable({ !window.isVisible }) else { throw MenuCheckError.didNotClose }
+                    }
                     // A transient popover can be dismissed by a foreground-app change during
                     // the asynchronous layout checks. Establish the shown baseline before
                     // testing toggle-to-close, otherwise toggle would reopen it instead.
@@ -102,22 +109,95 @@ enum Diagnostics {
                     if restoredVisibilityBeforeToggle {
                         print("Fixture dismissed before toggle check; restoring the shown baseline")
                         toggleMenu?()
-                        guard await waitFor({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
+                        guard await waitForStable({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
                     }
                     guard let closing = menuWindow?(), closing.isVisible else { throw MenuCheckError.didNotOpen }
                     // Exercise the same controller used by the registered hotkey and status button.
                     toggleMenu?()
-                    guard await waitFor({ !closing.isVisible }) else { throw MenuCheckError.didNotClose }
+                    guard await waitForStable({ !closing.isVisible }) else { throw MenuCheckError.didNotClose }
                     let previousApplication = try await prepareBackgroundMenu(in: directory)
                     toggleMenu?()
                     guard await waitFor({ menuWindow?()?.isVisible == true }) else { throw MenuCheckError.didNotOpen }
                     guard let reopened = menuWindow?(), reopened.isVisible else { throw MenuCheckError.didNotOpen }
                     // LaunchServices brings the fixed fixture to the foreground. Require a real
                     // key window before dispatching a synthetic event through its responder chain.
-                    guard await waitFor({ NSApp.isActive && reopened.isKeyWindow }) else {
+                    guard await waitForStable({ NSApp.isActive && reopened.isKeyWindow }) else {
                         print("Keyboard focus unavailable: app=\(ProcessInfo.processInfo.processIdentifier), front=\(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1), active=\(NSApp.isActive), policy=\(NSApp.activationPolicy().rawValue), canKey=\(reopened.canBecomeKey), key=\(reopened.isKeyWindow), visible=\(reopened.isVisible), appKey=\(NSApp.keyWindow?.windowNumber ?? -1), popover=\(reopened.windowNumber)")
                         throw MenuCheckError.keyboardFocusUnavailable
                     }
+                    // Drive the explanation through its actual SwiftUI data source.
+                    // Direct presenter injection can be overwritten by a normal anchor
+                    // update, legitimately shortening the document and clamping to zero.
+                    var explanationEstimate = TaskAPICostEstimate(lines: (0..<30).map {
+                        TaskAPICostLine(model: "fixture-model-\($0)", lowerUSD: 1, upperUSD: 1)
+                    })
+                    guard let taskID = MonitorStore.shared.tasks.first?.id,
+                          let disclosure = reopened.contentView.flatMap({ menuControl(in: $0, id: "monitor.tokens." + taskID) }) else {
+                        throw MenuCheckError.missingCostControls
+                    }
+                    MonitorStore.shared.tasks[0].apiCostSource = .recorded(explanationEstimate)
+                    disclosure.performClick(nil)
+                    guard await waitForStable({ reopened.contentView.flatMap({ infoControl(in: $0, kind: "api-cost") }) != nil }),
+                          let info = reopened.contentView.flatMap({ infoControl(in: $0, kind: "api-cost") }),
+                          let presenter = info.presenter else {
+                        throw MenuCheckError.missingCostControls
+                    }
+                    info.scrollToVisible(info.bounds)
+                    info.performClick(nil)
+                    guard await waitForStable({ presenter.window?.isVisible == true
+                        && presenter.window?.isKeyWindow == true && NSApp.isActive && reopened.isVisible }),
+                          let infoWindow = presenter.window else { throw MenuCheckError.didNotOpen }
+                    // Repeat the live explanation regression under every native appearance.
+                    guard let infoController = presenter.contentController,
+                          let infoScroll = infoWindow.contentView.flatMap({ scrollView(in: $0) }),
+                          let infoDocument = infoScroll.documentView else { throw MenuCheckError.didNotOpen }
+                    infoWindow.contentView?.layoutSubtreeIfNeeded()
+                    // Showing/resizing a popover schedules AppKit and SwiftUI focus
+                    // work. Establish a settled input target before testing updates.
+                    guard await waitForStable({ presenter.window === infoWindow && infoWindow.isKeyWindow
+                        && NSApp.isActive && infoScroll.window === infoWindow
+                        && presenter.content?.details.count == 31
+                        && infoDocument.bounds.height - infoScroll.contentView.bounds.height >= 200 }) else {
+                        print("Info input not ready: sameWindow=\(presenter.window === infoWindow), key=\(infoWindow.isKeyWindow), active=\(NSApp.isActive), attached=\(infoScroll.window === infoWindow), documentHeight=\(infoDocument.bounds.height), viewport=\(infoScroll.contentView.bounds.height), details=\(presenter.content?.details.count ?? -1)")
+                        throw MenuCheckError.keyboardFocusUnavailable
+                    }
+                    infoScroll.contentView.scroll(to: NSPoint(x: 0, y: 200))
+                    infoScroll.reflectScrolledClipView(infoScroll.contentView)
+                    guard infoWindow.makeFirstResponder(infoScroll) else {
+                        print("Info scroll rejected focus: key=\(infoWindow.isKeyWindow), attached=\(infoScroll.window === infoWindow)")
+                        throw MenuCheckError.keyboardFocusUnavailable
+                    }
+                    let infoResponder = infoWindow.firstResponder
+                    // Simulate a normal monitored snapshot arriving while this
+                    // explanation is open, including its declarative anchor update.
+                    MonitorStore.shared.tasks[0].contextUsage = ContextWindowUsage(used: 1, window: 100)
+                    explanationEstimate.lines[0].lowerUSD = 2
+                    explanationEstimate.lines[0].upperUSD = 2
+                    MonitorStore.shared.tasks[0].apiCostSource = .recorded(explanationEstimate)
+                    let expectedAmount = TaskAPICostText.amount(explanationEstimate.total)
+                    guard await waitForStable({ presenter.content?.details.first?.value == expectedAmount
+                        && abs(infoScroll.contentView.bounds.minY - 200) <= 1
+                        && presenter.contentController === infoController && infoScroll.documentView === infoDocument
+                        && infoWindow.firstResponder === infoResponder && infoWindow.isKeyWindow && NSApp.isActive }) else {
+                        print("Info refresh failed: offset=\(infoScroll.contentView.bounds.minY), controller=\(presenter.contentController === infoController), document=\(infoScroll.documentView === infoDocument), responder=\(infoWindow.firstResponder === infoResponder), sameWindow=\(presenter.window === infoWindow), visible=\(infoWindow.isVisible), active=\(NSApp.isActive)")
+                        throw MenuCheckError.infoRefreshNotPreserved
+                    }
+                    records.append(["position": "info-refresh", "offset": infoScroll.contentView.bounds.minY,
+                                    "preservesController": true, "preservesDocument": true, "preservesFocus": true,
+                                    "dataDrivenContent": true, "concurrentTaskRefresh": true,
+                                    "updatedTotal": expectedAmount])
+                    if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: infoWindow.windowNumber, context: nil,
+                        characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
+                        NSApp.postEvent(escape, atStart: false)
+                    }
+                    guard await waitForStable({ presenter.shownIdentifier == nil && reopened.isVisible
+                        && reopened.isKeyWindow && reopened.firstResponder === info }) else {
+                        print("Info Escape failed: dismissed=\(presenter.shownIdentifier == nil), parentVisible=\(reopened.isVisible), triggerAttached=\(info.window === reopened), triggerFocused=\(reopened.firstResponder === info), parentKey=\(reopened.isKeyWindow), infoKey=\(infoWindow.isKeyWindow), active=\(NSApp.isActive), front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")")
+                        throw MenuCheckError.infoEscapeFocusNotRestored
+                    }
+                    records.append(["position": "info-popover", "firstEscapeKeepsMenu": true,
+                                    "restoresTriggerFocus": true, "nativePopover": true])
                     let control = reopened.contentView.flatMap { menuControl(in: $0) }
                     let focused = control.map { reopened.makeFirstResponder($0) } ?? false
                     let keyboardAppWasActive = NSApp.isActive
@@ -140,6 +220,7 @@ enum Diagnostics {
                                     "appWasActive": keyboardAppWasActive,
                                     "windowWasKey": keyboardWindowWasKey,
                                     "openedFromBackground": true, "previousApplicationRestored": true,
+                                    "forcedRecoveryBaseline": forcedRecovery,
                                     "restoredVisibilityBeforeToggle": restoredVisibilityBeforeToggle])
                     // Pure dsh uses the same native popover and keyboard controls.
                     PreviewSupport.configure(MonitorStore.shared, scenario: .dshOnly)
@@ -175,6 +256,16 @@ enum Diagnostics {
                     // Exercise reference costs in the actual NSPopover, including
                     // its native material, contrast and reduced-transparency variants.
                     PreviewSupport.configure(MonitorStore.shared, scenario: .apiCosts)
+                    // Cost model rows now live in the explanation. Keep overflow testing
+                    // independent of their former inline height with additional safe cards.
+                    if let template = MonitorStore.shared.tasks.first {
+                        for index in 0..<8 {
+                            MonitorStore.shared.tasks.append(TaskSnapshot(id: "cost-scroll-\(index)", title: "Cost scrolling fixture",
+                                model: template.model, source: .desktop, parentID: nil, startedAt: template.startedAt,
+                                updatedAt: template.updatedAt, tokens: template.tokens, activity: .running,
+                                apiCostSource: template.apiCostSource))
+                        }
+                    }
                     var costPreviousApplication = try await prepareBackgroundMenu(in: directory)
                     toggleMenu?()
                     guard await waitFor({ menuWindow?()?.isVisible == true }),
@@ -293,12 +384,30 @@ enum Diagnostics {
         return view.subviews.lazy.compactMap { menuControl(in: $0, id: id) }.first
     }
 
+    private static func infoControl(in view: NSView, kind: String) -> TaskInfoNativeButton? {
+        if let button = view as? TaskInfoNativeButton,
+           button.accessibilityIdentifier().hasPrefix("monitor.info.\(kind).") { return button }
+        return view.subviews.lazy.compactMap { infoControl(in: $0, kind: kind) }.first
+    }
+
     private static func waitFor(_ condition: () -> Bool) async -> Bool {
         for _ in 0..<20 {
             if condition() { return true }
             try? await Task.sleep(for: .milliseconds(50))
         }
         return condition()
+    }
+
+    /// A visible/key flag can change before AppKit finishes its responder work.
+    /// Require readiness on separate event-loop turns; keep the existing 1s bound.
+    private static func waitForStable(_ condition: () -> Bool) async -> Bool {
+        var consecutive = 0
+        for _ in 0..<20 {
+            consecutive = condition() ? consecutive + 1 : 0
+            if consecutive == 2 { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
     }
 
     /// Exercise the actual background-open path instead of inheriting focus
@@ -345,6 +454,7 @@ enum Diagnostics {
         case didNotScroll
         case didNotClose, didNotOpen, escapeDidNotClose
         case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidDshState, invalidLease, appearanceMismatch
+        case infoRefreshNotPreserved, infoEscapeFocusNotRestored
     }
 
     /// Capture our own real popover, avoiding a fixed preview window that

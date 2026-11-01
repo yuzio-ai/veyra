@@ -12,6 +12,8 @@ struct RolloutState: Sendable {
     var boundary: TurnBoundary?
     var model: String?
     var display = RolloutDisplay()
+    var context = RolloutContext()
+    var modifiedAt: Date?
 }
 
 /// Lifecycle/token data plus explicitly public progress; never reasoning or tool output.
@@ -19,6 +21,7 @@ enum RolloutEvent {
     static func apply(_ line: Data, to state: inout RolloutState, newestFirst: Bool = false) {
         guard let event = try? JSONValue.decode(line) else { return }
         state.display.apply(event, newestFirst: newestFirst)
+        state.context.apply(event, newestFirst: newestFirst)
         let payload = event["payload"]
         if event["type"].string == "turn_context" {
             let model = payload["model"].string
@@ -94,6 +97,7 @@ struct RolloutReader {
                 }
             }
             cursor.modified = modified
+            cursor.state.modifiedAt = modified
             cursors[url.path] = cursor
             return cursor.state
         }
@@ -126,13 +130,15 @@ struct RolloutReader {
             position = start
             if hasRequiredFields(state, requireBoundary: requireBoundary) { break }
         }
+        state.modifiedAt = modified
         cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial,
                                    state: state, didReachStart: position == 0)
         return state
     }
 
     private func hasRequiredFields(_ state: RolloutState, requireBoundary: Bool) -> Bool {
-        state.usage != nil && state.model != nil && (!requireBoundary || state.boundary != nil)
+        state.usage != nil && state.model != nil && !state.context.needsEarlierModel
+            && (!requireBoundary || state.boundary != nil)
     }
 
     private func joinBackwardFragments(_ fragments: inout [Data]) -> Data {

@@ -134,6 +134,27 @@ final class LocalizationTests: XCTestCase {
                 XCTAssertTrue(TaskTokenText.totalHelp(inconsistent).contains(chinese
                     ? "来源总量与明细合计不一致。" : "The source total differs from the sum of the details."))
                 XCTAssertFalse(TaskTokenText.totalHelp(usage).contains("\n"))
+                XCTAssertEqual(TaskSessionText.duration(1_300), chinese ? "1.3秒" : "1.3 seconds")
+                XCTAssertEqual(TaskSessionText.duration(0), chinese ? "0.0秒" : "0.0 seconds")
+                XCTAssertEqual(TaskSessionText.duration(61_000), chinese ? "1分 1秒" : "1m 1s")
+                XCTAssertEqual(TaskSessionText.duration(nil), "—")
+                XCTAssertEqual(TaskSessionText.duration(.infinity), "—")
+                XCTAssertEqual(L10n.text("Context used"), chinese ? "上下文已用" : "Context used")
+                XCTAssertEqual(L10n.text("Session statistics"), chinese ? "会话统计" : "Session statistics")
+                XCTAssertEqual(L10n.text("Updating…"), chinese ? "更新中…" : "Updating…")
+                XCTAssertEqual(L10n.text("Updating. Showing the previous recorded result."),
+                               chinese ? "正在更新。当前显示上次记录的结果。" : "Updating. Showing the previous recorded result.")
+                let samples: Int64 = 2
+                XCTAssertEqual(L10n.text("\(samples) completed-turn samples"),
+                               chinese ? "2 个已完成轮次样本" : "2 completed-turn samples")
+                let oneSample: Int64 = 1
+                XCTAssertEqual(L10n.text("\(oneSample) completed-turn samples"),
+                               chinese ? "1 个已完成轮次样本" : "1 completed-turn sample")
+                XCTAssertEqual(TaskSessionText.basedOn(11), chinese ? "基于11轮" : "Based on 11 turns")
+                XCTAssertEqual(TaskSessionText.basedOn(1), chinese ? "基于1轮" : "Based on 1 turn")
+                XCTAssertEqual(L10n.text("API cost (reference)"), chinese ? "API 费用（参考）" : "API cost (reference)")
+                XCTAssertEqual(L10n.text("Tool call time (cumulative)"), chinese ? "工具调用用时（累计）" : "Tool call time (cumulative)")
+                XCTAssertEqual(L10n.text("First token latency (average)"), chinese ? "首 Token 延时（平均）" : "First token latency (average)")
             }
         }
     }

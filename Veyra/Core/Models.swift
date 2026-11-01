@@ -294,6 +294,10 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     /// shown as context instead of being folded into the displayed name.
     var modelProvider: String?
     var reasoningEffort: String?
+    var contextUsage: ContextWindowUsage?
+    var rolloutModifiedAt: Date?
+    /// Fixture-only snapshots avoid reading real session history during previews.
+    var sessionStatistics: TaskSessionStatistics?
     /// The badge stays short so the identity row keeps one line; the full
     /// product name is the badge's help and accessibility text.
     var sourceLabel: String { backend == .dsh ? "DSH" : source.label }

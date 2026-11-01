@@ -365,7 +365,10 @@ enum PreviewSupport {
                 let scenarios: [Scenario] = CommandLine.arguments.contains("--preview-settings-only") ? []
                     : (dshOnly ? [.dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError] : Scenario.allCases)
                 if !scenarios.isEmpty { try renderStatusItems(to: directory) }
-                if !scenarios.isEmpty && !dshOnly { try await TaskDetailInteractionChecks.run(to: directory) }
+                if !scenarios.isEmpty && !dshOnly {
+                    try await TaskDetailInteractionChecks.run(to: directory)
+                    try await TaskInfoInteractionChecks.run(to: directory)
+                }
                 for scenario in scenarios {
                     configure(store, scenario: scenario)
                     let appearances: [(String, NSAppearance.Name)] = [
