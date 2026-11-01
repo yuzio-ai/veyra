@@ -62,7 +62,7 @@ struct TaskAPICostView: View {
 
     var body: some View {
         TaskStatisticLine(label: L10n.text("API cost (reference)"),
-            value: estimate.map { TaskAPICostText.amount($0.total) } ?? L10n.text("Calculating…"),
+            value: estimate.map { TaskAPICostText.summaryAmount($0.total) } ?? L10n.text("Calculating…"),
             suffix: status, infoIdentifier: "monitor.info.api-cost.\(task.id)", info: explanation)
         .accessibilityIdentifier("monitor.api-cost.\(task.id)")
         .task(id: request) {

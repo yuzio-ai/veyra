@@ -174,6 +174,14 @@ enum TaskAPICostSource: Equatable, Sendable {
 }
 
 enum TaskAPICostText {
+    /// Compact display only. Historical cost arithmetic and the detailed range stay unchanged.
+    static func summaryAmount(_ line: TaskAPICostLine?) -> String {
+        guard let line else { return "—" }
+        guard line.lowerUSD == line.upperUSD else { return amount(line) }
+        if line.upperUSD > 0 && line.upperUSD < Decimal(string: "0.01")! { return "< US$0.01" }
+        return value(line.lowerUSD, approximate: true, digits: 2)
+    }
+
     static func amount(_ line: TaskAPICostLine?) -> String {
         guard let line else { return "—" }
         if line.upperUSD > 0 && line.upperUSD < Decimal(string: "0.001")! { return "< US$0.001" }
@@ -183,12 +191,12 @@ enum TaskAPICostText {
         return lower + "–" + value(line.upperUSD, approximate: false)
     }
 
-    private static func value(_ amount: Decimal, approximate: Bool) -> String {
+    private static func value(_ amount: Decimal, approximate: Bool, digits: Int = 3) -> String {
         if amount > 0 && amount < Decimal(string: "0.001")! { return "< US$0.001" }
         let formatter = NumberFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 3; formatter.maximumFractionDigits = 3
+        formatter.minimumFractionDigits = digits; formatter.maximumFractionDigits = digits
         formatter.roundingMode = .halfUp
         let number = formatter.string(from: NSDecimalNumber(decimal: amount)) ?? "—"
         return (approximate ? "≈ US$" : "") + number

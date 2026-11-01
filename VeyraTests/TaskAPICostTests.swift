@@ -90,11 +90,15 @@ final class TaskAPICostTests: XCTestCase {
     func testZeroSmallRangeAndLargeValuesHaveUnambiguousUSDText() throws {
         let zero = try estimate(TokenUsage(input: 0, output: 0, cachedInput: 0))
         XCTAssertEqual(TaskAPICostText.amount(zero.total), "≈ US$0.000")
+        XCTAssertEqual(TaskAPICostText.summaryAmount(zero.total), "≈ US$0.00")
         let tiny = try estimate(TokenUsage(input: 1, output: 0, cachedInput: 0))
         XCTAssertEqual(TaskAPICostText.amount(tiny.total), "< US$0.001")
+        XCTAssertEqual(TaskAPICostText.summaryAmount(tiny.total), "< US$0.01")
+        XCTAssertEqual(TaskAPICostText.summaryAmount(nil), "—")
         XCTAssertEqual(TaskAPICostText.amount(nil), "—")
         let range = TaskAPICostEstimate.dsh(usage: TokenUsage(input: 1, output: 1, cachedInput: 0), model: "deepseek-flash")
         XCTAssertEqual(TaskAPICostText.amount(range.total), "< US$0.001")
+        XCTAssertEqual(TaskAPICostText.summaryAmount(range.total), TaskAPICostText.amount(range.total))
         let large = try estimate(TokenUsage(input: Int64.max / 2, output: Int64.max / 2, cachedInput: 0))
         XCTAssertNotNil(large.total)
         XCTAssertFalse(TaskAPICostText.amount(large.total).contains("—"))
@@ -104,6 +108,17 @@ final class TaskAPICostTests: XCTestCase {
         let unknownCache = try estimate(TokenUsage(input: 100, output: 10, cachedInput: 50), model: "gpt-5.5-pro")
         XCTAssertNil(unknownCache.total)
         XCTAssertEqual(unknownCache.issues, [.unknownCachePrice("gpt-5.5-pro")])
+    }
+
+    func testSummaryRoundsOnlySingleValuesAndPreservesDetailedCost() {
+        let amount = Decimal(string: "6.799")!
+        let line = TaskAPICostLine(model: "fixture", lowerUSD: amount, upperUSD: amount)
+        XCTAssertEqual(TaskAPICostText.summaryAmount(line), "≈ US$6.80")
+        XCTAssertEqual(TaskAPICostText.amount(line), "≈ US$6.799")
+        let fraction = Decimal(string: "0.009")!
+        XCTAssertEqual(TaskAPICostText.summaryAmount(TaskAPICostLine(model: "fixture", lowerUSD: fraction, upperUSD: fraction)), "< US$0.01")
+        let range = TaskAPICostLine(model: "fixture", lowerUSD: Decimal(string: "0.005")!, upperUSD: Decimal(string: "0.015")!)
+        XCTAssertEqual(TaskAPICostText.summaryAmount(range), TaskAPICostText.amount(range))
     }
 
     func testMixedKnownUnknownAndMissingModelsProducePartialEstimateInStableOrder() throws {
