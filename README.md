@@ -9,6 +9,16 @@
 
 Veyra is a native Swift 6 and SwiftUI menu bar app for monitoring Codex quotas and local Codex and dsh tasks. It shows quota windows and reset times alongside active tasks, models, elapsed time, and token usage without getting in the way of your work.
 
+## Features
+
+- **Tasks by project** — keep parent tasks and subagents together, with status, model, elapsed time, and source labels.
+- **Recorded context usage** — see the latest recorded Codex context usage and reported window size, even with token details collapsed.
+- **Usage and reference costs** — expand cumulative tokens to inspect cached input, uncached input, output including reasoning, cache hit rate, and estimated API costs in USD.
+- **Session timing** — inspect recorded cumulative tool time and average first-token latency for Codex tasks, with the number of contributing turns. Overlapping tool intervals count once.
+- **Online Codex quotas** — check remaining quota, reset times, and available reset credits. Quotas sync automatically and support manual refresh.
+
+Context and timing depend on available records; missing values are not estimated. dsh does not provide context usage or session timing statistics. API reference costs are estimates, not actual bills or subscription deductions. See the [user guide](docs/user-guide.zh-CN.md) for details and limitations.
+
 ## Requirements
 
 - macOS 14 or later.
