@@ -1,5 +1,7 @@
 # 服务商功能移除验证
 
+> 归档文档（2026-11-01）：本文是历史验证记录，对应的源码快照、界面和测试数量均已过时。当前行为见[使用指南](../user-guide.zh-CN.md)，当前验证入口见[验证索引](../validation.md)。
+
 ## 结果
 
 - 删除服务商与模型设置、菜单切换、配置同步与读写 RPC、模型发现与连接测试、Keychain 与取钥命令、模型目录生成和恢复事务。删除专属代码、测试、脚本、资源、文案和设计记录。
@@ -7,20 +9,20 @@
 - 额度不再读取服务商、模型或网关配置。保留登录、账户、路径及服务可用性变化时的旧额度失效保护，以及请求合并、限流和退避。
 - 任务用量与菜单操作按钮统一将 Escape 交给菜单控制器，关闭弹窗后恢复此前的前台应用。
 - 旧取钥命令及其他未知命令在 NSApplication 初始化前以 64 退出，stdout 为空，不输出参数或 Key，不启动界面。
-- Codex 配置、认证文件、旧 ModelProfiles 文件及钥匙串项目不修改或删除；升级依赖处理见[迁移说明](user-guide.zh-CN.md#旧版服务商功能迁移)。
+- Codex 配置、认证文件、旧 ModelProfiles 文件及钥匙串项目不修改或删除；升级依赖处理见[迁移说明](../user-guide.zh-CN.md#旧版服务商功能迁移)。
 
 ## 验证证据（各记录对应其源码快照）
 
 | 检查 | 结果 | 证据 |
 | --- | --- | --- |
-| 完整测试与隔离诊断 | 233 项 XCTest、29 项隔离应用诊断、5 项语言检查、34 项验证入口及 11 项能耗脚本回归通过；80 项配置检查无失败 | [完整验证](../build/local-verification/20261031T072842Z-497f0eb4/result.json) |
-| 移除阶段：中英文设置 | 每种语言 56 张布局；25 项原生交互检查通过，含单页窗口、440pt 高度滚动、路径编辑、关闭与重开及快捷键 | [设置验证](../build/local-verification/20261031T071946Z-f40c09b3/result.json) |
-| 移除阶段：中英文菜单 | 每种语言 212 张布局；各六种原生外观下的滚动、动态收缩、键盘、Escape 与前台恢复通过，含纯 dsh 与无数据源场景 | [英文](../build/local-verification/20261031T070914Z-75089d96/result.json) · [中文](../build/local-verification/20261031T071546Z-c12238af/result.json) |
-| 本轮原生菜单 | 六种英文固定外观通过，合法预览与键盘宿主参数仍正常启动；滚动、Escape、前台恢复断言全部通过 | [预览验证](../build/local-verification/20261031T073125Z-513a97df/result.json) |
-| Universal Release | 无签名 arm64 + x86_64 构建、产物配置检查及辅助功能读取工具编译通过 | [Release 验证](../build/local-verification/20261031T073002Z-7231749a/result.json) |
-| 清理扫描 | 生产代码及字符串目录无服务商管理、配置读写、Keychain 或取钥残留；专属资源无残留；diff 检查通过 | [扫描结果](../build/provider-removal-work/removal-audit.json) |
+| 完整测试与隔离诊断 | 233 项 XCTest、29 项隔离应用诊断、5 项语言检查、34 项验证入口及 11 项能耗脚本回归通过；80 项配置检查无失败 | [完整验证](../../build/local-verification/20261031T072842Z-497f0eb4/result.json) |
+| 移除阶段：中英文设置 | 每种语言 56 张布局；25 项原生交互检查通过，含单页窗口、440pt 高度滚动、路径编辑、关闭与重开及快捷键 | [设置验证](../../build/local-verification/20261031T071946Z-f40c09b3/result.json) |
+| 移除阶段：中英文菜单 | 每种语言 212 张布局；各六种原生外观下的滚动、动态收缩、键盘、Escape 与前台恢复通过，含纯 dsh 与无数据源场景 | [英文](../../build/local-verification/20261031T070914Z-75089d96/result.json) · [中文](../../build/local-verification/20261031T071546Z-c12238af/result.json) |
+| 本轮原生菜单 | 六种英文固定外观通过，合法预览与键盘宿主参数仍正常启动；滚动、Escape、前台恢复断言全部通过 | [预览验证](../../build/local-verification/20261031T073125Z-513a97df/result.json) |
+| Universal Release | 无签名 arm64 + x86_64 构建、产物配置检查及辅助功能读取工具编译通过 | [Release 验证](../../build/local-verification/20261031T073002Z-7231749a/result.json) |
+| 清理扫描 | 生产代码及字符串目录无服务商管理、配置读写、Keychain 或取钥残留；专属资源无残留；diff 检查通过 | [扫描结果](../../build/provider-removal-work/removal-audit.json) |
 
-已目视检查英文浅色菜单、中文深色高对比度菜单、设置页及原生缩小窗口滚动截图。菜单截图见[英文](../build/local-verification/20261031T070914Z-75089d96/en/single-light.png)与[中文](../build/local-verification/20261031T071546Z-c12238af/zh/single-dark-increased.png)。
+已目视检查英文浅色菜单、中文深色高对比度菜单、设置页及原生缩小窗口滚动截图。菜单截图见[英文](../../build/local-verification/20261031T070914Z-75089d96/en/single-light.png)与[中文](../../build/local-verification/20261031T071546Z-c12238af/zh/single-dark-increased.png)。
 
 ## 菜单续验与修复
 
@@ -36,7 +38,7 @@ Mac 解锁后，原生菜单续验发现任务用量按钮上的 Escape 绕过�
 - 菜单场景和外观由启动校验与预览共用类型，避免两处列表漂移。保留当前合法预览、诊断、能耗与 Foundation 默认值参数。
 - 新增参数回归先复现 15 个失败断言；修复后 5 项参数单测及 29 项隔离应用诊断通过。失败命令检查自身也使用临时路径和能耗隔离参数，防止未来回归触碰真实数据。
 - 删除开发文档中已失效的场景清单项；自动滚动命令改用会创建键盘宿主的固定入口。历史混合验证记录增加当前指南与清理报告链接，移除指向已删除文档的文字指引。
-- 当前文档链接和所列菜单场景均已核对，无失效引用；证据见[文档审计](../build/provider-removal-work/followup-document-audit.json)。
+- 当前文档链接和所列菜单场景均已核对，无失效引用；证据见[文档审计](../../build/provider-removal-work/followup-document-audit.json)。
 - dsh 的 DeepSeek 进程名与任务模型元数据用于只读任务监控；旧命令拒绝测试、隐私测试、迁移说明和历史快照继续保留。
 
 ## 验证入口调整
@@ -49,7 +51,7 @@ GUI 预览曾在读取 Documents 下的夹具许可文件时阻塞，调用栈�
 
 本次提交按代码块排除了工作区中的菜单栏配色、状态图标预览、额度卡片顺序与文字布局改动；这些改动继续保留在工作区。此前界面位图采集于包含这些并发外观改动的工作区，用于对应源码快照的功能验收。
 
-暂存区已导出独立源码快照并重新运行完整验证：233 项 XCTest、29 项隔离应用诊断、5 项语言检查、34 项验证入口及 11 项能耗脚本回归通过，工程配置检查无失败。证据见[提交快照验证](../build/service-removal-commit/source/build/local-verification/20261031T073645Z-c11190c7/result.json)。本节仅补充提交范围与证据说明，不改变已验证的源代码。
+暂存区已导出独立源码快照并重新运行完整验证：233 项 XCTest、29 项隔离应用诊断、5 项语言检查、34 项验证入口及 11 项能耗脚本回归通过，工程配置检查无失败。证据见[提交快照验证](../../build/service-removal-commit/source/build/local-verification/20261031T073645Z-c11190c7/result.json)。本节仅补充提交范围与证据说明，不改变已验证的源代码。
 
 ## 证据边界
 

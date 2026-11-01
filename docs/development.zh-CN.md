@@ -103,7 +103,7 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 # 明确验证联网额度链路
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --diagnose --network
 
-# 渲染任务家族、额度、本地来源、过期、空记录、冷却、刷新和圆环边界场景
+# 渲染任务家族、项目分组、用量与 API 费用明细、额度、重置次数、空记录和冷却场景
 # 输出浅色、深色及高对比度 PNG 和 layouts.json，不启动 Codex
 'build/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra' --render-previews "$PWD/build/previews"
 
@@ -137,7 +137,7 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 
 布局位图不包含完整的 WindowServer 玻璃合成。最终验收需要打开真实菜单，在浅色、深色、减少透明度和增加对比度环境下检查顶部、中部、底部、快速滚动、回弹及窗口动态收缩。
 
-固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`no-quota`、`cooldown`、`task-family`、`family-expanded`、`family-context`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`。
+固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`no-quota`、`cooldown`、`task-projects`、`task-family`、`family-expanded`、`family-context`、`token-breakdown`、`token-edges`、`api-costs`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`，以及纯 dsh、无来源和混合故障场景。完整列表以 `AppArguments.MenuScenario` 为准。
 
 额度预览不依赖模型或服务商配置；不同配置不再控制额度显示与轮询。
 
@@ -148,7 +148,7 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 
 `--render-previews` 渲染菜单及通用设置固定夹具，覆盖浅色、深色和增加对比度。`--preview-settings-only` 只渲染设置。场景定义以 `AppArguments.MenuScenario`、`PreviewSupport.SettingsScenario` 和输出的 `layouts.json` 为准。无效或已移除的场景与外观、重复的取值选项、冲突的主模式，以及缺少主模式的预览选项，均在启动界面前失败，不会回退到真实监控。
 
-核心测试覆盖额度窗口、缓存、累计 token、日志增量读取、文件替换与截断、父子任务、状态合并、进程证据、只读 SQLite、RPC 初始化与断管重连，以及诊断输出的隐私边界。尺寸测试覆盖自然高度、溢出上限、窗口边距、展开与收起及多屏尺寸变化。任务家族的专项结果见[父子任务卡片验收](task-family-validation.md)。
+核心测试覆盖额度窗口、缓存、累计 token、日志增量读取、文件替换与截断、父子任务、状态合并、进程证据、只读 SQLite、RPC 初始化与断管重连，以及诊断输出的隐私边界。尺寸测试覆盖自然高度、溢出上限、窗口边距、展开与收起及多屏尺寸变化。任务家族的专项结果见[父子任务卡片验收](history/task-family-validation.md)。
 
 ## 能耗验证
 
@@ -174,7 +174,7 @@ python3 scripts/measure_energy.py \
 
 离线回归 `python3 -I -B scripts/test_measure_energy.py` 由 `test.sh` 一同执行。除隔离与参数检查外，还使用真实子进程运行脚本主流程，覆盖正常完成（测量子进程忽略 SIGTERM）、编译超时、就绪超时、预检失败、启动失败、采样失败、提前退出、SIGINT、SIGTERM 和输出失败，并检查全部子进程已回收、临时夹具已清理。
 
-`active` 和 `panel` 场景包含三个持有真实文件句柄的模拟运行任务，并持续追加用量。`panel` 使用相同内容的原生调试窗口，不能替代真实菜单的玻璃与交互验收。脚本会先用目标应用的诊断确认运行任务数；夹具位于忽略的 `build/` 临时目录，结束后清理。测试方法、实测结果和限制见[能耗优化验收记录](energy-validation.md)，结构化汇总见 [energy-measurements.json](energy-measurements.json)。
+`active` 和 `panel` 场景包含三个持有真实文件句柄的模拟运行任务，并持续追加用量。`panel` 使用相同内容的原生调试窗口，不能替代真实菜单的玻璃与交互验收。脚本会先用目标应用的诊断确认运行任务数；夹具位于忽略的 `build/` 临时目录，结束后清理。测试方法、实测结果和限制见[能耗优化验收记录](history/energy-validation.md)，结构化汇总见 [energy-measurements.json](history/energy-measurements.json)。
 
 
 ### 设置与菜单验证
@@ -197,7 +197,7 @@ GUI 夹具的许可、进程回执、隔离数据和布局先写入临时验证�
 
 每次夹具启动都有独立许可和进程回执。超时或中断先撤销许可；迟到的应用实例会在初始化 AppKit 前退出。已运行的实例只有在 PID、进程组、可执行文件路径和本次启动标识全部匹配时才会回收。LaunchServices 启动器返回零不能证明应用检查通过，运行器还要求有效的 `layouts.json` 或 `menu-check.json`。这些检查不启动已安装应用，不扩大通用命令权限。
 
-焦点交接必须先确认宿主位于前台，再发送 `focus-request`；请求之后不能再重复激活宿主，否则可能取消其刚交出的激活权。宿主仅负责交接，实际菜单仍需通过 active、key window、Escape 与前台恢复断言。宿主日志立即记录交接状态；测试期间切换其他应用仍可能中断检查，此类失败保留为失败，不能按成功缓存。修复与补验证据见[验证索引](validation.md#2026-10-31-原生外观补验与焦点握手修复)。
+焦点交接必须先确认宿主位于前台，再发送 `focus-request`；请求之后不能再重复激活宿主，否则可能取消其刚交出的激活权。宿主仅负责交接，实际菜单仍需通过 active、key window、Escape 与前台恢复断言。宿主日志立即记录交接状态；测试期间切换其他应用仍可能中断检查，此类失败保留为失败，不能按成功缓存。修复与补验证据见[历史验证记录](history/validation-log-2026-10-31.md#2026-10-31-原生外观补验与焦点握手修复)。
 
 指定预览外观时，菜单夹具直接设置 `NSPopover.appearance` 及其窗口外观，以覆盖弹窗默认的浅色内容外观。原生检查在截图前核对实际 `effectiveAppearance`；`menu-check.json` 的 `appearance` 记录包含请求、系统解析与实际外观，并核对对比度和降低透明度夹具开关。实际外观必须与系统解析结果一致且保持请求的浅深色归属。当前系统会将手动高对比度外观解析为普通 Aqua／DarkAqua，应用仍使用既有对比度绘制夹具；此检查不修改全局辅助显示设置。仅场景名称或交互通过不足以证明外观正确。
 

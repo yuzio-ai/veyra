@@ -1,6 +1,6 @@
 # 纯 dsh 用户体验验证
 
-> 历史快照：服务商管理、取钥命令及按服务商屏蔽额度的行为已移除。下文仅记录当时的实现与证据。当前行为见[使用指南](user-guide.zh-CN.md)，移除范围与验收见[清理验证](provider-removal-validation.md)。
+> 归档文档（2026-11-01）：本文是历史验证记录，对应的源码快照、界面和测试数量均已过时。当前行为见[使用指南](../user-guide.zh-CN.md)，当前验证入口见[验证索引](../validation.md)。
 
 日期：2026-10-30（Asia/Shanghai）。
 
@@ -30,9 +30,9 @@
 
 代表性预览：
 
-- [纯 dsh 深色面板](../build/local-verification/20261030T055045Z-6d5d2b4a/zh/dsh-only-dark.png)
-- [无来源引导](../build/local-verification/20261030T055045Z-6d5d2b4a/zh/no-sources-light.png)
-- [纯 dsh 模型设置说明](../build/local-verification/20261030T055045Z-6d5d2b4a/zh/settings-dsh-models-light.png)
+- [纯 dsh 深色面板](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/dsh-only-dark.png)
+- [无来源引导](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/no-sources-light.png)
+- [纯 dsh 模型设置说明](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/settings-dsh-models-light.png)
 
 复现命令：
 

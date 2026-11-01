@@ -1,5 +1,7 @@
 # 菜单卡片层级与间距验证
 
+> 归档文档（2026-11-01）：本文是历史验证记录，对应的源码快照、界面和测试数量均已过时。当前行为见[使用指南](../user-guide.zh-CN.md)，当前验证入口见[验证索引](../validation.md)。
+
 ## 改动
 
 - 移除主、子任务 Token 汇总行前后的分隔线，与前一组信息及展开明细均保持 12pt 间距。父子任务之间的分隔线保留。
@@ -20,7 +22,7 @@
 - 配置检查 80 项，0 失败、1 跳过：本轮未构建 Release，跳过 Release 二进制与合并 Info.plist 检查。
 - 新增 4 项数量与本地化回归，覆盖运行/未确认状态、多层子任务、仅子任务运行、祖先占位、独立子代理和 dsh 分类。
 - 本地化完整性校验从实际 `.stringsdict` 读取复数词条，避免依赖固定词条名单。
-- [完整测试结果](../build/local-verification/20261030T144301Z-aceca1d1/result.json)
+- [完整测试结果](../../build/local-verification/20261030T144301Z-aceca1d1/result.json)
 
 首轮版本通过标准菜单验证入口：
 
@@ -32,20 +34,20 @@
 - 中英文按钮夹具均通过：四个 28pt 点击区域，每个按钮的空格、回车与原生按压调用各触发一次；禁用后不触发。退出图标使用安全回调。
 - 悬停与按下图分别由原生 tracking 回调和 highlight 状态生成；已查看默认、焦点、悬停、按下与禁用图。
 - Token 夹具通过独立展开/收起、精确总数帮助与辅助功能、空格操作、内容高度收缩及多层长数值检查。
-- [菜单验证结果](../build/local-verification/20261030T144331Z-4ba7b18e/result.json)
-- [中文额度与任务布局](../build/local-verification/20261030T144331Z-4ba7b18e/zh/single-light.png)
-- [中文父子任务折叠布局](../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-collapsed.png)
-- [中文父子任务展开布局](../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-expanded.png)
+- [菜单验证结果](../../build/local-verification/20261030T144331Z-4ba7b18e/result.json)
+- [中文额度与任务布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/single-light.png)
+- [中文父子任务折叠布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-collapsed.png)
+- [中文父子任务展开布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-expanded.png)
 
 ## 本轮追加：移除 Token 明细分隔线
 
 - 主、子任务的 Token 汇总与明细之间统一改为 12pt 间距，保留父子任务分隔线。已查看中文双任务展开图。
-- [最终完整测试](../build/local-verification/20261030T150327Z-5bb4d047/result.json)：375 项 XCTest 及标准诊断、Python 回归、配置检查通过。共享工作区的并行改动已纳入这轮检查。
-- [中文布局与 Token 交互](../build/local-verification/20261030T145828Z-333ec3b2/zh/layouts.json)：466 项布局记录通过；独立展开/收起、空格操作、窗口收缩与长数值检查通过。该次整轮因焦点宿主未激活而失败，因此不作为整轮成功记录。
-- [最终中文原生菜单专项](../build/local-verification/20261030T150205Z-7cf0a534/result.json)：单独重试后，六种外观、滚动、窗口收缩、开关切换、Escape 与焦点恢复全部通过。
-- [最终 Release 验证](../build/local-verification/20261030T150409Z-eee62ad0/result.json)：通用构建、Release 配置与辅助工具编译通过。
-- [本轮展开布局](../build/local-verification/20261030T145828Z-333ec3b2/zh/task-details-both-expanded.png)
-- [本地开发签名构建记录](../build/local-preview/token-details-spacing-20261030-230517/build-result.json)：支持 arm64、x86_64，签名校验通过；未自动启动应用。
+- [最终完整测试](../../build/local-verification/20261030T150327Z-5bb4d047/result.json)：375 项 XCTest 及标准诊断、Python 回归、配置检查通过。共享工作区的并行改动已纳入这轮检查。
+- [中文布局与 Token 交互](../../build/local-verification/20261030T145828Z-333ec3b2/zh/layouts.json)：466 项布局记录通过；独立展开/收起、空格操作、窗口收缩与长数值检查通过。该次整轮因焦点宿主未激活而失败，因此不作为整轮成功记录。
+- [最终中文原生菜单专项](../../build/local-verification/20261030T150205Z-7cf0a534/result.json)：单独重试后，六种外观、滚动、窗口收缩、开关切换、Escape 与焦点恢复全部通过。
+- [最终 Release 验证](../../build/local-verification/20261030T150409Z-eee62ad0/result.json)：通用构建、Release 配置与辅助工具编译通过。
+- [本轮展开布局](../../build/local-verification/20261030T145828Z-333ec3b2/zh/task-details-both-expanded.png)
+- [本地开发签名构建记录](../../build/local-preview/token-details-spacing-20261030-230517/build-result.json)：支持 arm64、x86_64，签名校验通过；未自动启动应用。
 
 ## 证据边界
 

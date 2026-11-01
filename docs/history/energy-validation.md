@@ -1,5 +1,7 @@
 # 能耗优化验收记录
 
+> 归档文档（2026-11-01）：本文是历史验证记录，对应的源码快照、界面和测试数量均已过时。当前行为见[使用指南](../user-guide.zh-CN.md)，当前验证入口见[验证索引](../validation.md)。
+
 日期：2026-09-03。环境：Apple M4 Pro、macOS 26.5.2。基线是修改前保留的 Release 应用，优化版使用本次工作的 Release 构建。
 
 ## 实现与回归
@@ -34,7 +36,7 @@
 
 空闲累计 CPU 降低至少 60% 的目标已达到；运行任务收起及面板可见场景均未出现超过 10% 的 CPU 回退。面板测量使用同一内容的原生调试窗口，不能直接等同于 MenuBarExtra 弹窗的合成成本。最早未通过运行任务数核验的采样已排除，不计入此表。
 
-复现命令见[开发与手动发布](development.zh-CN.md#能耗验证)。汇总数据见 [energy-measurements.json](energy-measurements.json)。
+复现命令见[开发与手动发布](../development.zh-CN.md#能耗验证)。汇总数据见 [energy-measurements.json](energy-measurements.json)。
 
 ## 界面验收及限制
 
