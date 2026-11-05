@@ -148,7 +148,7 @@ enum Diagnostics {
                     // Direct presenter injection can be overwritten by a normal anchor
                     // update, legitimately shortening the document and clamping to zero.
                     var explanationEstimate = TaskAPICostEstimate(lines: (0..<30).map {
-                        TaskAPICostLine(model: "fixture-model-\($0)", lowerUSD: 1, upperUSD: 1)
+                        TaskAPICostLine(model: "fixture-model-\($0)", amountUSD: 1)
                     })
                     guard let taskID = MonitorStore.shared.tasks.first?.id,
                           let disclosure = reopened.contentView.flatMap({ menuControl(in: $0, id: "monitor.tokens." + taskID) }) else {
@@ -190,8 +190,7 @@ enum Diagnostics {
                     // Simulate a normal monitored snapshot arriving while this
                     // explanation is open, including its declarative anchor update.
                     MonitorStore.shared.tasks[0].contextUsage = ContextWindowUsage(used: 1, window: 100)
-                    explanationEstimate.lines[0].lowerUSD = 2
-                    explanationEstimate.lines[0].upperUSD = 2
+                    explanationEstimate.lines[0].amountUSD = 2
                     MonitorStore.shared.tasks[0].apiCostSource = .recorded(explanationEstimate)
                     let expectedAmount = TaskAPICostText.amount(explanationEstimate.total)
                     guard await waitForStable({ presenter.content?.details.first?.value == expectedAmount
@@ -241,37 +240,37 @@ enum Diagnostics {
                                     "openedFromBackground": true, "previousApplicationRestored": true,
                                     "forcedRecoveryBaseline": forcedRecovery,
                                     "restoredVisibilityBeforeToggle": restoredVisibilityBeforeToggle])
-                    // Pure dsh uses the same native popover and keyboard controls.
-                    PreviewSupport.configure(MonitorStore.shared, scenario: .dshOnly)
+                    // Tasks without quota uses the same native popover and keyboard controls.
+                    PreviewSupport.configure(MonitorStore.shared, scenario: .tasksOnly)
                     try await Task.sleep(for: .milliseconds(700))
-                    let dshPreviousApplication = try await prepareBackgroundMenu(in: directory)
+                    let taskOnlyPreviousApplication = try await prepareBackgroundMenu(in: directory)
                     toggleMenu?()
                     guard await waitFor({ menuWindow?()?.isVisible == true }),
-                          let dshWindow = menuWindow?(), let dshView = dshWindow.contentView,
-                          menuControl(in: dshView) != nil,
+                          let taskOnlyWindow = menuWindow?(), let taskOnlyView = taskOnlyWindow.contentView,
+                          menuControl(in: taskOnlyView) != nil,
                           !MonitorStore.shared.showsQuota, MonitorStore.shared.menuTaskCount == "2" else {
-                        throw MenuCheckError.invalidDshState
+                        throw MenuCheckError.invalidTaskState
                     }
-                    dshView.layoutSubtreeIfNeeded()
-                    try PreviewSupport.saveBitmap(dshView, to: directory.appendingPathComponent("dsh-only-layout.png"))
-                    guard await waitFor({ NSApp.isActive && dshWindow.isKeyWindow }) else {
-                        print("dsh keyboard focus unavailable: active=\(NSApp.isActive), canKey=\(dshWindow.canBecomeKey), key=\(dshWindow.isKeyWindow), visible=\(dshWindow.isVisible)")
+                    taskOnlyView.layoutSubtreeIfNeeded()
+                    try PreviewSupport.saveBitmap(taskOnlyView, to: directory.appendingPathComponent("tasks-only-layout.png"))
+                    guard await waitFor({ NSApp.isActive && taskOnlyWindow.isKeyWindow }) else {
+                        print("Task-only keyboard focus unavailable: active=\(NSApp.isActive), canKey=\(taskOnlyWindow.canBecomeKey), key=\(taskOnlyWindow.isKeyWindow), visible=\(taskOnlyWindow.isVisible)")
                         throw MenuCheckError.keyboardFocusUnavailable
                     }
-                    let dshAppWasActive = NSApp.isActive, dshWindowWasKey = dshWindow.isKeyWindow
+                    let taskOnlyAppWasActive = NSApp.isActive, taskOnlyWindowWasKey = taskOnlyWindow.isKeyWindow
                     if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
-                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: dshWindow.windowNumber, context: nil,
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: taskOnlyWindow.windowNumber, context: nil,
                         characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) {
-                        dshWindow.sendEvent(escape)
+                        taskOnlyWindow.sendEvent(escape)
                     }
-                    guard await waitFor({ !dshWindow.isVisible }) else { throw MenuCheckError.escapeDidNotClose }
-                    guard await waitFor({ NSWorkspace.shared.frontmostApplication?.processIdentifier == dshPreviousApplication }) else {
+                    guard await waitFor({ !taskOnlyWindow.isVisible }) else { throw MenuCheckError.escapeDidNotClose }
+                    guard await waitFor({ NSWorkspace.shared.frontmostApplication?.processIdentifier == taskOnlyPreviousApplication }) else {
                         throw MenuCheckError.focusNotRestored
                     }
-                    records.append(["position": "dsh-only", "quotaHidden": true,
+                    records.append(["position": "tasks-only", "quotaHidden": true,
                                     "runningCount": "2", "escapePassed": true,
                                     "openedFromBackground": true, "previousApplicationRestored": true,
-                                    "appWasActive": dshAppWasActive, "windowWasKey": dshWindowWasKey])
+                                    "appWasActive": taskOnlyAppWasActive, "windowWasKey": taskOnlyWindowWasKey])
                     // Exercise reference costs in the actual NSPopover, including
                     // its native material, contrast and reduced-transparency variants.
                     PreviewSupport.configure(MonitorStore.shared, scenario: .apiCosts)
@@ -296,7 +295,7 @@ enum Diagnostics {
                         throw MenuCheckError.keyboardFocusUnavailable
                     }
                     try await Task.sleep(for: .milliseconds(400))
-                    for id in ["cost-single", "cost-mixed", "cost-dsh", "cost-partial", "cost-unavailable"] {
+                    for id in ["cost-single", "cost-mixed", "cost-partial", "cost-unavailable"] {
                         guard let control = menuControl(in: costView, id: "monitor.tokens." + id) else {
                             throw MenuCheckError.missingCostControls
                         }
@@ -323,7 +322,7 @@ enum Diagnostics {
                         }
                         try await Task.sleep(for: .milliseconds(150))
                     }
-                    for id in ["cost-single", "cost-mixed", "cost-dsh", "cost-partial", "cost-unavailable"] {
+                    for id in ["cost-single", "cost-mixed", "cost-partial", "cost-unavailable"] {
                         guard let control = menuControl(in: costView, id: "monitor.tokens." + id),
                               String(describing: control.accessibilityValue() ?? "").contains(L10n.text("Expanded")) else {
                             throw MenuCheckError.missingCostControls
@@ -372,7 +371,7 @@ enum Diagnostics {
                     try await Task.sleep(for: .milliseconds(700))
                     guard let emptyView = menuWindow?()?.contentView, MonitorStore.shared.noSourcesFound,
                           MonitorStore.shared.menuTaskCount == "0", !MonitorStore.shared.hasSourceWarning else {
-                        throw MenuCheckError.invalidDshState
+                        throw MenuCheckError.invalidTaskState
                     }
                     try PreviewSupport.saveBitmap(emptyView, to: directory.appendingPathComponent("no-sources-layout.png"))
                     records.append(["position": "no-sources", "runningCount": "0", "warning": false])
@@ -464,7 +463,7 @@ enum Diagnostics {
         case missingCostControls
         case didNotScroll
         case didNotClose, didNotOpen, escapeDidNotClose
-        case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidDshState, invalidLease, appearanceMismatch
+        case keyboardFocusUnavailable, backgroundSetupFailed, focusNotRestored, invalidTaskState, invalidLease, appearanceMismatch
         case infoRefreshNotPreserved, infoEscapeFocusNotRestored
     }
 

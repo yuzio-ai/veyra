@@ -26,8 +26,6 @@ enum PreviewSupport {
                                  inspectConfiguration: { _, _ in CodexConfigurationReport(location: location, state: state) })
         store.isPreview = true
         store.previewCodexServicesAvailable = !(scenario == .missing)
-        store.dshHomePath = "/Users/preview/.dsh"
-        store.dshReadState = .available
         store.homePath = ""
         store.executablePath = ""
         if [.manual, .invalidDirectory, .invalidExecutable, .longPath].contains(scenario) {
@@ -77,9 +75,8 @@ enum PreviewSupport {
         case .familyExpanded: ["demo-1", "demo-2"]
         case .tokenBreakdown: ["token-parent", "token-child", "token-deep"]
         case .tokenEdges: ["token-zero", "token-missing", "token-invalid"]
-        case .apiCosts: ["cost-single", "cost-mixed", "cost-dsh", "cost-partial", "cost-unavailable"]
+        case .apiCosts: ["cost-single", "cost-mixed", "cost-partial", "cost-unavailable"]
         case .edgeCases: ["demo-1", "demo-2"]
-        case .dshOnly: ["dsh:demo-1"]
         default: []
         }
     }
@@ -89,32 +86,21 @@ enum PreviewSupport {
         store.quota = QuotaDisplayState()
         store.taskError = nil
         store.taskWarning = nil
-        store.dshWarning = nil
         store.previewCodexServicesAvailable = true
         store.codexReadState = .available
-        store.dshReadState = .notFound
         store.tasksBusy = false
         store.quotaBusy = false
         store.nextCalibrationAt = nil
         store.tasksUpdatedAt = referenceDate
         store.tasks = []
         store.taskAncestors = []
-        if [.dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError].contains(scenario) {
+        if scenario == .noSources || scenario == .tasksOnly {
             store.previewCodexServicesAvailable = false
-            store.codexReadState = .notFound
-            store.dshReadState = .available
-            switch scenario {
-            case .dshOnly: store.tasks = [dshTask(1), dshTask(2)]
-            case .dshUnknown: store.tasks = [dshTask(1, activity: .unknown)]
-            case .dshError:
-                store.dshReadState = .failed
-                store.dshWarning = L10n.text("Unable to read dsh session records. Check its data directory.")
-            case .noSources: store.dshReadState = .notFound; store.tasksUpdatedAt = nil
-            case .mixedError:
-                store.tasks = [dshTask(1)]
-                store.codexReadState = .failed
-                store.taskError = L10n.text("Unable to read Codex task records. Check its data directory.")
-            default: break
+            if scenario == .noSources {
+                store.codexReadState = .notFound
+                store.tasksUpdatedAt = nil
+            } else {
+                store.tasks = [task(1), task(2)]
             }
             return
         }
@@ -146,7 +132,6 @@ enum PreviewSupport {
             windows = [quota("codex", "Codex", primary: true, used: 94, minutes: 300)]
             store.quota.error = QuotaFailure.rpcFailed.message
             store.taskError = L10n.text("Unable to read Codex task records. Check its data directory.")
-            store.dshWarning = L10n.text("Some dsh session records are unreadable.")
         }
         if scenario == .edgeCases {
             windows = [
@@ -189,6 +174,10 @@ enum PreviewSupport {
             store.quota.apply(QuotaRefresh(account: store.quota.account, snapshot: snapshot))
         }
         if scenario == .noQuota { store.quota = QuotaDisplayState() }
+        if scenario == .quotaOnly {
+            store.codexReadState = .notFound
+            store.tasksUpdatedAt = nil
+        }
         if scenario == .cooldown {
             store.quota.error = QuotaFailure.rateLimited.message
             store.nextCalibrationAt = referenceDate.addingTimeInterval(300)
@@ -201,9 +190,6 @@ enum PreviewSupport {
             store.tasks = [task(1, longTitle: true)]
         case .multiple, .taskProjects, .updateAvailable, .planProLite, .planBusiness, .planEnterprise, .planUnknown:
             store.tasks = (1...16).map { task($0, longTitle: $0 == 2 || $0 == 4, parentID: $0 == 2 ? "demo-1" : nil) }
-            if scenario == .multiple || scenario == .taskProjects {
-                store.tasks += [dshTask(17), dshTask(18, activity: .unknown)]
-            }
         case .unknown:
             store.tasks = [task(1), task(2, longTitle: true, activity: .unknown)]
         case .edgeCases:
@@ -221,31 +207,29 @@ enum PreviewSupport {
             let screenshot = TokenUsage(input: 250_229, output: 1_404, cachedInput: 211_840, reasoningOutput: 420, total: 251_633)
             let million = TokenUsage(input: 1_000_000, output: 0, cachedInput: 0, total: 1_000_000)
             var single = TaskAPICostEstimate()
-            single.add(TaskCostTokens(usage: screenshot)!, model: "gpt-6.1-sol", backend: .codex)
+            single.add(TaskCostTokens(usage: screenshot)!, model: "gpt-6.1-sol")
             var mixed = TaskAPICostEstimate()
             let mixedModels = ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-luna", "gpt-6-sol",
                                "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4",
                                "gpt-5.4-mini", "gpt-5.4-nano"]
             for model in mixedModels {
-                mixed.add(TaskCostTokens(usage: million)!, model: model, backend: .codex)
+                mixed.add(TaskCostTokens(usage: million)!, model: model)
             }
             var partial = single
             partial.note(.unknownModel("unpriced-fixture-model"))
-            let fixtures: [(String, String, String, TokenUsage, TaskAPICostEstimate, TaskBackend)] = [
-                ("cost-single", "API 参考费用 · 截图用量", "gpt-6.1-sol", screenshot, single, .codex),
+            let fixtures: [(String, String, String, TokenUsage, TaskAPICostEstimate)] = [
+                ("cost-single", "API 参考费用 · 截图用量", "gpt-6.1-sol", screenshot, single),
                 ("cost-mixed", "API 参考费用 · 多模型累计", mixedModels.last!,
                     TokenUsage(input: Int64(mixedModels.count) * 1_000_000, output: 0, cachedInput: 0,
-                               total: Int64(mixedModels.count) * 1_000_000), mixed, .codex),
-                ("cost-dsh", "API 参考费用 · DeepSeek 峰谷区间", "deepseek-flash", screenshot,
-                    .dsh(usage: screenshot, model: "deepseek-flash"), .dsh),
-                ("cost-partial", "API 参考费用 · 部分估算", "gpt-6.1-sol", screenshot, partial, .codex),
+                               total: Int64(mixedModels.count) * 1_000_000), mixed),
+                ("cost-partial", "API 参考费用 · 部分估算", "gpt-6.1-sol", screenshot, partial),
                 ("cost-unavailable", "API 参考费用 · 未知模型", "unpriced-fixture-model", screenshot,
-                    TaskAPICostEstimate(issues: [.unknownModel("unpriced-fixture-model")]), .codex)
+                    TaskAPICostEstimate(issues: [.unknownModel("unpriced-fixture-model")]))
             ]
-            store.tasks = fixtures.map { id, title, model, tokens, cost, backend in
+            store.tasks = fixtures.map { id, title, model, tokens, cost in
                 TaskSnapshot(id: id, title: title, model: model, source: .desktop, parentID: nil,
                     startedAt: referenceDate.addingTimeInterval(-36), updatedAt: referenceDate, tokens: tokens,
-                    activity: .running, backend: backend, apiCostSource: .recorded(cost))
+                    activity: .running, apiCostSource: .recorded(cost))
             }
         case .tokenBreakdown:
             store.tasks = [
@@ -303,7 +287,7 @@ enum PreviewSupport {
             store.taskAncestors = [TaskReference(id: "completed-parent", title: "已结束父任务的归属标题", parentID: nil)]
             store.tasks = [task(1, parentID: "completed-parent"), task(2, activity: .unknown),
                            task(3, parentID: "demo-2"), task(4, parentID: "missing-parent")]
-        case .dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError,
+        case .tasksOnly, .quotaOnly, .noSources,
              .loading, .empty, .error, .noQuota, .quotaRingLow, .quotaRingHigh,
              .resetCredits, .resetCreditsExpired, .resetCreditsUnknown, .resetCreditsZero,
              .resetCreditsUnavailable, .resetCreditsOverflow, .resetCreditsOnly:
@@ -317,7 +301,7 @@ enum PreviewSupport {
                             roots: ["/Projects/Long name"])
             ]
             for index in store.tasks.indices {
-                let project = store.tasks[index].backend == .dsh ? projects[0] : projects[min(index / 5, 2)]
+                let project = projects[min(index / 5, 2)]
                 store.tasks[index].projectAssignment = index == 14 ? .unassigned : .project(project)
             }
         }
@@ -344,20 +328,12 @@ enum PreviewSupport {
                      activity: activity)
     }
 
-    private static func dshTask(_ number: Int, activity: TaskActivity = .running) -> TaskSnapshot {
-        TaskSnapshot(id: "dsh:demo-\(number)", title: "按设计实施 dsh 数据源并核对缓存命中率 · \(number)",
-                     model: "kimi-k3", source: .desktop, parentID: nil,
-                     startedAt: referenceDate.addingTimeInterval(-418), updatedAt: referenceDate,
-                     tokens: TokenUsage(input: 963_704, output: 17_773, cachedInput: 763_904, total: 981_477),
-                     activity: activity, backend: .dsh)
-    }
-
     private static func panel(store: MonitorStore, scenario: Scenario, screenHeight: CGFloat = 800, increasedContrast: Bool = false,
                               onSizingChange: @escaping (PanelSizing) -> Void) -> some View {
         MonitorPanel(store: store, updates: .preview(scenario == .updateAvailable ? .available : .idle),
                      screenOverride: PanelScreenMetrics(visibleHeight: screenHeight),
                      initiallyExpandedTaskIDs: expandedTaskIDs(for: scenario),
-                     initiallyShowUnknown: scenario == .unknown || scenario == .taskProjects || scenario == .dshUnknown, onSizingChange: onSizingChange)
+                     initiallyShowUnknown: scenario == .unknown || scenario == .taskProjects, onSizingChange: onSizingChange)
             .environment(\.monitorOpaquePreview, true)
             .environment(\.monitorPreviewContrast, increasedContrast ? .increased : .standard)
             .environment(\.monitorReferenceDate, referenceDate)
@@ -374,11 +350,10 @@ enum PreviewSupport {
                 }
                 let store = MonitorStore()
                 var results: [[String: Any]] = []
-                let dshOnly = CommandLine.arguments.contains("--preview-dsh-only")
                 let scenarios: [Scenario] = CommandLine.arguments.contains("--preview-settings-only") ? []
-                    : (dshOnly ? [.dshOnly, .dshIdle, .dshUnknown, .dshError, .noSources, .mixedError] : Scenario.allCases)
+                    : Scenario.allCases
                 if !scenarios.isEmpty { try renderStatusItems(to: directory) }
-                if !scenarios.isEmpty && !dshOnly {
+                if !scenarios.isEmpty {
                     try await TaskDetailInteractionChecks.run(to: directory)
                     try await TaskInfoInteractionChecks.run(to: directory)
                 }
@@ -428,8 +403,7 @@ enum PreviewSupport {
                     }
                 }
                 // Fixed settings fixtures never expose the user's configured paths.
-                let settingsCases = dshOnly ? [(SettingsScenario.missing, UpdateStore.PreviewState.idle)]
-                    : UpdateStore.PreviewState.allCases.map { (SettingsScenario.automatic, $0) }
+                let settingsCases = UpdateStore.PreviewState.allCases.map { (SettingsScenario.automatic, $0) }
                         + SettingsScenario.allCases.filter { $0 != .automatic }.map { ($0, UpdateStore.PreviewState.idle) }
                 for (settingsScenario, updateState) in settingsCases {
                     let settingsStore = settingsStore(settingsScenario)

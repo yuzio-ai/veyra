@@ -133,7 +133,7 @@ enum TaskInfoInteractionChecks {
         guard case .recorded(var revised) = store.tasks[1].apiCostSource else {
             throw Failure.check("missing recorded explanation fixture")
         }
-        revised.lines += (0..<15).map { TaskAPICostLine(model: "fixture-model-\($0)", lowerUSD: 1, upperUSD: 1) }
+        revised.lines += (0..<15).map { TaskAPICostLine(model: "fixture-model-\($0)", amountUSD: 1) }
         store.tasks[1].apiCostSource = .recorded(revised)
         try await settle()
         infoScroll.contentView.scroll(to: NSPoint(x: 0, y: 200))
@@ -142,8 +142,7 @@ enum TaskInfoInteractionChecks {
         // NSScrollView may forward first-responder status to its document view.
         let focusedResponder = presenter.window?.firstResponder
         try expect(focusedResponder != nil, "explanation has a focused responder")
-        revised.lines[0].lowerUSD += 1
-        revised.lines[0].upperUSD += 1
+        revised.lines[0].amountUSD += 1
         store.tasks[1].contextUsage = ContextWindowUsage(used: 1, window: 100)
         store.tasks[1].apiCostSource = .recorded(revised)
         try await settle()
@@ -155,7 +154,7 @@ enum TaskInfoInteractionChecks {
         try expect(abs(infoScroll.contentView.bounds.minY - 200) <= 1, "live update preserves 200pt offset")
         try expect(presenter.window?.firstResponder === focusedResponder, "live update preserves keyboard focus")
         store.tasks[1].apiCostSource = .recorded(TaskAPICostEstimate(lines: [
-            TaskAPICostLine(model: "fixture-model", lowerUSD: 1, upperUSD: 1)
+            TaskAPICostLine(model: "fixture-model", amountUSD: 1)
         ]))
         try await settle()
         let shortenedMaximum = max(0, document.bounds.height - infoScroll.contentView.bounds.height)
@@ -240,8 +239,8 @@ enum TaskInfoInteractionChecks {
             }) else { throw Failure.check("missing refresh explanation button") }
             button.performClick(nil)
         }
-        let estimate = TaskAPICostEstimate(lines: [TaskAPICostLine(model: "fixture-model", lowerUSD: 1, upperUSD: 1)])
-        let updated = TaskAPICostEstimate(lines: [TaskAPICostLine(model: "fixture-model", lowerUSD: 2, upperUSD: 2)])
+        let estimate = TaskAPICostEstimate(lines: [TaskAPICostLine(model: "fixture-model", amountUSD: 1)])
+        let updated = TaskAPICostEstimate(lines: [TaskAPICostLine(model: "fixture-model", amountUSD: 2)])
         let statistics = TaskSessionStatistics(toolMilliseconds: 1_000, meanTTFTMilliseconds: 1_000, ttftSampleCount: 7)
         let updatedStatistics = TaskSessionStatistics(toolMilliseconds: 2_000, meanTTFTMilliseconds: 2_000, ttftSampleCount: 11)
         try await waitForReads()

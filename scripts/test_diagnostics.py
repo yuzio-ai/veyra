@@ -194,9 +194,11 @@ def run_unsupported_command_cases(app):
     removed_commands = [
         '--provider-credential', '--provider-credential-fixture', '--create-credential-fixture',
         '--create-denied-credential-fixture', '--delete-credential-fixture', '--lock-credential-fixture',
-        '--create-model-catalog-fixture', '--render-provider-previews', '--unknown-command',
+        '--create-model-catalog-fixture', '--render-provider-previews', '--unknown-command', '--preview-dsh-only',
     ]
     commands = [[command, 'PRIVATE_VALUE'] for command in removed_commands] + [
+        *[['--preview-menu', scenario] for scenario in ('dsh-only', 'dsh-idle', 'dsh-unknown', 'dsh-error')],
+        ['--render-previews', 'PRIVATE_VALUE', '--preview-dsh-only'],
         ['--preview-menu', 'custom-model'], ['--preview-menu', 'PRIVATE_VALUE'],
         ['--preview-menu', 'single', '--preview-appearance', 'PRIVATE_VALUE'],
         ['--preview-menu', 'single', '--preview-menu', 'multiple'], ['--preview-settings-only'],
@@ -206,7 +208,7 @@ def run_unsupported_command_cases(app):
     with tempfile.TemporaryDirectory(prefix='veyra-unsupported-command-') as home:
         for arguments in commands:
             # Keep a future validation regression isolated even if it reaches app startup.
-            isolated = ['--energy-benchmark', '-codexHome', home, '-codexExecutable', '/usr/bin/true', '-dshHome', home]
+            isolated = ['--energy-benchmark', '-codexHome', home, '-codexExecutable', '/usr/bin/true']
             result = subprocess.run([str(app)] + arguments + isolated,
                 env=dict(os.environ, CODEX_HOME=home), capture_output=True, text=True, timeout=5)
             assert result.returncode == 64, 'Unsupported command must exit before starting the application'

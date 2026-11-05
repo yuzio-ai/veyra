@@ -20,8 +20,6 @@ enum SettingsInteractionChecks {
             CodexConfigurationReport(location: location, state: .valid)
         })
         store.isPreview = true
-        store.dshHomePath = home.path
-        store.dshReadState = .available
         let registrar = SettingsHotKeyFixture()
         let shortcuts = ShortcutStore(registrar: registrar, defaults: defaults)
         shortcuts.start()
@@ -44,7 +42,7 @@ enum SettingsInteractionChecks {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         defer { window.close() }
-        try await wait { store.configurationState == .valid && fields(in: hosting).count == 3 }
+        try await wait { store.configurationState == .valid && fields(in: hosting).count == 2 }
         hosting.layoutSubtreeIfNeeded()
         window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
         try require(window.toolbar == nil, "single-page settings have no tabs")
@@ -64,7 +62,11 @@ enum SettingsInteractionChecks {
         window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
         try await pause()
         let pathFields = fields(in: hosting)
-        let homeField = pathFields[0], executableField = pathFields[1]
+        guard let homeField = pathFields.first(where: { $0.accessibilityIdentifier() == "settings.path.home" }),
+              let executableField = pathFields.first(where: { $0.accessibilityIdentifier() == "settings.path.executable" }) else {
+            throw CheckError.failed("Codex path fields are available")
+        }
+        try require(pathFields.count == 2, "only Codex paths are editable")
         try require(homeField.accessibilityLabel() == L10n.text("Data directory"), "directory accessibility label")
         try require(executableField.accessibilityLabel() == L10n.text("Executable"), "executable accessibility label")
         try require(abs(homeField.frame.width - executableField.frame.width) < 1, "matching path widths")
@@ -149,29 +151,7 @@ enum SettingsInteractionChecks {
         await store.restoreAutomaticPaths()
         try await wait { homeField.stringValue == home.path && executableField.stringValue == executable.path }
         try require(!store.hasManualPaths, "restore clears both overrides and drafts")
-        let dshField = pathFields[2]
-        try require(dshField.accessibilityLabel() == L10n.text("dsh data directory"), "dsh directory accessibility label")
-        let dshDirectory = home.appendingPathComponent("dsh fixtures")
-        try files.createDirectory(at: dshDirectory, withIntermediateDirectories: true)
-        let dshEditor = try focus(dshField, in: window)
-        replace(dshEditor, with: dshDirectory.path)
-        dshEditor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
-        try await wait { defaults.string(forKey: "dshHome") == dshDirectory.path }
-        try require(!store.hasManualPaths, "dsh edits preserve automatic Codex paths")
-        replace(try focus(dshField, in: window), with: "invalid/dsh-path")
-        window.makeFirstResponder(nil)
-        try await pause()
-        try require(defaults.string(forKey: "dshHome") == dshDirectory.path, "invalid dsh path not persisted")
-        window.close(); try await pause(); window.makeKeyAndOrderFront(nil)
-        try await wait { dshField.stringValue == dshDirectory.path }
-        _ = await store.commitDshPath("", restoringAutomatic: true)
-        try require(store.dshHomePath.isEmpty, "dsh restore returns to automatic paths")
-        let closeDirectory = home.appendingPathComponent("dsh close fixture")
-        try files.createDirectory(at: closeDirectory, withIntermediateDirectories: true)
-        replace(try focus(dshField, in: window), with: closeDirectory.path)
-        window.close()
-        try await wait { defaults.string(forKey: "dshHome") == closeDirectory.path }
-        let checks = ["preview-build-version", "preview-newer-version", "single-page-settings", "settings-overflow-scroll", "dsh-valid-close-commit", "dsh-path-commit", "dsh-invalid-draft", "dsh-close-and-reopen", "dsh-restore", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
+        let checks = ["preview-build-version", "preview-newer-version", "single-page-settings", "settings-overflow-scroll", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
                       "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore",
                       "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur"]
         try JSONSerialization.data(withJSONObject: ["passed": checks, "currentVersion": updates.currentVersion,

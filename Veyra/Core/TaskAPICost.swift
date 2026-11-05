@@ -5,7 +5,6 @@ enum TaskAPICostCatalog {
     static let checkedOn = "2026-10-31"
     static let currency = "USD"
     static let openAISource = "https://developers.openai.com/api/docs/pricing"
-    static let deepSeekSource = "https://api-docs.deepseek.com/quick_start/pricing/"
 
     struct Rate: Sendable {
         let input: Decimal
@@ -68,17 +67,8 @@ enum TaskAPICostCatalog {
         "gpt-3.5-turbo-0125": Rate("0.50", nil, "1.50")
     ]
 
-    static func prices(model: String, backend: TaskBackend) -> (Rate, Rate)? {
-        if backend == .codex { return openAI[model].map { ($0, $0) } }
-        switch model {
-        // Only aliases explicitly documented by DeepSeek are accepted.
-        case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
-            return (Rate("0.15", "0.003", "0.60"), Rate("0.30", "0.006", "1.20"))
-        case "deepseek-v4-pro":
-            return (Rate("0.66", "0.022", "1.98"), Rate("1.32", "0.044", "3.96"))
-        default: return nil
-        }
-    }
+    static func prices(model: String) -> Rate? { openAI[model] }
+
 }
 
 struct TaskCostTokens: Equatable, Sendable {
@@ -126,19 +116,17 @@ enum TaskAPICostIssue: Hashable, Sendable {
 
 struct TaskAPICostLine: Equatable, Sendable {
     let model: String
-    var lowerUSD: Decimal
-    var upperUSD: Decimal
+    var amountUSD: Decimal
 }
 
 struct TaskAPICostEstimate: Equatable, Sendable {
     var lines: [TaskAPICostLine] = []
     var issues: [TaskAPICostIssue] = []
-    var usesLastModel = false
 
     var total: TaskAPICostLine? {
         guard !lines.isEmpty else { return nil }
-        return lines.reduce(TaskAPICostLine(model: "", lowerUSD: 0, upperUSD: 0)) {
-            TaskAPICostLine(model: "", lowerUSD: $0.lowerUSD + $1.lowerUSD, upperUSD: $0.upperUSD + $1.upperUSD)
+        return lines.reduce(TaskAPICostLine(model: "", amountUSD: 0)) {
+            TaskAPICostLine(model: "", amountUSD: $0.amountUSD + $1.amountUSD)
         }
     }
 
@@ -148,22 +136,15 @@ struct TaskAPICostEstimate: Equatable, Sendable {
         if !issues.contains(issue) { issues.append(issue) }
     }
 
-    mutating func add(_ tokens: TaskCostTokens, model: String?, backend: TaskBackend) {
+    mutating func add(_ tokens: TaskCostTokens, model: String?) {
         guard let model, !model.isEmpty else { note(.missingModel); return }
-        guard let (low, high) = TaskAPICostCatalog.prices(model: model, backend: backend) else {
+        guard let rate = TaskAPICostCatalog.prices(model: model) else {
             note(.unknownModel(model)); return
         }
-        guard let lower = low.cost(tokens), let upper = high.cost(tokens) else { note(.unknownCachePrice(model)); return }
+        guard let amount = rate.cost(tokens) else { note(.unknownCachePrice(model)); return }
         if let index = lines.firstIndex(where: { $0.model == model }) {
-            lines[index].lowerUSD += lower; lines[index].upperUSD += upper
-        } else { lines.append(TaskAPICostLine(model: model, lowerUSD: lower, upperUSD: upper)) }
-    }
-
-    static func dsh(usage: TokenUsage, model: String?) -> Self {
-        var result = Self(usesLastModel: true)
-        guard let tokens = TaskCostTokens(usage: usage) else { result.note(.invalidUsage); return result }
-        result.add(tokens, model: model, backend: .dsh)
-        return result
+            lines[index].amountUSD += amount
+        } else { lines.append(TaskAPICostLine(model: model, amountUSD: amount)) }
     }
 }
 
@@ -174,24 +155,20 @@ enum TaskAPICostSource: Equatable, Sendable {
 }
 
 enum TaskAPICostText {
-    /// Compact display only. Historical cost arithmetic and the detailed range stay unchanged.
+    /// Compact display only. Historical cost arithmetic remains unchanged.
     static func summaryAmount(_ line: TaskAPICostLine?) -> String {
         guard let line else { return "—" }
-        guard line.lowerUSD == line.upperUSD else { return amount(line) }
-        if line.upperUSD > 0 && line.upperUSD < Decimal(string: "0.01")! { return "< US$0.01" }
-        return value(line.lowerUSD, approximate: true, digits: 2)
+        if line.amountUSD > 0 && line.amountUSD < Decimal(string: "0.01")! { return "< US$0.01" }
+        return value(line.amountUSD, digits: 2)
     }
 
     static func amount(_ line: TaskAPICostLine?) -> String {
         guard let line else { return "—" }
-        if line.upperUSD > 0 && line.upperUSD < Decimal(string: "0.001")! { return "< US$0.001" }
-        if line.lowerUSD == line.upperUSD { return value(line.lowerUSD, approximate: true) }
-        let lower = line.lowerUSD > 0 && line.lowerUSD < Decimal(string: "0.001")!
-            ? "≈ US$<0.001" : value(line.lowerUSD, approximate: true)
-        return lower + "–" + value(line.upperUSD, approximate: false)
+        if line.amountUSD > 0 && line.amountUSD < Decimal(string: "0.001")! { return "< US$0.001" }
+        return value(line.amountUSD)
     }
 
-    private static func value(_ amount: Decimal, approximate: Bool, digits: Int = 3) -> String {
+    private static func value(_ amount: Decimal, digits: Int = 3) -> String {
         if amount > 0 && amount < Decimal(string: "0.001")! { return "< US$0.001" }
         let formatter = NumberFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -199,6 +176,6 @@ enum TaskAPICostText {
         formatter.minimumFractionDigits = digits; formatter.maximumFractionDigits = digits
         formatter.roundingMode = .halfUp
         let number = formatter.string(from: NSDecimalNumber(decimal: amount)) ?? "—"
-        return (approximate ? "≈ US$" : "") + number
+        return "≈ US$" + number
     }
 }

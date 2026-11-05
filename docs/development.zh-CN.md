@@ -137,7 +137,7 @@ iconutil -c icns build/Veyra.iconset -o Veyra/AppIcon.icns
 
 布局位图不包含完整的 WindowServer 玻璃合成。最终验收需要打开真实菜单，在浅色、深色、减少透明度和增加对比度环境下检查顶部、中部、底部、快速滚动、回弹及窗口动态收缩。
 
-固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`no-quota`、`cooldown`、`task-projects`、`task-family`、`family-expanded`、`family-context`、`token-breakdown`、`token-edges`、`api-costs`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`，以及纯 dsh、无来源和混合故障场景。完整列表以 `AppArguments.MenuScenario` 为准。
+固定场景包括 `loading`、`empty`、`single`、`long-title`、`multiple`、`quotas`、`error`、`expanded`、`unknown`、`edge-cases`、`no-quota`、`cooldown`、`task-projects`、`task-family`、`family-expanded`、`family-context`、`token-breakdown`、`token-edges`、`api-costs`、`quota-ring-low`、`quota-ring-high` 和 `refreshing`，以及 `tasks-only`、`quota-only` 和 `no-sources` 能力场景。完整列表以 `AppArguments.MenuScenario` 为准。
 
 额度预览不依赖模型或服务商配置；不同配置不再控制额度显示与轮询。
 
@@ -168,7 +168,7 @@ python3 scripts/measure_energy.py \
   --scenario panel --output build/energy/panel.json
 ```
 
-脚本为 Codex 与 dsh 分别创建临时数据目录，不继承真实数据目录或账号环境变量。预检和测量进程均通过 `-codexHome`、`-codexExecutable`、`-dshHome` 显式覆盖已保存的手动路径，不修改用户原有设置。测量进程使用 `--energy-benchmark`，关闭更新检查与全局快捷键。诊断预检必须确认应用支持此隔离模式；旧构建会明确失败，需先重新构建。
+脚本为 Codex 创建临时数据目录，不继承真实数据目录或账号环境变量。预检和测量进程均通过 `-codexHome`、`-codexExecutable` 显式覆盖已保存的手动路径，不修改用户原有设置。测量进程使用 `--energy-benchmark`，关闭更新检查与全局快捷键。诊断预检必须确认应用支持此隔离模式；旧构建会明确失败，需先重新构建。
 
 进程创建后立即注册清理。就绪等待与退出等待均有时限；测量进程忽略 SIGTERM 时会升级为 SIGKILL，并通过非阻塞 `wait4` 保留生命周期 CPU 统计。预检中断、启动失败、采样失败及脚本收到 SIGINT/SIGTERM 时也会回收子进程。测量进程提前退出会报错，不生成本次结果；测量秒数必须为正数。
 
@@ -201,15 +201,10 @@ python3 scripts/measure_energy.py \
 
 `previews menu --native-only --language en` 可仅执行六种固定外观的原生弹窗检查。其缓存范围与完整预览分开，不能替代完整中英文布局证据。
 
-GUI 夹具的许可、进程回执、隔离数据和布局先写入临时验证目录，避免 Documents 的访问检查阻塞启动；完成或失败后将证据归档到仓库的本次输出目录。布局预览与原生菜单夹具均通过 LaunchServices 启动独立的 Debug 应用实例，传入固定预览参数和隔离 `CODEX_HOME`，以支持布局夹具内的原生键盘检查。菜单键盘检查要求应用已激活、弹窗是 key window，且任务用量展开按钮已成为 first responder，再通过原生窗口发送合成 Escape 事件。纯 dsh 场景也检查真实 key window 和 Escape 关闭。菜单专项先等待独立身份的固定宿主激活，再启动预览；宿主只向预览 PID 交出激活权限。结果同时记录 `appWasActive`、`windowWasKey`、`openedFromBackground`、`previousApplicationRestored`；缺少任一焦点证据不能算通过。这仍是合成事件证据，不代表硬件键盘或 VoiceOver 人工验收。
+GUI 夹具的许可、进程回执、隔离数据和布局先写入临时验证目录，避免 Documents 的访问检查阻塞启动；完成或失败后将证据归档到仓库的本次输出目录。布局预览与原生菜单夹具均通过 LaunchServices 启动独立的 Debug 应用实例，传入固定预览参数和隔离 `CODEX_HOME`，以支持布局夹具内的原生键盘检查。菜单键盘检查要求应用已激活、弹窗是 key window，且任务用量展开按钮已成为 first responder，再通过原生窗口发送合成 Escape 事件。仅本地 Codex 任务且无额度服务的场景也检查真实 key window 和 Escape 关闭。菜单专项先等待独立身份的固定宿主激活，再启动预览；宿主只向预览 PID 交出激活权限。结果同时记录 `appWasActive`、`windowWasKey`、`openedFromBackground`、`previousApplicationRestored`；缺少任一焦点证据不能算通过。这仍是合成事件证据，不代表硬件键盘或 VoiceOver 人工验收。
 
 每次夹具启动都有独立许可和进程回执。超时或中断先撤销许可；迟到的应用实例会在初始化 AppKit 前退出。已运行的实例只有在 PID、进程组、可执行文件路径和本次启动标识全部匹配时才会回收。LaunchServices 启动器返回零不能证明应用检查通过，运行器还要求有效的 `layouts.json` 或 `menu-check.json`。这些检查不启动已安装应用，不扩大通用命令权限。
 
 焦点交接必须先确认宿主位于前台，再发送 `focus-request`；请求之后不能再重复激活宿主，否则可能取消其刚交出的激活权。宿主仅负责交接，实际菜单仍需通过 active、key window、Escape 与前台恢复断言。宿主日志立即记录交接状态；测试期间切换其他应用仍可能中断检查，此类失败保留为失败，不能按成功缓存。修复与补验证据见[历史验证记录](history/validation-log-2026-10-31.md#2026-10-31-原生外观补验与焦点握手修复)。
 
 指定预览外观时，菜单夹具直接设置 `NSPopover.appearance` 及其窗口外观，以覆盖弹窗默认的浅色内容外观。原生检查在截图前核对实际 `effectiveAppearance`；`menu-check.json` 的 `appearance` 记录包含请求、系统解析与实际外观，并核对对比度和降低透明度夹具开关。实际外观必须与系统解析结果一致且保持请求的浅深色归属。当前系统会将手动高对比度外观解析为普通 Aqua／DarkAqua，应用仍使用既有对比度绘制夹具；此检查不修改全局辅助显示设置。仅场景名称或交互通过不足以证明外观正确。
-
-
-### 纯 dsh 体验验证
-
-使用 `/usr/bin/python3 -I -B scripts/verify_local.py previews menu --dsh-only` 渲染中英文的纯 dsh、空闲、未确认、故障、无数据源、另一来源故障及通用设置夹具。保留六种原生菜单外观检查，验证纯 dsh 下隐藏额度、任务数与 Escape 关闭。输出包含布局位图及 `menu-check.json`，不访问真实账号。它与完整预览使用独立证据，不能替代完整预览。

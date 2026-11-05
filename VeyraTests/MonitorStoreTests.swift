@@ -67,20 +67,6 @@ final class MonitorStoreTests: XCTestCase {
         return defaults
     }
 
-    /// A suite whose dsh data directory is a temp folder. Use it only where the
-    /// store actually produces dsh tasks: the default project resolver reads
-    /// that directory, and a test must never inspect the developer's ~/.dsh.
-    /// (Presetting a path would also turn a "dsh not installed" read into the
-    /// configured-but-missing warning, so it is not the default suite.)
-    private func dshIsolatedDefaults(home: URL) -> UserDefaults {
-        let defaults = defaults(home: home)
-        let dshHome = FileManager.default.temporaryDirectory
-            .appendingPathComponent("veyra-dsh-" + UUID().uuidString, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dshHome, withIntermediateDirectories: true)
-        defaults.set(dshHome.path, forKey: "dshHome")
-        addTeardownBlock { try? FileManager.default.removeItem(at: dshHome) }
-        return defaults
-    }
     private var verifiedQuota: QuotaRefresh {
         let account = AccountSnapshot(json: .object(["type": .string("chatgpt"), "email": .string("a@example.invalid")]), accountID: "account-a")
         let window = QuotaWindow(id: "codex:primary", bucketID: "codex", bucketName: "Codex", isPrimary: true,
@@ -93,7 +79,7 @@ final class MonitorStoreTests: XCTestCase {
             let folder = try SQLiteFixture(), fixture = MonitorFixture()
             await fixture.setNetwork(verifiedQuota)
             var now = Date(timeIntervalSince1970: 300)
-            let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+            let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                      now: { now }, defaults: defaults(home: folder.home))
             await store.refreshAll()
             await store.calibrateQuota()
@@ -118,7 +104,7 @@ final class MonitorStoreTests: XCTestCase {
         let verified = verifiedQuota
         await fixture.setNetwork(verified)
         var now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        let store = MonitorStore(fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
         await store.calibrateQuota()
         await fixture.setNetwork(QuotaRefresh(error: .timeout))
         now = now.addingTimeInterval(61)
@@ -135,7 +121,7 @@ final class MonitorStoreTests: XCTestCase {
             online.snapshot = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimits":{"primary":{"usedPercent":97,"windowDurationMins":10080},"secondary":{"usedPercent":20,"windowDurationMins":300}}}"#.utf8)))
             await fixture.setNetwork(online)
             var now = Date(timeIntervalSince1970: 300)
-            let store = MonitorStore(readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+            let store = MonitorStore(fetchQuota: { _ in await fixture.network() },
                                      now: { now }, defaults: defaults(home: folder.home))
             await store.calibrateQuota()
             XCTAssertEqual(store.menuQuotaWindows.map(\.durationMinutes), [300, 10_080])
@@ -160,7 +146,7 @@ final class MonitorStoreTests: XCTestCase {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         await fixture.setNetwork(verifiedQuota)
         var now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+        let store = MonitorStore(fetchQuota: { _ in await fixture.network() },
                                  now: { now }, defaults: defaults(home: folder.home))
         await store.calibrateQuota()
         for _ in 0..<10 { await store.calibrateQuota() }
@@ -179,7 +165,7 @@ final class MonitorStoreTests: XCTestCase {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         await fixture.setNetwork(verifiedQuota)
         let now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                  now: { now }, defaults: defaults(home: folder.home))
         await store.refreshAll()
         await store.calibrateQuota()
@@ -198,7 +184,7 @@ final class MonitorStoreTests: XCTestCase {
             let folder = try SQLiteFixture(), fixture = MonitorFixture()
             await fixture.setNetwork(verifiedQuota)
             var now = Date(timeIntervalSince1970: 300)
-            let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+            let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                      now: { now }, defaults: defaults(home: folder.home))
             await store.refreshAll()
             await store.calibrateQuota()
@@ -222,7 +208,7 @@ final class MonitorStoreTests: XCTestCase {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock(), active = Flag()
         let store = MonitorStore(readLocal: { _ in
             TaskReadResult(tasks: await active.get() ? [Self.codexTask()] : [], fetchedAt: .now, warning: nil)
-        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
         now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
         store.start(); await store.refreshAll(); await drain()
         var counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
@@ -249,7 +235,7 @@ final class MonitorStoreTests: XCTestCase {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock(), active = Flag()
         let store = MonitorStore(readLocal: { _ in
             TaskReadResult(tasks: await active.get() ? [Self.codexTask()] : [], fetchedAt: .now, warning: nil)
-        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
         now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
         store.start(); await store.refreshAll(); await drain()
         clock.advance(120); await drain()
@@ -266,8 +252,7 @@ final class MonitorStoreTests: XCTestCase {
         let reader = LocalTaskReader(collectEvidence: { _ in ProcessEvidence(threadIDs: ["running"]) })
         let online = verifiedQuota
         await fixture.setNetwork(online)
-        let store = MonitorStore(readLocal: { try await reader.fetch(home: $0) }, readDsh: { _ in .empty },
-            fetchQuota: { _ in await fixture.network() }, clock: clock.clock, defaults: defaults(home: folder.home))
+        let store = MonitorStore(readLocal: { try await reader.fetch(home: $0) }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock, defaults: defaults(home: folder.home))
         store.start(); await store.refreshAll(); await store.calibrateQuota(); await drain()
         for _ in 0..<3 {
             let update = #"{"type":"event_msg","timestamp":"2026-10-30T06:00:00Z","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":456}},"rate_limits":{"primary":{"used_percent":99,"window_minutes":300}}}}"# + "\n"
@@ -290,8 +275,7 @@ final class MonitorStoreTests: XCTestCase {
     func testConfigurationChangesDoNotHideQuotaOrDiscardPendingResponse() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         await fixture.setNetwork(verifiedQuota)
-        let store = MonitorStore(readLocal: { _ in TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil) }, readDsh: { _ in .empty },
-            fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        let store = MonitorStore(readLocal: { _ in TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil) }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
             now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
         await fixture.hold()
         let request = Task { await store.calibrateQuota() }
@@ -319,7 +303,7 @@ final class MonitorStoreTests: XCTestCase {
         await fixture.setNetwork(QuotaRefresh(error: .rateLimited, didRequestQuota: true))
         let store = MonitorStore(readLocal: { _ in
             TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
-        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
         now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
         store.start(); await store.refreshAll(); await drain()
         clock.advance(299); await drain(); await store.calibrateQuota()
@@ -334,7 +318,7 @@ final class MonitorStoreTests: XCTestCase {
     func testManualRequestsCoalesceAndAuthenticationChangeInvalidatesNetworkResult() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
         let now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                  clock: clock.clock, now: { now }, defaults: defaults(home: folder.home))
         await store.refreshAll()
         await fixture.hold()
@@ -357,7 +341,7 @@ final class MonitorStoreTests: XCTestCase {
     }
     func testAutomaticPathCommitRefreshesTasksAndOnlineQuota() async throws {
         let firstHome = try SQLiteFixture(), secondHome = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                  clock: clock.clock, defaults: defaults(home: firstHome.home))
         await store.refreshAll()
         let before = await fixture.counts()
@@ -375,7 +359,7 @@ final class MonitorStoreTests: XCTestCase {
 
     func testSavingSettingsClearsCachesAndStartsQuotaForNewLocation() async throws {
         let firstHome = try SQLiteFixture(), secondHome = try SQLiteFixture(), fixture = MonitorFixture(), clock = TestPollingClock()
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                  clock: clock.clock, defaults: defaults(home: firstHome.home))
         await store.calibrateQuota()
         XCTAssertNotNil(store.nextCalibrationAt)
@@ -392,7 +376,7 @@ final class MonitorStoreTests: XCTestCase {
     func testOnlineQuotaAndCreditsSurviveTaskRefreshAndClearOnSettingsChange() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         var now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() },
                                  now: { now }, defaults: defaults(home: folder.home))
         await store.refreshAll()
         for count: Int64 in [3, 2] {
@@ -422,90 +406,26 @@ final class MonitorStoreTests: XCTestCase {
         TaskSnapshot(id: id, title: "Codex task", model: nil, source: .desktop, parentID: nil,
                      startedAt: nil, updatedAt: .distantPast, tokens: TokenUsage(), activity: .running)
     }
-    private nonisolated static func dshTask(id: String = "dsh:s1") -> TaskSnapshot {
-        TaskSnapshot(id: id, title: "dsh task", model: nil, source: .desktop, parentID: nil,
-                     startedAt: nil, updatedAt: .distantPast, tokens: TokenUsage(), activity: .running, backend: .dsh)
-    }
-    private nonisolated static func dshRead(_ tasks: [TaskSnapshot], warning: String? = nil) -> DshTaskRead {
-        DshTaskRead(tasks: tasks, fetchedAt: .now, warning: warning, parsedFiles: tasks.count, skippedFiles: 0)
-    }
-
-    func testMergesBothBackendsIntoTasksAndRunningCount() async throws {
-        let folder = try SQLiteFixture(), fixture = MonitorFixture()
-        let store = MonitorStore(
-            readLocal: { _ in TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil) },
-            readDsh: { _ in Self.dshRead([Self.dshTask()]) },
-            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
+    func testCodexFailureMarksCachedTasksUncertainAndRecoveryRestoresRunning() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture(), fail = Flag()
+        let store = MonitorStore(readLocal: { _ in
+            if await fail.get() { throw MonitorFailure("fixture") }
+            return TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
+        }, fetchQuota: { _ in await fixture.network() }, defaults: defaults(home: folder.home))
         await store.refreshAll()
-        XCTAssertEqual(Set(store.tasks.map(\.id)), ["cx-1", "dsh:s1"])
-        XCTAssertEqual(store.runningTasks.count, 2)
-        XCTAssertNil(store.dshWarning)
-        store.stop()
-    }
-
-    func testDshWarningEmptiesDshTasksButLeavesCodexIntact() async throws {
-        let folder = try SQLiteFixture(), fixture = MonitorFixture()
-        let broken = Flag()
-        let store = MonitorStore(
-            readLocal: { _ in TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil) },
-            readDsh: { _ in await broken.get()
-                ? Self.dshRead([], warning: "dsh broken")
-                : Self.dshRead([Self.dshTask()]) },
-            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
-        await store.refreshAll()
-        XCTAssertEqual(Set(store.tasks.map(\.id)), ["cx-1", "dsh:s1"])
-        XCTAssertNil(store.dshWarning)
-        // The dsh backend degrades alone: its tasks leave, Codex stays running.
-        await broken.set(true)
-        await store.refreshAll()
-        XCTAssertEqual(store.tasks.map(\.id), ["cx-1"])
-        XCTAssertEqual(store.tasks.first?.activity, .running)
-        XCTAssertEqual(store.dshWarning, "dsh broken")
-        XCTAssertNil(store.taskError)
-        // Recovery clears the warning and restores dsh tasks.
-        await broken.set(false)
-        await store.refreshAll()
-        XCTAssertEqual(Set(store.tasks.map(\.id)), ["cx-1", "dsh:s1"])
-        XCTAssertNil(store.dshWarning)
-        store.stop()
-    }
-
-    func testCodexFailureMarksOnlyCodexTasksUncertain() async throws {
-        let folder = try SQLiteFixture(), fixture = MonitorFixture()
-        let fail = Flag()
-        let store = MonitorStore(
-            readLocal: { _ in
-                if await fail.get() { throw MonitorFailure("fixture") }
-                return TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
-            },
-            readDsh: { _ in Self.dshRead([Self.dshTask()]) },
-            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
-        await store.refreshAll()
-        XCTAssertEqual(store.runningTasks.count, 2)
+        XCTAssertEqual(store.runningTasks.count, 1)
         await fail.set(true)
         await store.refreshAll()
-        XCTAssertEqual(store.tasks.first { $0.id == "cx-1" }?.activity, .unknown)
-        XCTAssertEqual(store.tasks.first { $0.id == "dsh:s1" }?.activity, .running)
+        XCTAssertEqual(store.tasks.map(\.activity), [.unknown])
+        XCTAssertEqual(store.runningTasks.count, 0)
         XCTAssertNotNil(store.taskError)
-        XCTAssertNil(store.dshWarning)
+        await fail.set(false)
+        await store.refreshAll()
+        XCTAssertEqual(store.tasks.map(\.activity), [.running])
+        XCTAssertNil(store.taskError)
         store.stop()
     }
 
-    func testSaveCodexSettingsPreservesDshState() async throws {
-        let folder = try SQLiteFixture(), fixture = MonitorFixture()
-        let store = MonitorStore(
-            readLocal: { _ in TaskReadResult(tasks: [], fetchedAt: .now, warning: nil) },
-            readDsh: { _ in Self.dshRead([Self.dshTask()], warning: "dsh broken") },
-            fetchQuota: { _ in await fixture.network() }, defaults: dshIsolatedDefaults(home: folder.home))
-        await store.refreshAll()
-        XCTAssertEqual(store.tasks.map(\.id), ["dsh:s1"])
-        XCTAssertEqual(store.dshWarning, "dsh broken")
-        store.saveSettings(home: folder.home.path, executable: "")
-        XCTAssertEqual(store.tasks.map(\.id), ["dsh:s1"])
-        XCTAssertEqual(store.dshWarning, "dsh broken")
-        store.stop()
-        await drain()
-    }
 }
 
 private actor Flag {
@@ -516,28 +436,25 @@ private actor Flag {
 
 @MainActor
 extension MonitorStoreTests {
-    func testTaskWarningsShareOneSummaryAndClearAfterBothSourcesRecover() async throws {
+    func testTaskWarningSharesOneSummaryAndClearsAfterRecovery() async throws {
         let folder = try SQLiteFixture(), broken = Flag()
         await broken.set(true)
         let store = MonitorStore(readLocal: { _ in
             TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now,
                            warning: await broken.get() ? .historyUnavailable : nil)
-        }, readDsh: { _ in
-            Self.dshRead([Self.dshTask()], warning: await broken.get() ? "dsh unreadable" : nil)
-        }, defaults: dshIsolatedDefaults(home: folder.home))
+        }, defaults: defaults(home: folder.home))
         await store.refreshAll()
         let summary = try XCTUnwrap(store.taskSourceWarningSummary)
         XCTAssertTrue(store.hasSourceWarning)
         XCTAssertEqual(store.taskWarning, .historyUnavailable, "Unproven history fallback remains visible")
-        XCTAssertNotNil(store.dshWarning)
-        XCTAssertEqual(store.menuTaskCount, "2")
+        XCTAssertEqual(store.menuTaskCount, "1")
         XCTAssertEqual(store.menuLabel.components(separatedBy: summary).count - 1, 1)
 
         await broken.set(false)
         await store.refreshAll()
         XCTAssertNil(store.taskSourceWarningSummary)
         XCTAssertFalse(store.hasSourceWarning)
-        XCTAssertEqual(store.menuTaskCount, "2")
+        XCTAssertEqual(store.menuTaskCount, "1")
         XCTAssertFalse(store.menuLabel.contains(summary))
         store.stop()
     }
@@ -550,8 +467,7 @@ extension MonitorStoreTests {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         await fixture.setNetwork(verifiedQuota)
         var now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
-            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
         await store.calibrateQuota()
         let original = store.quota.snapshot
         let config = folder.home.appendingPathComponent("config.toml")
@@ -577,8 +493,7 @@ extension MonitorStoreTests {
         let error = try JSONValue.decode(Data(#"{"code":-32000,"data":{"status":429,"retryAfterSeconds":7200}}"#.utf8))
         await fixture.setNetwork(QuotaRefresh(error: .rateLimited, failureDetails: QuotaFailureDetails(rpcError: error), didRequestQuota: true))
         let now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
-            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
         await store.calibrateQuota()
         let retryAt = try XCTUnwrap(store.nextCalibrationAt)
         XCTAssertEqual(retryAt, now.addingTimeInterval(7200))
@@ -597,8 +512,7 @@ extension MonitorStoreTests {
     func testLocalRefreshRemainsIndependentOfPendingQuotaAndCooldown() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         let now = Date(timeIntervalSince1970: 300)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
-            fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() }, now: { now }, defaults: defaults(home: folder.home))
         await store.refreshAll()
         await fixture.hold()
         let quota = Task { await store.calibrateQuota() }
@@ -628,7 +542,7 @@ extension MonitorStoreTests {
         await fixture.setNetwork(QuotaRefresh(error: .rateLimited, failureDetails: QuotaFailureDetails(rpcError: error), didRequestQuota: true))
         let store = MonitorStore(readLocal: { _ in
             TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now, warning: nil)
-        }, readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
             now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: defaults(home: folder.home))
         await fixture.hold()
         let first = Task { await store.calibrateQuota() }
@@ -666,8 +580,7 @@ extension MonitorStoreTests {
         let settings = defaults(home: folder.home)
         settings.set(executable.path, forKey: "codexExecutable")
         await fixture.setNetwork(verifiedQuota)
-        let store = MonitorStore(readLocal: { _ in await fixture.read() }, readDsh: { _ in .empty },
-            fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
+        let store = MonitorStore(readLocal: { _ in await fixture.read() }, fetchQuota: { _ in await fixture.network() }, clock: clock.clock,
             now: { Date(timeIntervalSince1970: 300 + Double(clock.instant.components.seconds)) }, defaults: settings)
         await fixture.hold()
         let pending = Task { await store.calibrateQuota() }
@@ -702,8 +615,7 @@ extension MonitorStoreTests {
             isPrimary: true, usedPercent: 60, durationMinutes: 300, resetsAt: nil)], fetchedAt: .now, accountID: "new-account")
         await current.setNetwork(newResult)
         let oldURL = oldHome.home
-        let store = MonitorStore(readLocal: { _ in await current.read() }, readDsh: { _ in .empty },
-            fetchQuota: { location in await (location.home.path == oldURL.path ? old : current).network() },
+        let store = MonitorStore(readLocal: { _ in await current.read() }, fetchQuota: { location in await (location.home.path == oldURL.path ? old : current).network() },
             clock: clock.clock, defaults: defaults(home: oldHome.home))
         await old.hold()
         let pending = Task { await store.calibrateQuota() }

@@ -48,9 +48,6 @@ struct TaskAPICostView: View {
         var details: [TaskInfoDetail] = []
         if let estimate = displayed {
             paragraphs += estimate.issues.map(\.text)
-            if estimate.usesLastModel {
-                paragraphs.append(L10n.text("Based on the last model; historical model changes may affect the estimate."))
-            }
             details.append(TaskInfoDetail(label: L10n.text("Total"), value: TaskAPICostText.amount(estimate.total)))
             details += estimate.lines.map { TaskInfoDetail(label: $0.model, value: TaskAPICostText.amount($0)) }
         } else {

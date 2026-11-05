@@ -7,11 +7,11 @@ final class TaskProjectTests: XCTestCase {
         TaskProject(id: id, name: name, roots: roots)
     }
     private func task(_ id: String, path: String? = nil, projectID: String? = nil,
-                      source: TaskSource = .cli, parent: String? = nil, backend: TaskBackend = .codex,
+                      source: TaskSource = .cli, parent: String? = nil,
                       assignment: TaskProjectAssignment = .unavailable, activity: TaskActivity = .running) -> TaskSnapshot {
         TaskSnapshot(id: id, title: id, model: nil, source: source, parentID: parent,
                      startedAt: nil, updatedAt: date, tokens: TokenUsage(), activity: activity,
-                     backend: backend, workingDirectory: path, projectID: projectID, projectAssignment: assignment)
+                     workingDirectory: path, projectID: projectID, projectAssignment: assignment)
     }
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -72,24 +72,23 @@ final class TaskProjectTests: XCTestCase {
             XCTAssertEqual(result.tasks.map(\.projectAssignment), [
                 .project(p), .unassigned, .project(p), .project(p), .unavailable, .unassigned])
             XCTAssertEqual(result.ancestors.first?.projectAssignment, .project(p))
-            XCTAssertTrue(result.tasks.allSatisfy { $0.activity == .running && $0.backend == .codex })
+            XCTAssertTrue(result.tasks.allSatisfy { $0.activity == .running })
         }
     }
 
-    func testLongestRootPathBoundariesAmbiguityAndDshInference() async {
+    func testLongestRootPathBoundariesAndAmbiguity() async {
         let broad = project("broad", roots: ["/workspace", "/shared"])
         let nested = project("nested", roots: ["/workspace/app", "/other"])
         let overlap = project("overlap", roots: ["/shared"])
-        let context = TaskProjectContext(projects: [broad.id: broad, nested.id: nested, overlap.id: overlap],
-                                         assignments: ["dsh:1": "broad"])
+        let context = TaskProjectContext(projects: [broad.id: broad, nested.id: nested, overlap.id: overlap])
         let result = await TaskProjectResolver().resolve(tasks: [
             task("nested", path: "/workspace/app/src"), task("prefix", path: "/workspace/application"),
             task("ambiguous", path: "/shared/sub"), task("outside", path: "/workspaces"),
-            task("other", path: "/other/sub"), task("dsh:1", path: "/other/sub", backend: .dsh),
+            task("other", path: "/other/sub"),
             task("relative", path: "workspace/app"), task("no-path")], ancestors: [], context: context, now: date)
         XCTAssertEqual(result.tasks.map(\.projectAssignment), [
             .project(nested), .project(broad), .unavailable, .unavailable,
-            .project(nested), .project(nested), .unavailable, .unavailable])
+            .project(nested), .unavailable, .unavailable])
     }
 
     func testCorruptDesktopMappingDoesNotGuessDesktopMembershipButOtherSourcesCanInfer() async {
@@ -97,11 +96,11 @@ final class TaskProjectTests: XCTestCase {
         let context = TaskProjectContext(projects: [p.id: p], desktopStateUnreadable: true)
         let result = await TaskProjectResolver().resolve(tasks: [
             task("desktop", path: "/repo", projectID: p.id, source: .desktop),
-            task("cli", path: "/repo"), task("dsh:1", path: "/repo", source: .desktop, backend: .dsh),
+            task("cli", path: "/repo"),
             task("child", path: "/repo", source: .subtask)],
             ancestors: [], context: context, now: date)
-        XCTAssertEqual(result.tasks.map(\.projectAssignment), [.unassigned, .project(p), .project(p), .unassigned])
-        XCTAssertEqual(result.tasks.map(\.activity), [.running, .running, .running, .running])
+        XCTAssertEqual(result.tasks.map(\.projectAssignment), [.unassigned, .project(p), .unassigned])
+        XCTAssertEqual(result.tasks.map(\.activity), [.running, .running, .running])
     }
 
     func testMainCheckoutRelativeWorktreesSubdirectoriesSymlinksAndIndependentClone() async throws {
@@ -205,7 +204,7 @@ final class TaskProjectTests: XCTestCase {
         let tasks = [task("root"), task("child", parent: "root"),
                      task("deep", parent: "child", activity: .unknown),
                      task("standalone-subagent", source: .subtask),
-                     task("dsh", backend: .dsh), task("unknown-main", activity: .unknown)]
+                     task("other"), task("unknown-main", activity: .unknown)]
         let project = TaskProjectGroup(project: nil, groups: TaskGroup.make(tasks: tasks, ancestors: []))
         XCTAssertEqual(project.counts(for: .running), TaskProjectCounts(main: 2, subtasks: 2))
         XCTAssertEqual(project.counts(for: .unknown), TaskProjectCounts(main: 1, subtasks: 1))
@@ -225,19 +224,16 @@ final class TaskProjectTests: XCTestCase {
         XCTAssertEqual(mixed.counts(for: .unknown), TaskProjectCounts(main: 1, subtasks: 0))
     }
 
-    func testDshSubagentRowsCountAsSubtasksAndRootsAsMainTasks() {
-        // dsh spawns a session per subagent; the catalog link makes the row a
-        // subtask, so a fan-out never reads as that many independent tasks.
-        let child = task("dsh:child", source: .subtask, backend: .dsh)
-        let row = TaskGroupRow(reference: TaskReference(id: child.id, title: child.title, parentID: "dsh:parent",
-                                                        backend: .dsh),
+    func testLinkedSubagentsCountAsSubtasksAndRootsAsMainTasks() {
+        // A linked subagent remains a subtask while its root counts as a main task.
+        let child = task("linked-child", source: .subtask)
+        let row = TaskGroupRow(reference: TaskReference(id: child.id, title: child.title, parentID: "linked-parent"),
                                task: child, parentTitle: "Parent", depth: 1)
         XCTAssertTrue(row.isSubagent)
         let project = TaskProjectGroup(project: nil, groups: [TaskGroup(id: row.id, rows: [row])])
         XCTAssertEqual(project.counts(for: .running), TaskProjectCounts(main: 0, subtasks: 1))
-        let parent = task("dsh:parent", backend: .dsh)
-        let root = TaskGroupRow(reference: TaskReference(id: parent.id, title: parent.title, parentID: nil,
-                                                        backend: .dsh),
+        let parent = task("linked-parent")
+        let root = TaskGroupRow(reference: TaskReference(id: parent.id, title: parent.title, parentID: nil),
                                 task: parent, parentTitle: nil, depth: 0)
         XCTAssertFalse(root.isSubagent)
     }

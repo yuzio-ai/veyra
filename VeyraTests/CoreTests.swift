@@ -247,57 +247,8 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(evidence.rolloutPaths, [home.path + "/sessions/rollout.jsonl"])
     }
 
-    func testDshProcessEvidenceKeepsOnlySessionLocksUnderHome() {
-        let home = URL(fileURLWithPath: "/private/tmp/dsh-fixture")
-        let session = "session-" + UUID().uuidString.lowercased()
-        let log = """
-        p91272
-        cnode
-        n\(home.path)/sessions/--tmp-work--/\(session)/session.lock
-        n\(home.path)/sessions/--tmp-work--/\(session)/session.v3.jsonl.zstd
-        n\(home.path)/storages/session_projcache/sessions/\(session).json
-        n/private/tmp/other/.dsh/sessions/--x--/session-a/session.lock
-        p91300
-        cnode
-        n\(home.path)/sessions/--tmp-web--/614ab421-be16-4441-8a31-85711cf32e5a/session.lock
-        """
-        let evidence = DshProcessEvidence.parse(log, home: home)
-        XCTAssertEqual(evidence.sessionIDs, [session, "614ab421-be16-4441-8a31-85711cf32e5a"])
-        XCTAssertTrue(evidence.matches(sessionID: session))
-        XCTAssertFalse(evidence.matches(sessionID: "session-a"))
-    }
 
-    func testDshProcessEvidenceKeepsDesktopHarnessSessionLocks() {
-        // `parse` ignores `c` lines, so pin the scanned process list and the
-        // assembled `lsof` invocation — otherwise this test would pass with or
-        // without the fix.
-        XCTAssertEqual(DshProcessEvidence.processNames, ["node", "DeepSeek", "dsh"])
-        XCTAssertEqual(DshProcessEvidence.lsofArguments,
-                       ["-nP", "-Fpcn", "-c", "node", "-c", "DeepSeek", "-c", "dsh"])
-        let home = URL(fileURLWithPath: "/Users/example/.dsh")
-        let session = "session-" + UUID().uuidString.lowercased()
-        let log = """
-        p95082
-        cDeepSeek Harness
-        n\(home.path)/sessions/--work--/\(session)/session.lock
-        p95083
-        cDeepSeek Harness Helper
-        n\(home.path)/sessions/--work--/614ab421-be16-4441-8a31-85711cf32e5a/session.lock
-        """
-        let evidence = DshProcessEvidence.parse(log, home: home)
-        XCTAssertEqual(evidence.sessionIDs, [session, "614ab421-be16-4441-8a31-85711cf32e5a"])
-        XCTAssertTrue(evidence.matches(sessionID: session))
-    }
 
-    func testDshLocationPrefersEnvironmentAndExpandsTilde() {
-        let resolved = DshLocation.resolve(environment: ["DSH_HOME": "~/custom-dsh"])
-        XCTAssertEqual(resolved.home.path,
-                       FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("custom-dsh").path)
-        let fallback = DshLocation.resolve(environment: [:])
-        XCTAssertEqual(fallback.home.path,
-                       FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dsh").path)
-        XCTAssertEqual(DshLocation.resolve(environment: ["DSH_HOME": ""]).home, fallback.home)
-    }
 
     func testSQLiteReadsExistingDataWithoutCreatingMissingDB() throws {
         let folder = try temp(), url = folder.appendingPathComponent("state_5.sqlite")

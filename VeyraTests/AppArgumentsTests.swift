@@ -19,7 +19,9 @@ final class AppArgumentsTests: XCTestCase {
     }
     func testRemovedUnknownAndDuplicatePreviewValuesAreRejected() {
         for arguments in [
-            ["--preview-menu", "custom-model"], ["--preview-menu", "unknown-scenario"],
+            ["--preview-menu", "custom-model"], ["--preview-menu", "dsh-only"],
+            ["--preview-menu", "dsh-idle"], ["--preview-menu", "dsh-unknown"], ["--preview-menu", "dsh-error"],
+            ["--render-previews", "/tmp/fixture", "--preview-dsh-only"], ["--preview-menu", "unknown-scenario"],
             ["--preview-menu", "single", "--preview-appearance", "purple"],
             ["--preview-menu", "single", "--preview-menu", "multiple"]
         ] {
@@ -44,8 +46,7 @@ final class AppArgumentsTests: XCTestCase {
         for arguments in [
             ["--render-previews", "/tmp/fixture", "--exercise-settings"],
             ["--render-previews", "/tmp/fixture", "--preview-settings-only"],
-            ["--render-previews", "/tmp/fixture", "--preview-dsh-only", "--exercise-settings"],
-            ["--preview-menu", "dsh-only", "--preview-appearance", "dark-increased", "--show-menu",
+            ["--preview-menu", "tasks-only", "--preview-appearance", "dark-increased", "--show-menu",
              "--exercise-menu-to", "/tmp/fixture", "--exit-after-menu-checks"],
             ["--preview-focus-host", "/tmp/fixture", "--preview-lease", UUID().uuidString],
             ["--energy-benchmark", "--diagnose", "--network"],

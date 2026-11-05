@@ -54,7 +54,7 @@ struct TaskAPICostLedger: Sendable {
         }
         guard let delta = current.difference(from: previous) else { estimate.note(.invalidUsage); return }
         if delta == .zero && sawUsage { return }
-        estimate.add(delta, model: model, backend: .codex)
+        estimate.add(delta, model: model)
     }
 
     func result(expected: TokenUsage?) -> TaskAPICostEstimate {

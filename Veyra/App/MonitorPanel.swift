@@ -200,7 +200,7 @@ struct MonitorPanel: View {
                     Image(systemName: !store.sourceDetectionFinished ? "ellipsis" : "checkmark.circle")
                         .font(.system(size: 20, weight: .light)).foregroundStyle(.tertiary)
                     Text(store.noSourcesFound
-                         ? L10n.text("No local Codex or dsh data found. Choose a data directory in Settings.")
+                         ? L10n.text("No local Codex data found. Choose a data directory in Settings.")
                          : (!store.sourceDetectionFinished && !store.hasSourceWarning ? L10n.text("Reading local tasks…") : L10n.text("No confirmed running tasks")))
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 16).monitorCard()
@@ -224,7 +224,7 @@ struct MonitorPanel: View {
             }
             if let summary = store.taskSourceWarningSummary {
                 TaskSourceNotice(summary: summary, codexError: store.taskError,
-                                 codexWarning: store.taskWarning?.message, dshWarning: store.dshWarning)
+                                 codexWarning: store.taskWarning?.message)
             }
         }
     }
@@ -267,7 +267,6 @@ private struct TaskSourceNotice: View {
     let summary: String
     let codexError: String?
     let codexWarning: String?
-    let dshWarning: String?
 
     private var explanation: TaskInfoContent {
         var details: [TaskInfoDetail] = []
@@ -275,7 +274,6 @@ private struct TaskSourceNotice: View {
         if !codexMessages.isEmpty {
             details.append(TaskInfoDetail(label: "Codex", value: codexMessages.joined(separator: "\n")))
         }
-        if let dshWarning { details.append(TaskInfoDetail(label: "dsh", value: dshWarning)) }
         return TaskInfoContent(title: L10n.text("Task data status"), details: details)
     }
 
@@ -505,14 +503,10 @@ private struct TaskRow: View {
                                sourceIcon: isSubagent ? "arrow.triangle.branch" : task.source.iconName,
                                sourceDetail: isSubagent ? TaskText.subagentDetail(nickname: task.agentNickname) : task.sourceDetail,
                                model: task.model,
-                               modelDetail: TaskText.modelDetail(model: task.model, provider: task.modelProvider,
-                                                                 effort: task.reasoningEffort),
                                activity: task.activity, startedAt: task.startedAt)
             if let progress = task.progress { TaskProgressSection(progress: progress) }
-            if task.backend == .codex {
-                TaskContextUsageView(taskID: task.id, usage: task.contextUsage)
-                    .padding(.top, 4)
-            }
+            TaskContextUsageView(taskID: task.id, usage: task.contextUsage)
+                .padding(.top, 4)
             TaskTokenSummary(taskID: task.id, title: task.title, tokens: task.tokens,
                              isSubagent: isSubagent, expanded: $expanded)
                 .padding(.top, 4)
@@ -531,7 +525,6 @@ private struct TaskIdentityHeader: View {
     let sourceIcon: String
     let sourceDetail: String
     let model: String?
-    let modelDetail: String?
     let activity: TaskActivity
     let startedAt: Date?
 
@@ -569,7 +562,7 @@ private struct TaskIdentityHeader: View {
 
     private var badges: some View {
         TaskIdentityBadges(source: source, sourceIcon: sourceIcon, sourceDetail: sourceDetail,
-                           model: model, modelDetail: modelDetail)
+                           model: model)
     }
 }
 
@@ -578,7 +571,6 @@ private struct TaskIdentityBadges: View {
     let sourceIcon: String
     let sourceDetail: String
     let model: String?
-    let modelDetail: String?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -586,8 +578,8 @@ private struct TaskIdentityBadges: View {
                 .lineLimit(1).truncationMode(.tail).help(sourceDetail)
                 .accessibilityLabel(sourceDetail)
             TaskBadge(model ?? L10n.text("Unknown model"), systemImage: "sparkles")
-                .lineLimit(1).truncationMode(.tail).help(modelDetail ?? model ?? L10n.text("Unknown model"))
-                .accessibilityLabel(modelDetail ?? model ?? L10n.text("Unknown model"))
+                .lineLimit(1).truncationMode(.tail).help(model ?? L10n.text("Unknown model"))
+                .accessibilityLabel(model ?? L10n.text("Unknown model"))
         }
     }
 }
@@ -741,11 +733,9 @@ private struct TaskTokenDetails: View {
                 TaskOutputDetailLine(tokens: tokens)
             }
             TaskAPICostView(task: task)
-            if task.backend == .codex {
-                Divider().padding(.vertical, 2)
-                TaskSessionStatisticsView(taskID: task.id, source: task.apiCostSource,
-                    updatedAt: task.rolloutModifiedAt ?? task.updatedAt, tokens: task.tokens, fixture: task.sessionStatistics)
-            }
+            Divider().padding(.vertical, 2)
+            TaskSessionStatisticsView(taskID: task.id, source: task.apiCostSource,
+                updatedAt: task.rolloutModifiedAt ?? task.updatedAt, tokens: task.tokens, fixture: task.sessionStatistics)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("monitor.token-details.\(task.id)")

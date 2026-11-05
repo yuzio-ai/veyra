@@ -137,15 +137,12 @@ class EnergyIsolationTests(unittest.TestCase):
             def check_launch(command, environment):
                 self.assertIn('--energy-benchmark', command)
                 self.assertEqual(command[command.index('-codexHome') + 1], environment['CODEX_HOME'])
-                # Environment alone loses to the user's saved manual dshHome.
-                self.assertIn('-dshHome', command)
-                self.assertEqual(command[command.index('-dshHome') + 1], environment['DSH_HOME'])
-                for key in ('CODEX_HOME', 'DSH_HOME'):
+                for key in ('CODEX_HOME',):
                     path = Path(environment[key])
                     self.assertTrue(path.is_relative_to(root / 'build'))
                     self.assertTrue(path.is_dir())
-                self.assertEqual(list(Path(environment['DSH_HOME']).iterdir()), [])
                 self.assertNotIn('API_KEY', environment)
+                self.assertNotIn('DSH_HOME', environment)
                 launches.append((list(command), dict(environment)))
 
             def run(command, **kwargs):

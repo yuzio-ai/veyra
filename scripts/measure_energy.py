@@ -136,11 +136,10 @@ def main():
     with handle_termination(), tempfile.TemporaryDirectory(prefix='energy-fixture-', dir=fixture_parent) as temporary, ExitStack() as cleanup:
         root = Path(temporary)
         home = root / 'home'; home.mkdir()
-        dsh_home = root / 'dsh'; dsh_home.mkdir()
-        # Forward toolchain/session basics, never account variables or a real dsh home.
+        # Forward toolchain/session basics, never account variables or real session data.
         names = ('PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'TZ', 'DEVELOPER_DIR')
         environment = {name: os.environ[name] for name in names if name in os.environ}
-        environment.update(CODEX_HOME=str(home), DSH_HOME=str(dsh_home))
+        environment.update(CODEX_HOME=str(home))
         locks = home / 'thread-writer-locks'; locks.mkdir()
         sessions = home / 'sessions'; sessions.mkdir()
         helper = root / 'codex'
@@ -172,8 +171,7 @@ def main():
             cleanup.callback(stop_process, holder)
             wait_for_ready(holder)
         # Launch arguments override saved manual paths; environment alone does not.
-        command = [str(app), '--energy-benchmark', '-codexHome', str(home), '-codexExecutable', str(helper),
-                   '-dshHome', str(dsh_home)]
+        command = [str(app), '--energy-benchmark', '-codexHome', str(home), '-codexExecutable', str(helper)]
         # Check that the actual target app recognizes the intended process/task state.
         probe = subprocess.run(command + ['--diagnose'], env=environment,
                                capture_output=True, text=True, timeout=20, check=True)
@@ -226,7 +224,7 @@ def main():
                       'app': str(app), 'duration_seconds': elapsed, 'warmup_seconds': 10,
                       'fixture_threads': 1000, 'fixture_active_tasks': len(active),
                       'verified_running_tasks': confirmed,
-                      'isolation': {'codex_fixture': True, 'dsh_fixture': True,
+                      'isolation': {'codex_fixture': True,
                                     'updates_disabled': True, 'global_shortcut_disabled': True},
                       'main_cpu_mach_ticks': cpu_ticks, 'mach_timebase_numer': tb.numer, 'mach_timebase_denom': tb.denom,
                       'main_cpu_seconds': cpu, 'main_average_cpu_percent': cpu / elapsed * 100,

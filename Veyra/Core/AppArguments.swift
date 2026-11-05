@@ -10,8 +10,7 @@ enum AppArguments {
         case tokenBreakdown = "token-breakdown", tokenEdges = "token-edges"
         case apiCosts = "api-costs"
         case quotaRingLow = "quota-ring-low", quotaRingHigh = "quota-ring-high"
-        case dshOnly = "dsh-only", dshIdle = "dsh-idle", dshUnknown = "dsh-unknown"
-        case dshError = "dsh-error", noSources = "no-sources", mixedError = "mixed-error"
+        case tasksOnly = "tasks-only", quotaOnly = "quota-only", noSources = "no-sources"
         case refreshing
         case updateAvailable = "update-available"
         case resetCredits = "reset-credits", resetCreditsExpired = "reset-credits-expired"
@@ -30,7 +29,7 @@ enum AppArguments {
         let flags: Set<String> = [
             "--diagnose", "--network", "--energy-benchmark", "--show-menu", "--show-panel",
             "--exit-after-menu-checks", "--preview-reduce-transparency", "--preview-settings-only",
-            "--preview-dsh-only", "--exercise-settings", "--exercise-settings-only"
+            "--exercise-settings", "--exercise-settings-only"
         ]
         let valued: Set<String> = [
             "--render-previews", "--preview-menu", "--preview-appearance", "--capture-menu-to",
@@ -63,7 +62,7 @@ enum AppArguments {
         }
         let modes: Set<String> = ["--diagnose", "--render-previews", "--preview-menu", "--preview-focus-host"]
         guard supplied.intersection(modes).count <= 1 else { return false }
-        let renderModifiers: Set<String> = ["--preview-settings-only", "--preview-dsh-only",
+        let renderModifiers: Set<String> = ["--preview-settings-only",
                                             "--exercise-settings", "--exercise-settings-only"]
         if !supplied.isDisjoint(with: renderModifiers), !supplied.contains("--render-previews") { return false }
         let menuModifiers: Set<String> = ["--preview-appearance", "--preview-reduce-transparency",

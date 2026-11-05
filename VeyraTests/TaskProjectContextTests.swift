@@ -144,7 +144,7 @@ final class TaskProjectContextTests: XCTestCase {
     }
 
     @MainActor
-    func testStoreRefreshMovesAndRenamesTasksWithoutChangingActivityOrBackend() async throws {
+    func testStoreRefreshMovesAndRenamesTasksWithoutChangingActivity() async throws {
         let fixture = try SQLiteFixture(); try state(fixture)
         let suite = "veyra-project-test-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
@@ -152,11 +152,10 @@ final class TaskProjectContextTests: XCTestCase {
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
         let local = TaskSnapshot(id: "thread", title: "Task", model: nil, source: .desktop, parentID: nil,
                                  startedAt: nil, updatedAt: .now, tokens: TokenUsage(), activity: .running)
-        let dsh = TaskSnapshot(id: "dsh:s1", title: "dsh", model: nil, source: .desktop, parentID: nil,
-                               startedAt: nil, updatedAt: .now, tokens: TokenUsage(), activity: .running,
-                               backend: .dsh, workingDirectory: "/repo/sub")
-        let store = MonitorStore(readLocal: { _ in TaskReadResult(tasks: [local], fetchedAt: .now, warning: nil) },
-                                 readDsh: { _ in DshTaskRead(tasks: [dsh], fetchedAt: .now, warning: nil, parsedFiles: 1, skippedFiles: 0) },
+        let other = TaskSnapshot(id: "other", title: "Other", model: nil, source: .cli, parentID: nil,
+                                 startedAt: nil, updatedAt: .now, tokens: TokenUsage(), activity: .running,
+                                 workingDirectory: "/repo/sub")
+        let store = MonitorStore(readLocal: { _ in TaskReadResult(tasks: [local, other], fetchedAt: .now, warning: nil) },
                                  defaults: defaults)
         await store.refreshAll()
         XCTAssertEqual(store.tasks.map(\.projectAssignment).map { assignment -> String? in
@@ -167,12 +166,11 @@ final class TaskProjectContextTests: XCTestCase {
         XCTAssertEqual(store.tasks.first?.projectAssignment, .unassigned)
         XCTAssertEqual(store.tasks.last?.projectAssignment, .project(TaskProject(id: "new", name: "Renamed", roots: ["/repo", "/other"])))
         XCTAssertEqual(store.runningTasks.count, 2)
-        XCTAssertNil(store.taskError); XCTAssertNil(store.dshWarning)
+        XCTAssertNil(store.taskError)
         try Data("broken".utf8).write(to: fixture.home.appendingPathComponent(".codex-global-state.json"), options: .atomic)
         await store.refreshAll()
         XCTAssertEqual(store.tasks.map(\.activity), [.running, .running])
-        XCTAssertEqual(store.tasks.map(\.backend), [.codex, .dsh])
-        XCTAssertNil(store.taskError); XCTAssertNil(store.taskWarning); XCTAssertNil(store.dshWarning)
+        XCTAssertNil(store.taskError); XCTAssertNil(store.taskWarning)
         store.stop()
     }
 }

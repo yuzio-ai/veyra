@@ -96,7 +96,7 @@ final class LocalizationTests: XCTestCase {
                 store.taskError = nil
                 store.previewCodexServicesAvailable = false
                 XCTAssertEqual(store.menuLabel, language == "en" ? "Running 0" : "运行 0")
-                store.dshWarning = "fixture warning"
+                store.taskError = "fixture warning"
                 XCTAssertEqual(store.menuTaskCount, "0")
             }
         }

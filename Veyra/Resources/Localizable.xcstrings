@@ -37,9 +37,7 @@
         }
       }
     },
-    "·" : {
-
-    },
+    "·" : {},
     "· %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -74,9 +72,7 @@
         }
       }
     },
-    "%@" : {
-
-    },
+    "%@" : {},
     "%@ · %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -789,23 +785,6 @@
         }
       }
     },
-    "Based on the last model; historical model changes may affect the estimate." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Based on the last model; historical model changes may affect the estimate."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按最后模型折算，历史换模型可能有偏差。"
-          }
-        }
-      }
-    },
     "Cache hit %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1180,19 +1159,19 @@
         }
       }
     },
-    "Codex not detected. dsh monitoring remains available." : {
+    "Codex not detected. Check its paths in Settings." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Codex not detected. dsh monitoring remains available."
+            "value" : "Codex not detected. Check its paths in Settings."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未检测到 Codex，仍可监控 dsh。"
+            "value" : "未检测到 Codex，请在设置中检查路径。"
           }
         }
       }
@@ -1469,23 +1448,6 @@
         }
       }
     },
-    "Data directory is readable" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Data directory is readable"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "数据目录可读取"
-          }
-        }
-      }
-    },
     "Delegating subtask" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1554,23 +1516,6 @@
         }
       }
     },
-    "Detecting dsh…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Detecting dsh…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在检测 dsh…"
-          }
-        }
-      }
-    },
     "Diagnostics failed: unable to complete local diagnostics." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1618,40 +1563,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 GitHub 下载新版，然后退出 Veyra 并替换应用。"
-          }
-        }
-      }
-    },
-    "dsh data directory" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dsh data directory"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dsh 数据目录"
-          }
-        }
-      }
-    },
-    "dsh data not found. Choose its data directory if needed." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dsh data not found. Choose its data directory if needed."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未发现 dsh 数据，可选择其数据目录。"
           }
         }
       }
@@ -2030,23 +1941,6 @@
         }
       }
     },
-    "Monitor tasks on this Mac without installing Codex." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Monitor tasks on this Mac without installing Codex."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "监控本机任务，无需安装 Codex。"
-          }
-        }
-      }
-    },
     "New version available: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2081,19 +1975,19 @@
         }
       }
     },
-    "No local Codex or dsh data found. Choose a data directory in Settings." : {
+    "No local Codex data found. Choose a data directory in Settings." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No local Codex or dsh data found. Choose a data directory in Settings."
+            "value" : "No local Codex data found. Choose a data directory in Settings."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未发现本地 Codex 或 dsh 数据，可在设置中选择数据目录。"
+            "value" : "未发现本地 Codex 数据，可在设置中选择数据目录。"
           }
         }
       }
@@ -2370,23 +2264,6 @@
         }
       }
     },
-    "provider %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "provider %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "服务商 %@"
-          }
-        }
-      }
-    },
     "Quit Veyra" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2536,23 +2413,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在读取本机任务…"
-          }
-        }
-      }
-    },
-    "reasoning %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "reasoning %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "推理强度 %@"
           }
         }
       }
@@ -3012,23 +2872,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "软件更新"
-          }
-        }
-      }
-    },
-    "Some dsh session records are unreadable." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Some dsh session records are unreadable."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "部分 dsh 会话记录无法读取。"
           }
         }
       }
@@ -3747,23 +3590,6 @@
         }
       }
     },
-    "Unable to read dsh session records. Check its data directory." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to read dsh session records. Check its data directory."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法读取 dsh 会话记录，请检查其数据目录。"
-          }
-        }
-      }
-    },
     "Unable to read local task records. Check the data directory in Settings." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3913,23 +3739,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法核对 Codex 进程，任务状态暂不确定。"
-          }
-        }
-      }
-    },
-    "Unable to verify dsh processes. Task status is uncertain." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to verify dsh processes. Task status is uncertain."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法核对 dsh 进程，任务状态暂不确定。"
           }
         }
       }

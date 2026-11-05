@@ -133,14 +133,13 @@ class VerificationTests(unittest.TestCase):
         if name.startswith('previews-'):
             directory = output / name.removeprefix('previews-')
             directory.mkdir()
-            names = ('dsh-only-light', 'dsh-idle-light', 'dsh-unknown-light', 'dsh-error-light', 'no-sources-light',
-                     'mixed-error-light', 'settings-missing-light')
+            names = ('tasks-only-light', 'quota-only-light', 'no-sources-light',
+                     'settings-missing-light')
             (directory / 'layouts.json').write_text(json.dumps([{'name': name} for name in names]))
             (directory / 'fixture.png').write_bytes(b'fixture')
             if '--exercise-settings' in command:
                 (directory / 'settings-native-checks.json').write_text(json.dumps({
                     'currentVersion': '7.4.2', 'exampleAvailableVersion': '7.4.3', 'passed': [
-                    'dsh-path-commit', 'dsh-invalid-draft', 'dsh-close-and-reopen', 'dsh-restore',
                     'single-page-settings', 'settings-overflow-scroll', 'return-commit', 'focus-loss-commit',
                     'close-and-reopen', 'shortcut-recording']}))
         if name.startswith('native-menu-'):
@@ -149,7 +148,7 @@ class VerificationTests(unittest.TestCase):
             (directory / 'menu-check.json').write_text(json.dumps([
                 {'toggleAndEscapePassed': True, 'appWasActive': True, 'windowWasKey': True,
                  'openedFromBackground': True, 'previousApplicationRestored': True},
-                {'position': 'dsh-only', 'quotaHidden': True, 'escapePassed': True,
+                {'position': 'tasks-only', 'quotaHidden': True, 'escapePassed': True,
                  'appWasActive': True, 'windowWasKey': True,
                  'openedFromBackground': True, 'previousApplicationRestored': True}]))
             path = directory / 'menu-check.json'
@@ -326,31 +325,9 @@ class VerificationTests(unittest.TestCase):
             for locale in ('en', 'zh'):
                 self.assertTrue(list(verify.OUTPUT.glob('*/' + locale + '/layouts.json')))
 
-    def testDshPreviewsAreIsolatedAndCannotReplaceFullPreviewEvidence(self):
-        with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
-            verify.run(verify.arguments(['previews', 'menu', '--dsh-only']))
-            previews = [call.args for call in execute.call_args_list if call.args[0].startswith('previews-')]
-            self.assertEqual(len(previews), 2)
-            for name, command, timeout, output, env in previews:
-                self.assertIn('--preview-dsh-only', command)
-                self.assertEqual(env['CODEX_HOME'], str(output / 'fixture-codex-home'))
-            execute.reset_mock()
-            verify.run(verify.arguments(['previews', 'menu']))
-            self.assertTrue(any(call.args[0] == 'previews-en' for call in execute.call_args_list))
-
-    def testDshPreviewsRejectMissingCapabilityEvidence(self):
-        def incomplete(name, command, timeout, output, env):
-            self.fake_execute(name, command, timeout, output, env)
-            if name.startswith('previews-'):
-                directory = Path(command[command.index('--render-previews') + 1])
-                (directory / 'layouts.json').write_text('[{"fixture": true}]')
-        with patch.object(verify, 'execute', side_effect=incomplete):
-            with self.assertRaisesRegex(RuntimeError, 'dsh capability'):
-                verify.run(verify.arguments(['previews', 'menu', '--dsh-only']))
-
-    def testDshOnlyRejectsSettingsTarget(self):
+    def testRemovedDshOptionIsRejected(self):
         with self.assertRaises(SystemExit):
-            verify.arguments(['previews', 'settings', '--dsh-only'])
+            verify.arguments(['previews', 'menu', '--dsh-only'])
 
     def testNativeOnlyRunsFixedChecksAndCannotReplaceFullPreviewEvidence(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:

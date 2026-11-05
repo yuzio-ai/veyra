@@ -1,5 +1,7 @@
 # 历史归档
 
+> DSH 支持已退役。历史记录及截图保留原始事实，不作为当前功能或正向验收依据。
+
 本目录保存已过时的设计记录与验证证据，仅用于追溯，不随当前行为更新。当前行为见[使用指南](../user-guide.zh-CN.md)、[数据与隐私](../data-and-privacy.zh-CN.md)，当前验证入口见[验证索引](../validation.md)。
 
 归档规则：记录只对应其源码快照，其中的测试数量、界面尺寸、版本号和旧功能说明均不代表当前版本；发现与当前实现冲突时以源码和当前文档为准，不修改归档内容。
@@ -12,7 +14,7 @@
 | [provider-removal-validation.md](provider-removal-validation.md) | 2026-10-31 | 服务商管理、取钥命令移除 | 功能已移除，迁移说明见[使用指南](../user-guide.zh-CN.md#旧版服务商功能迁移) |
 | [stale-code-cleanup-validation.md](stale-code-cleanup-validation.md) | 2026-10-30 | 本地额度解析与旧代码清理 | 相关代码已删除 |
 | [interrupted-session-cleanup-validation.md](interrupted-session-cleanup-validation.md) | 2026-10-31 | 中断会话遗留与服务商事务复查 | 相关代码已删除 |
-| [dsh-only-experience-validation.md](dsh-only-experience-validation.md) | 2026-10-30 | 纯 dsh 体验 | 所述模型设置页与供应商入口已移除 |
+| [dsh-only-experience-validation.md](dsh-only-experience-validation.md) | 2026-10-30 | 纯 dsh 体验 | DSH 支持及专用验证入口已退役；仅保留历史事实 |
 | [quota-polling-validation.md](quota-polling-validation.md) | 2026-10-30 | 额度轮询与状态栏 | 按服务商屏蔽额度的行为已移除 |
 | [menu-header-layout-validation.md](menu-header-layout-validation.md) | 2026-10-30 | 菜单顶部布局与本地交付 | 服务商下拉已移除，顶栏已改版 |
 | [menu-card-hierarchy-validation.md](menu-card-hierarchy-validation.md) | 2026-10-30 | 菜单卡片层级、间距与按钮 | 布局在后续轮次继续调整 |
@@ -32,3 +34,5 @@
 ## 已删除的退役资料
 
 2026-11-01 清理时删除了 `docs/design/dashboard-workspace/`（已退役 Dashboard 的 README、验证记录、概念图与运行截图）和 `docs/design/provider-*` 空目录。相关内容属于已移除功能，仍可从本次清理前的 git 提交中恢复。
+
+- [DSH 移除验收记录](dsh-removal-validation.md)：Codex 单来源清理及本次验证边界。

@@ -73,7 +73,6 @@ def arguments(argv=None):
             child.add_argument('target', choices=('menu', 'settings'))
             child.add_argument('--language', choices=('en', 'zh', 'both'), default='both')
             child.add_argument('--native-only', action='store_true', help='Run only the six fixed fixture popover checks (menu only)')
-            child.add_argument('--dsh-only', action='store_true', help='Render only dsh capability fixtures and native menu checks (menu only)')
         if mode == 'launch':
             child.add_argument('--language', choices=('en', 'zh'), default='zh')
         if mode == 'ax-read':
@@ -81,8 +80,6 @@ def arguments(argv=None):
     result = parser.parse_args(argv)
     if any(not SELECTOR.fullmatch(selector) for selector in getattr(result, 'only_testing', None) or ()):
         parser.error('--only-testing must be VeyraTests/TestClass[/testMethod]')
-    if result.mode == 'previews' and result.dsh_only and (result.target != 'menu' or result.native_only):
-        parser.error('--dsh-only requires previews menu and cannot be combined with --native-only')
     if result.mode == 'ax-read' and result.pid <= 0:
         parser.error('pid must be positive')
     if result.mode == 'previews' and result.native_only and result.target != 'menu':
@@ -262,7 +259,7 @@ def commands(options, output):
                                      str(ROOT / 'scripts/accessibility_snapshot.swift'), '-o', str(STATE / 'accessibility-snapshot')], 120)]
     if options.mode == 'previews':
         locales = ('en', 'zh') if options.language == 'both' else (options.language,)
-        extra = ['--preview-settings-only', '--exercise-settings'] if options.target == 'settings' else (['--preview-dsh-only', '--exercise-settings'] if options.dsh_only else [])
+        extra = ['--preview-settings-only', '--exercise-settings'] if options.target == 'settings' else []
         plan = [('previews-' + locale, gui_preview_command(
                     ['--render-previews', str(output / locale)] + extra + language(locale), 'previews-' + locale, output), 300)
                 for locale in locales]
@@ -558,17 +555,9 @@ def run(options):
                     if options.target == 'settings':
                         settings = validate_preview_versions(output / locale)
                         required = {'single-page-settings', 'settings-overflow-scroll', 'return-commit',
-                                    'focus-loss-commit', 'close-and-reopen', 'shortcut-recording', 'dsh-path-commit'}
+                                    'focus-loss-commit', 'close-and-reopen', 'shortcut-recording'}
                         if not required.issubset(settings.get('passed', [])):
                             raise RuntimeError(f'Native single-page settings evidence is missing for {locale}')
-                    if options.dsh_only:
-                        required = {'dsh-only-light', 'dsh-idle-light', 'dsh-unknown-light', 'dsh-error-light',
-                                    'no-sources-light', 'mixed-error-light', 'settings-missing-light'}
-                        if not required.issubset({row.get('name') for row in layouts}):
-                            raise RuntimeError(f'dsh capability preview evidence is missing for {locale}')
-                        settings = validate_preview_versions(output / locale)
-                        if not {'dsh-path-commit', 'dsh-invalid-draft', 'dsh-close-and-reopen', 'dsh-restore'}.issubset(settings.get('passed', [])):
-                            raise RuntimeError(f'Native dsh settings evidence is missing for {locale}')
                 if options.target == 'menu':
                     for style in ('light', 'dark', 'light-increased', 'dark-increased', 'light-opaque', 'dark-opaque'):
                         records = json.loads((output / locales[0] / ('native-' + style) / 'menu-check.json').read_text())
@@ -589,12 +578,12 @@ def run(options):
                                    and row.get('windowWasKey') is True and row.get('openedFromBackground') is True
                                    and row.get('previousApplicationRestored') is True for row in records):
                             raise RuntimeError(f'Native menu interaction evidence is missing for {style}')
-                        if not any(row.get('position') == 'dsh-only'
+                        if not any(row.get('position') == 'tasks-only'
                                 and row.get('quotaHidden') is True
                                 and row.get('escapePassed') is True and row.get('appWasActive') is True
                                 and row.get('windowWasKey') is True and row.get('openedFromBackground') is True
                                 and row.get('previousApplicationRestored') is True for row in records):
-                            raise RuntimeError(f'Native dsh interaction evidence is missing for {style}')
+                            raise RuntimeError(f'Native task-only interaction evidence is missing for {style}')
                         if not any(valid_api_cost_scroll(row) for row in records):
                             raise RuntimeError(f'Native API cost scroll evidence is missing or incorrect for {style}')
             if options.mode == 'test' or rebuilt_debug:

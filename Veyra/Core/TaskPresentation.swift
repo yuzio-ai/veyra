@@ -16,9 +16,6 @@ struct TaskReference: Identifiable, Equatable, Sendable {
     var projectID: String?
     var projectAssignment: TaskProjectAssignment = .unavailable
     var source: TaskSource = .desktop
-    /// Ancestors resolve against their own backend's catalog, so a dsh family
-    /// never falls through to Codex project matching.
-    var backend: TaskBackend = .codex
 }
 
 struct TaskGroupRow: Identifiable, Equatable, Sendable {
@@ -39,16 +36,6 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
     var isRunning: Bool { rows.contains { $0.task?.activity == .running } }
     var unknownCount: Int { rows.filter { $0.task?.activity == .unknown }.count }
 
-    /// A group never mixes backends, so the first row that knows its backend
-    /// speaks for the family; ancestor-only rows carry it on the reference.
-    func backend(tasksByID: [String: TaskSnapshot]) -> TaskBackend {
-        for row in rows {
-            if let task = tasksByID[row.id] { return task.backend }
-            if row.reference.backend != .codex { return row.reference.backend }
-        }
-        return .codex
-    }
-
     /// Input order is the reader's activity/start-time/ID order. Ancestors never add to counts.
     static func make(tasks: [TaskSnapshot], ancestors: [TaskReference]) -> [TaskGroup] {
         var snapshots: [String: TaskSnapshot] = [:], references: [String: TaskReference] = [:]
@@ -57,7 +44,7 @@ struct TaskGroup: Identifiable, Equatable, Sendable {
             snapshots[task.id] = task
             references[task.id] = TaskReference(id: task.id, title: task.title, parentID: task.parentID,
                 workingDirectory: task.workingDirectory, projectID: task.projectID,
-                projectAssignment: task.projectAssignment, source: task.source, backend: task.backend)
+                projectAssignment: task.projectAssignment, source: task.source)
         }
         var included: Set<String> = [], priority: [String: Int] = [:]
         for (rank, task) in tasks.enumerated() {
@@ -117,16 +104,6 @@ enum TaskText {
 
     static func subagentDetail(nickname: String?) -> String {
         nonempty(nickname).map { L10n.text("Subagent: \($0)") } ?? L10n.text("Subagent")
-    }
-
-    /// dsh sessions record model identifiers, never display names. Surface the
-    /// context it does record instead of inventing a prettier name.
-    static func modelDetail(model: String?, provider: String?, effort: String?) -> String? {
-        guard let model = nonempty(model) else { return nil }
-        var parts = [model]
-        if let provider = nonempty(provider) { parts.append(L10n.text("provider \(provider)")) }
-        if let effort = nonempty(effort) { parts.append(L10n.text("reasoning \(effort)")) }
-        return parts.count > 1 ? parts.joined(separator: " · ") : nil
     }
 
     static func nonempty(_ value: String?) -> String? {

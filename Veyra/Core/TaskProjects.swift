@@ -146,68 +146,55 @@ struct TaskProjectResolution: Sendable {
 /// changes task activity, counts, or monitoring warnings.
 actor TaskProjectResolver {
     private let reader = TaskProjectContextReader()
-    private let workspaceReader = DshWorkspaceReader()
     private var repositories = TaskRepositoryIdentity()
     private var lastHome: URL?
 
-    func resolve(tasks: [TaskSnapshot], ancestors: [TaskReference], home: URL,
-                 dshHome: URL? = nil) -> TaskProjectResolution {
+    func resolve(tasks: [TaskSnapshot], ancestors: [TaskReference], home: URL) -> TaskProjectResolution {
         if lastHome != home { repositories.reset(); lastHome = home }
         let context = reader.read(home: home)
-        // Codex-only sessions never touch the dsh data directory.
-        let workspaces = tasks.contains { $0.backend == .dsh }
-            ? (dshHome.map { workspaceReader.read(home: $0) } ?? .empty) : .empty
         return resolve(tasks: tasks, ancestors: ancestors, context: context,
-                       workspaces: workspaces, now: Date())
+                       now: Date())
     }
 
     func resolve(tasks: [TaskSnapshot], ancestors: [TaskReference], context: TaskProjectContext,
-                 workspaces: DshWorkspaceCatalog = .empty, now: Date) -> TaskProjectResolution {
+                 now: Date) -> TaskProjectResolution {
         let tasks = tasks.map { task in
             var copy = task
             copy.projectAssignment = assignment(id: task.id, path: task.workingDirectory, projectID: task.projectID,
-                                                source: task.source, backend: task.backend, context: context,
-                                                workspaces: workspaces, now: now)
+                                                source: task.source, context: context, now: now)
             return copy
         }
         let ancestors = ancestors.map { reference in
             var copy = reference
             copy.projectAssignment = assignment(id: reference.id, path: reference.workingDirectory,
                                                 projectID: reference.projectID,
-                                                source: reference.source, backend: reference.backend, context: context,
-                                                workspaces: workspaces, now: now)
+                                                source: reference.source, context: context, now: now)
             return copy
         }
         return TaskProjectResolution(tasks: tasks, ancestors: ancestors)
     }
 
     private func assignment(id: String, path: String?, projectID: String?, source: TaskSource,
-                            backend: TaskBackend, context: TaskProjectContext,
-                            workspaces: DshWorkspaceCatalog, now: Date) -> TaskProjectAssignment {
-        if backend == .dsh, let workspace = dshWorkspace(id: id, path: path, workspaces: workspaces) {
-            return .project(workspace.project)
-        }
-        if backend == .codex {
-            // A corrupt desktop mapping may hide an explicit project choice.
-            // Do not replace that choice with a directory-based guess.
-            if source != .cli, context.desktopStateUnreadable { return .unassigned }
-            let migrated = context.assignmentsMigrated(for: id)
-            // Ignore entries belonging to a remote host even if its thread ID is present locally.
-            let local = context.membershipHosts[id].map { $0 == "local" } ?? true
-            let explicitlyProjectless = local && context.projectless.contains(id)
-            if !migrated {
-                if explicitlyProjectless { return .unassigned }
-                if local, let assignment = context.assignments[id] {
-                    return context.project(assignment).map(TaskProjectAssignment.project) ?? .unassigned
-                }
-            }
-            if let projectID {
-                return context.project(projectID).map(TaskProjectAssignment.project) ?? .unassigned
-            }
+                            context: TaskProjectContext, now: Date) -> TaskProjectAssignment {
+        // A corrupt desktop mapping may hide an explicit project choice.
+        // Do not replace that choice with a directory-based guess.
+        if source != .cli, context.desktopStateUnreadable { return .unassigned }
+        let migrated = context.assignmentsMigrated(for: id)
+        // Ignore entries belonging to a remote host even if its thread ID is present locally.
+        let local = context.membershipHosts[id].map { $0 == "local" } ?? true
+        let explicitlyProjectless = local && context.projectless.contains(id)
+        if !migrated {
             if explicitlyProjectless { return .unassigned }
-            // Migration selects which assignment source to trust. It does not
-            // turn absent membership into an explicit opt-out from inference.
+            if local, let assignment = context.assignments[id] {
+                return context.project(assignment).map(TaskProjectAssignment.project) ?? .unassigned
+            }
         }
+        if let projectID {
+            return context.project(projectID).map(TaskProjectAssignment.project) ?? .unassigned
+        }
+        if explicitlyProjectless { return .unassigned }
+        // Migration selects which assignment source to trust. It does not
+        // turn absent membership into an explicit opt-out from inference.
         guard let path = TaskRepositoryIdentity.canonicalPath(path) else { return .unavailable }
         var matches: [TaskProject] = [], longest = -1
         for project in context.projects.values {
@@ -226,14 +213,6 @@ actor TaskProjectResolver {
             }
         }
         return unique(matches)
-    }
-
-    /// dsh tasks belong to a dsh workspace, not a Codex project: recorded
-    /// membership wins over a directory guess, because it survives `cd`.
-    private func dshWorkspace(id: String, path: String?, workspaces: DshWorkspaceCatalog) -> DshWorkspace? {
-        let prefix = "dsh:"
-        let sessionID = id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : id
-        return workspaces.workspace(forSession: sessionID) ?? path.flatMap(workspaces.workspace(forPath:))
     }
 
     private func unique(_ matches: [TaskProject]) -> TaskProjectAssignment {

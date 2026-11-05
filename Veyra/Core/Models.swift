@@ -261,10 +261,6 @@ struct TokenUsage: Equatable, Sendable {
 
 enum TaskActivity: String, Sendable { case running, unknown }
 
-/// The monitoring backend that produced a task. Codex stays the default so
-/// existing construction sites remain valid; only the dsh reader passes `.dsh`.
-enum TaskBackend: String, Sendable { case codex, dsh }
-
 enum TaskSource: Sendable {
     case cli, desktop, subtask
 
@@ -291,27 +287,18 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     var agentNickname: String?
     var agentRole: String?
     var progress: TaskProgress?
-    /// Trailing on purpose: the memberwise default keeps every existing call
-    /// site valid; `source` carries no meaning for dsh tasks (a placeholder)
-    /// and their label comes from the backend instead. (`var`, not `let`:
-    /// only variables join the memberwise initializer with a default value.)
-    var backend: TaskBackend = .codex
     var workingDirectory: String?
     var projectID: String?
     var projectAssignment: TaskProjectAssignment = .unavailable
     var apiCostSource: TaskAPICostSource?
-    /// dsh records keep the provider and effort next to the model id; they are
-    /// shown as context instead of being folded into the displayed name.
-    var modelProvider: String?
-    var reasoningEffort: String?
     var contextUsage: ContextWindowUsage?
     var rolloutModifiedAt: Date?
     /// Fixture-only snapshots avoid reading real session history during previews.
     var sessionStatistics: TaskSessionStatistics?
     /// The badge stays short so the identity row keeps one line; the full
     /// product name is the badge's help and accessibility text.
-    var sourceLabel: String { backend == .dsh ? "DSH" : source.label }
-    var sourceDetail: String { backend == .dsh ? "DeepSeek Harness" : source.label }
+    var sourceLabel: String { source.label }
+    var sourceDetail: String { source.label }
 }
 
 struct TaskReadResult: Sendable {

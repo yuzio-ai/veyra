@@ -16,9 +16,6 @@ final class MonitorStore {
     }
     var taskError: String? { didSet { updateMenuLabel() } }
     var taskWarning: TaskReadWarning? { didSet { updateMenuLabel() } }
-    /// dsh degrades silently by design: failures surface only here and never
-    /// touch the Codex error/warning state.
-    var dshWarning: String? { didSet { updateMenuLabel() } }
     var quotaBusy = false
     var tasksBusy = false
     var panelVisible = false
@@ -31,16 +28,10 @@ final class MonitorStore {
     var hasManualPaths: Bool { !homePath.isEmpty || !executablePath.isEmpty }
     private(set) var codexServiceWarning: String? { didSet { updateMenuLabel() } }
     @ObservationIgnored private var previouslyHadCodexServices = false
-    var dshHomePath: String
     var codexReadState: TaskSourceReadState = .detecting { didSet { updateMenuLabel() } }
-    var dshReadState: TaskSourceReadState = .detecting { didSet { updateMenuLabel() } }
     private(set) var codexServicesAvailable = false { didSet { updateMenuLabel() } }
     var isPreview = false { didSet { updateMenuLabel() } }
     @ObservationIgnored private var codexReadAt: Date?
-    @ObservationIgnored private var dshReadAt: Date?
-    @ObservationIgnored private var dshRevision = 0
-    @ObservationIgnored private var dshPathRequest = 0
-    private(set) var dshPathResetRevision = 0
     @ObservationIgnored private let resolveLocation: @Sendable (String, String) -> CodexLocation
     @ObservationIgnored private let inspectServices: @Sendable (CodexLocation) -> Bool
 
@@ -63,16 +54,11 @@ final class MonitorStore {
     @ObservationIgnored private var authStamp: String?
     @ObservationIgnored private var suspended = false
     @ObservationIgnored private var attemptedLocalRead = false
-    /// Reader outputs stay separated so one backend's failure never rewrites
-    /// the other's tasks; the published `tasks` is their merge.
+    /// Reader outputs remain separate from project-resolved presentation snapshots.
     @ObservationIgnored private var codexTasks: [TaskSnapshot] = []
-    @ObservationIgnored private var dshTasks: [TaskSnapshot] = []
-    /// Kept apart from the published, merged `taskAncestors`: dsh ancestors are
-    /// rebuilt on every read and must not leak into the Codex reader's carry-over.
     @ObservationIgnored private var codexAncestors: [TaskReference] = []
     @ObservationIgnored private let readLocal: @Sendable (URL) async throws -> TaskReadResult
-    @ObservationIgnored private let readDsh: @Sendable (URL) async -> DshTaskRead
-    @ObservationIgnored private let resolveProjects: @Sendable ([TaskSnapshot], [TaskReference], URL, URL) async -> TaskProjectResolution
+    @ObservationIgnored private let resolveProjects: @Sendable ([TaskSnapshot], [TaskReference], URL) async -> TaskProjectResolution
     @ObservationIgnored private let fetchQuota: @Sendable (CodexLocation) async -> QuotaRefresh
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let clock: PollingClock
@@ -82,8 +68,7 @@ final class MonitorStore {
     }
 
     init(readLocal: (@Sendable (URL) async throws -> TaskReadResult)? = nil,
-         readDsh: (@Sendable (URL) async -> DshTaskRead)? = nil,
-         resolveProjects: (@Sendable ([TaskSnapshot], [TaskReference], URL, URL) async -> TaskProjectResolution)? = nil,
+         resolveProjects: (@Sendable ([TaskSnapshot], [TaskReference], URL) async -> TaskProjectResolution)? = nil,
          fetchQuota: (@Sendable (CodexLocation) async -> QuotaRefresh)? = nil,
          clock: PollingClock = .continuous(), now: @escaping @MainActor () -> Date = Date.init,
          defaults: UserDefaults = .standard,
@@ -97,10 +82,8 @@ final class MonitorStore {
         self.validatePath = validatePath
         let reader = LocalTaskReader()
         self.readLocal = readLocal ?? { try await reader.fetch(home: $0) }
-        let dshReader = DshTaskReader()
-        self.readDsh = readDsh ?? { await dshReader.fetch(home: $0) }
         let projectResolver = TaskProjectResolver()
-        self.resolveProjects = resolveProjects ?? { await projectResolver.resolve(tasks: $0, ancestors: $1, home: $2, dshHome: $3) }
+        self.resolveProjects = resolveProjects ?? { await projectResolver.resolve(tasks: $0, ancestors: $1, home: $2) }
         self.fetchQuota = fetchQuota ?? { location in
             let client = AppServerClient()
             let result = await client.fetch(location: location)
@@ -110,29 +93,27 @@ final class MonitorStore {
         self.clock = clock; self.now = now; self.defaults = defaults
         homePath = defaults.string(forKey: "codexHome") ?? ""
         executablePath = defaults.string(forKey: "codexExecutable") ?? ""
-        dshHomePath = defaults.string(forKey: "dshHome") ?? ""
         codexServicesAvailable = inspectServices(resolveLocation(homePath, executablePath))
         previouslyHadCodexServices = codexServicesAvailable
         updateMenuLabel()
     }
     var location: CodexLocation { resolveLocation(homePath, executablePath) }
     var runningTasks: [TaskSnapshot] { tasks.filter { $0.activity == .running } }
-    var dshLocation: DshLocation { .resolve(homePath: dshHomePath) }
     var canUseCodexServices: Bool { isPreview ? previewCodexServicesAvailable : codexServicesAvailable }
     var previewCodexServicesAvailable = true { didSet { updateMenuLabel() } }
     var showsQuota: Bool { canUseCodexServices }
     /// Task health is independent of the executable paths used for online quota.
-    var hasSourceWarning: Bool { taskError != nil || taskWarning != nil || dshWarning != nil }
+    var hasSourceWarning: Bool { taskError != nil || taskWarning != nil }
     var taskSourceWarningSummary: String? {
         hasSourceWarning ? L10n.text("Some task data is unavailable. Running count may be incomplete.") : nil
     }
-    var sourceDetectionFinished: Bool { codexReadState != .detecting && dshReadState != .detecting }
-    var noSourcesFound: Bool { codexReadState == .notFound && dshReadState == .notFound && !canUseCodexServices }
+    var sourceDetectionFinished: Bool { codexReadState != .detecting }
+    var noSourcesFound: Bool { codexReadState == .notFound && !canUseCodexServices }
     var codexHasNoTaskData: Bool { codexReadState == .notFound && canUseCodexServices }
     var menuQuotaPercent: Double? { showsQuota ? quota.snapshot?.menuWindow?.remainingPercent : nil }
     var menuQuotaWindows: [QuotaWindow] { showsQuota ? (quota.snapshot?.menuWindows ?? []) : [] }
     var menuTaskCount: String {
-        hasTaskSnapshot || (codexReadState == .notFound && dshReadState == .notFound) ? String(runningTasks.count) : "—"
+        hasTaskSnapshot || codexReadState == .notFound ? String(runningTasks.count) : "—"
     }
     var pollingSeconds: Int {
         Int(TaskPollingPolicy.interval(panelVisible: panelVisible, hasRunningTasks: !runningTasks.isEmpty).components.seconds)
@@ -222,14 +203,12 @@ final class MonitorStore {
         await task.value
     }
     private func refreshLocal() async {
-        let version = revision, dshVersion = dshRevision, location = location
+        let version = revision, location = location
         var ancestors = codexAncestors
         guard !suspended else { return }
         refreshServiceAvailability()
         if !attemptedLocalRead { tasksBusy = true; attemptedLocalRead = true }
         checkAuthentication(at: location.home)
-        // dsh reads never throw: failures arrive as a warning plus empty tasks.
-        async let dshRead = readDsh(dshLocation.home)
         do {
             let result = try await readLocal(location.home)
             guard version == revision else { return }
@@ -256,22 +235,9 @@ final class MonitorStore {
                 return copy
             }
         }
-        let dsh = await dshRead
+        tasksUpdatedAt = codexReadAt
+        let resolved = await resolveProjects(codexTasks, ancestors, location.home)
         guard version == revision else { return }
-        if dshVersion == dshRevision {
-            let missingExpected = dsh.state == .notFound && (!dshHomePath.isEmpty || dshReadAt != nil)
-            dshReadState = missingExpected ? .failed : dsh.state
-            dshTasks = dsh.tasks
-            let warning = missingExpected ? L10n.text("Unable to read dsh session records. Check its data directory.") : dsh.warning
-            if dshWarning != warning { dshWarning = warning }
-            if dsh.state == .available { dshReadAt = dsh.fetchedAt }
-        }
-        tasksUpdatedAt = [codexReadAt, dshReadAt].compactMap { $0 }.max()
-        // A superseded dsh read belongs to a different home: never merge its families.
-        let dshAncestors = dshVersion == dshRevision ? dsh.ancestors : []
-        let resolved = await resolveProjects(codexTasks + dshTasks, ancestors + dshAncestors,
-                                            location.home, dshLocation.home)
-        guard version == revision, dshVersion == dshRevision else { return }
         if taskAncestors != resolved.ancestors { taskAncestors = resolved.ancestors }
         if tasks != resolved.tasks { tasks = resolved.tasks }
         if tasksBusy { tasksBusy = false }
@@ -377,46 +343,6 @@ final class MonitorStore {
         await detectConfiguration()
     }
 
-    /// Reserve at the UI event, before an unstructured Task can be reordered.
-    func beginDshPathSubmission() -> Int {
-        dshPathRequest += 1
-        return dshPathRequest
-    }
-
-    func commitDshPath(_ text: String, restoringAutomatic: Bool = false,
-                       resetVersion: Int? = nil, submissionVersion: Int? = nil) async -> CodexPathCommitResult {
-        guard resetVersion == nil || resetVersion == dshPathResetRevision else { return .superseded }
-        if let submissionVersion, submissionVersion != dshPathRequest { return .superseded }
-        let request = submissionVersion ?? beginDshPathSubmission()
-        if restoringAutomatic { dshPathResetRevision += 1 }
-        let reset = dshPathResetRevision
-        let path = CodexConfiguration.normalized(text)
-        // Even an unchanged submission supersedes older asynchronous validation.
-        // Keep auto detection when the user submits its currently displayed path.
-        if !restoringAutomatic, path == dshLocation.home.path {
-            await refreshAll()
-            return request == dshPathRequest && reset == dshPathResetRevision ? .unchanged : .superseded
-        }
-        let error = await validatePath(path, .home)
-        guard request == dshPathRequest, reset == dshPathResetRevision, !Task.isCancelled else { return .superseded }
-        if let error { return .rejected(error) }
-        guard path != dshHomePath else {
-            await refreshAll()
-            return .unchanged
-        }
-        dshRevision += 1
-        let version = dshRevision
-        dshHomePath = path
-        defaults.set(path, forKey: "dshHome")
-        dshTasks = []; dshReadAt = nil; dshWarning = nil; dshReadState = .detecting
-        tasks = tasks.filter { $0.backend == .codex }
-        tasksUpdatedAt = codexReadAt
-        await scheduler.drain()
-        guard version == dshRevision else { return .superseded }
-        await refreshAll()
-        return .applied
-    }
-
     func saveSettings(home: String, executable: String) {
         stop()
         revision += 1
@@ -430,8 +356,8 @@ final class MonitorStore {
         quotaState = QuotaDisplayState(); quota = quotaState
         calibrationPolicy = QuotaCalibrationPolicy(); nextCalibrationAt = nil; authStamp = nil
         lastQuotaAttemptAt = nil; serviceRevision += 1
-        tasks = tasks.filter { $0.backend == .dsh }
-        codexReadAt = nil; tasksUpdatedAt = dshReadAt
+        tasks = []
+        codexReadAt = nil; tasksUpdatedAt = nil
         taskError = nil; taskWarning = nil; codexReadState = .detecting
         codexTasks = []
         codexAncestors = []

@@ -34,8 +34,6 @@ struct MonitorSettings: View {
             Divider()
             CodexSettingsSection(store: store)
             Divider()
-            DshSettingsSection(store: store)
-            Divider()
             UpdateSettingsSection(updates: updates)
         }
         .padding(.horizontal, SettingsLayout.horizontalPadding)
@@ -60,80 +58,6 @@ private struct CodexSettingsSection: View {
                 PathSettingRow(store: store, field: .executable)
                 CodexStatusRow(store: store)
             }
-        }
-    }
-}
-
-private struct DshSettingsSection: View {
-    @Bindable var store: MonitorStore
-    @State private var draft: String?
-    @State private var error: CodexPathError?
-    @State private var submission = 0
-
-    private var text: Binding<String> {
-        Binding(get: { draft ?? store.dshLocation.home.path }, set: {
-            draft = $0; error = nil; submission += 1
-        })
-    }
-    private var status: String {
-        switch store.dshReadState {
-        case .detecting: L10n.text("Detecting dsh…")
-        case .notFound: L10n.text("dsh data not found. Choose its data directory if needed.")
-        case .available: store.dshWarning ?? L10n.text("Data directory is readable")
-        case .failed: store.dshWarning ?? L10n.text("Unable to read dsh session records. Check its data directory.")
-        }
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.contentSpacing) {
-            VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
-                Text(verbatim: "DeepSeek Harness").font(.headline)
-                Text("Monitor tasks on this Mac without installing Codex.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
-                Text("Data directory")
-                HStack {
-                    NativePathField(text: text, title: L10n.text("dsh data directory"), identifier: "settings.path.dsh",
-                                    commit: commit, discardDraft: { draft = nil; error = nil; submission += 1 })
-                    Button("Choose…") {
-                        let panel = NSOpenPanel()
-                        panel.canChooseDirectories = true; panel.canChooseFiles = false
-                        panel.allowsMultipleSelection = false; panel.showsHiddenFiles = true
-                        if panel.runModal() == .OK, let url = panel.url { text.wrappedValue = url.path; commit() }
-                    }.accessibilityIdentifier("settings.choose.dsh")
-                }
-                if let error { Text(error.message).foregroundStyle(.orange) }
-                HStack {
-                    Text(status).fixedSize(horizontal: false, vertical: true)
-                        .foregroundStyle(store.dshReadState == .failed || store.dshWarning != nil ? Color.orange : Color.secondary)
-                        .accessibilityIdentifier("settings.dsh.status")
-                    Spacer()
-                    if !store.dshHomePath.isEmpty {
-                        Button("Restore automatic detection") {
-                            NSApp.keyWindow?.makeFirstResponder(nil)
-                            submission += 1; draft = nil; error = nil
-                            let version = store.beginDshPathSubmission()
-                            Task { _ = await store.commitDshPath("", restoringAutomatic: true, submissionVersion: version) }
-                        }
-                    } else {
-                        Button("Detect Again") { Task { await store.refreshAll() } }
-                    }
-                }.font(.subheadline)
-            }
-        }
-        .onChange(of: store.dshPathResetRevision) { draft = nil; error = nil; submission += 1 }
-        .onDisappear { draft = nil; error = nil; submission += 1 }
-    }
-    private func commit() {
-        guard let draft else { return }
-        submission += 1
-        let request = submission, resetVersion = store.dshPathResetRevision
-        let version = store.beginDshPathSubmission()
-        Task {
-            let result = await store.commitDshPath(draft, resetVersion: resetVersion, submissionVersion: version)
-            guard request == submission else { return }
-            if case .rejected(let issue) = result { error = issue }
-            else { self.draft = nil; error = nil }
         }
     }
 }
@@ -223,7 +147,7 @@ private struct CodexStatusRow: View {
         switch store.configurationState {
         case .detecting: L10n.text("Detecting Codex…")
         case .valid: store.hasManualPaths ? L10n.text("Codex paths verified") : L10n.text("Codex detected automatically")
-        case .notFound: L10n.text("Codex not detected. dsh monitoring remains available.")
+        case .notFound: L10n.text("Codex not detected. Check its paths in Settings.")
         case .invalid(.home): L10n.text("Codex data directory is unavailable")
         case .invalid(.executable): L10n.text("Codex executable is invalid")
         }

@@ -29,7 +29,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
         let panel = MonitorPanel(store: store, updates: updates,
             initiallyExpandedTaskIDs: PreviewSupport.expandedTaskIDs(for: PreviewSupport.menuScenario),
-            initiallyShowUnknown: PreviewSupport.menuScenario == .unknown || PreviewSupport.menuScenario == .dshUnknown,
+            initiallyShowUnknown: PreviewSupport.menuScenario == .unknown,
             onSizingChange: { [weak self] sizing in
                 guard let self else { return }
                 let size = NSSize(width: PanelSizing.width, height: max(1, sizing.panelHeight))

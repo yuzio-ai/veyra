@@ -37,6 +37,19 @@ final class SQLiteFixture {
 }
 
 final class LocalTaskCacheTests: XCTestCase {
+    func testCodexDatabaseInHomeIsReadableDespiteUnrelatedInvalidSQLitePath() async throws {
+        let fixture = try SQLiteFixture()
+        try fixture.threads()
+        try Data("unrelated file".utf8).write(to: fixture.home.appendingPathComponent("sqlite"))
+        let reader = LocalTaskReader(collectEvidence: { _ in ProcessEvidence() })
+
+        let result = try await reader.fetch(home: fixture.home)
+
+        XCTAssertTrue(result.tasks.isEmpty)
+        XCTAssertNil(result.warning)
+        XCTAssertEqual(result.metrics.metadataQueries, 1)
+    }
+
     func testUnreadableHistoryKeepsWarningWhileSessionEventsRecoverRunningTask() async throws {
         let fixture = try SQLiteFixture()
         try fixture.threads()

@@ -106,7 +106,7 @@ enum TaskDetailInteractionChecks {
             resolveLocation: { _, _ in CodexLocation(home: directory, executable: nil) })
         PreviewSupport.configure(store, scenario: .single)
         store.taskWarning = .historyUnavailable
-        store.dshWarning = L10n.text("Some dsh session records are unreadable.")
+        store.taskError = L10n.text("Unable to read Codex task records. Check its data directory.")
         let presenter = TaskInfoPresenter()
         let host = NSHostingView(rootView: MonitorPanel(store: store,
             screenOverride: PanelScreenMetrics(visibleHeight: 1_200), openSettings: {}, infoPresenter: presenter)
@@ -146,24 +146,24 @@ enum TaskDetailInteractionChecks {
         window.sendEvent(space)
         try await settle()
         try expect(presenter.shownIdentifier == "monitor.info.taskSources", "Space opens source explanation")
-        try expect(presenter.content?.details.map(\.label) == ["Codex", "dsh"], "source labels remain distinct")
-        try expect(presenter.content?.details.first?.value == TaskReadWarning.historyUnavailable.message,
+        try expect(presenter.content?.details.map(\.label) == ["Codex"], "Codex warnings share one source detail")
+        try expect(presenter.content?.details.first?.value.contains(TaskReadWarning.historyUnavailable.message) == true,
                    "history fallback reason remains available")
         try presenter.saveContentPreview(to: directory.appendingPathComponent("source-warning-details.png"))
 
         store.taskWarning = nil
         try await settle()
-        try expect(presenter.content?.details.map(\.label) == ["dsh"], "open explanation removes recovered source")
+        try expect(presenter.content?.details.map(\.label) == ["Codex"], "open explanation retains remaining Codex error")
         trigger.cancelOperation(nil)
         try await settle()
         try expect(presenter.shownIdentifier == nil && window.firstResponder === trigger,
                    "Escape returns focus to source trigger")
         trigger.performClick(nil)
         try await settle()
-        store.dshWarning = nil
+        store.taskError = nil
         try await settle()
         try expect(warningButtons().isEmpty && presenter.shownIdentifier == nil,
-                   "all sources recovering removes notice and closes explanation")
+                   "Codex recovering removes notice and closes explanation")
 
         store.executablePath = "/preview/missing-codex"
         store.previewCodexServicesAvailable = false
