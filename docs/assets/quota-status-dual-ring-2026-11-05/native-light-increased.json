@@ -1,0 +1,106 @@
+[
+  {
+    "effectiveAppearance" : "NSAppearanceNameAqua",
+    "increasedContrast" : true,
+    "position" : "appearance",
+    "reduceTransparency" : false,
+    "requestedAppearance" : "NSAppearanceNameAccessibilityAqua",
+    "resolvedAppearance" : "NSAppearanceNameAqua"
+  },
+  {
+    "documentHeight" : 3815.5,
+    "offset" : 0,
+    "position" : "top",
+    "viewportHeight" : 1762,
+    "windowHeight" : 1836
+  },
+  {
+    "documentHeight" : 3815.5,
+    "offset" : 1026.75,
+    "position" : "middle",
+    "viewportHeight" : 1762,
+    "windowHeight" : 1836
+  },
+  {
+    "documentHeight" : 3815.5,
+    "offset" : 2053.5,
+    "position" : "bottom",
+    "viewportHeight" : 1762,
+    "windowHeight" : 1836
+  },
+  {
+    "position" : "shrunk",
+    "windowHeight" : 529
+  },
+  {
+    "concurrentTaskRefresh" : true,
+    "dataDrivenContent" : true,
+    "offset" : 200,
+    "position" : "info-refresh",
+    "preservesController" : true,
+    "preservesDocument" : true,
+    "preservesFocus" : true,
+    "updatedTotal" : "≈ US$31.000"
+  },
+  {
+    "firstEscapeKeepsMenu" : true,
+    "nativePopover" : true,
+    "position" : "info-popover",
+    "restoresTriggerFocus" : true
+  },
+  {
+    "appWasActive" : true,
+    "forcedRecoveryBaseline" : true,
+    "keyboardDispatch" : "native-window",
+    "keyboardFirstResponder" : "task-disclosure",
+    "openedFromBackground" : true,
+    "position" : "controls",
+    "previousApplicationRestored" : true,
+    "restoredVisibilityBeforeToggle" : true,
+    "toggleAndEscapePassed" : true,
+    "windowWasKey" : true
+  },
+  {
+    "appWasActive" : true,
+    "escapePassed" : true,
+    "openedFromBackground" : true,
+    "position" : "dsh-only",
+    "previousApplicationRestored" : true,
+    "quotaHidden" : true,
+    "runningCount" : "2",
+    "windowWasKey" : true
+  },
+  {
+    "appWasActive" : true,
+    "expanded" : 5,
+    "modelCount" : 12,
+    "nativePopover" : true,
+    "overflow" : 1605.5,
+    "position" : "api-costs",
+    "reopenedAfterLayout" : false,
+    "scrolls" : [
+      {
+        "offset" : 0,
+        "position" : "top",
+        "windowHeight" : 1836
+      },
+      {
+        "offset" : 802.75,
+        "position" : "middle",
+        "windowHeight" : 1836
+      },
+      {
+        "offset" : 1605.5,
+        "position" : "bottom",
+        "windowHeight" : 1836
+      }
+    ],
+    "source" : "deterministic-fixtures",
+    "windowWasKey" : true
+  },
+  {
+    "position" : "no-sources",
+    "runningCount" : "0",
+    "warning" : false
+  }
+]

@@ -137,7 +137,9 @@ enum PreviewSupport {
         ]))
         var windows = [quota("codex", "Codex", primary: true, used: 52, minutes: 10_080)]
         if [.quotas, .multiple, .expanded].contains(scenario) {
-            windows += [quota("additional-limit", "Additional quota", primary: true, used: 0, minutes: 300),
+            windows = [quota("codex", "Codex", primary: true, used: 52, minutes: 300),
+                       quota("codex", "Codex", primary: false, used: 97, minutes: 10_080),
+                       quota("additional-limit", "Additional quota", primary: true, used: 0, minutes: 300),
                         quota("additional-limit", "Additional quota", primary: false, used: 78, minutes: 10_080)]
         }
         if scenario == .error {
@@ -484,28 +486,56 @@ enum PreviewSupport {
     }
 
     private static func renderStatusItems(to directory: URL) throws {
-        let samples: [(Double?, String, Bool)] = [
-            (100, "0", true), (30, "1", true), (29.9, "2", true), (10, "12", true),
-            (9.9, "—", true), (0.4, "2", true), (0, "123", true), (nil, "—", true),
-            (nil, "1234", false)
+        let samples: [([Double?], String, Bool)] = [
+            ([100], "0", true), ([30], "1", true), ([29.9], "2", true), ([10], "12", true),
+            ([9.9], "—", true), ([0.4], "2", true), ([0], "123", true), ([], "—", true),
+            ([9.9, 29.9], "2", true), ([29.9, 80], "2", true), ([80, 9.9], "2", true),
+            ([0, nil], "2", true), ([], "1234", false)
         ]
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua),
                                   ("light-contrast", .accessibilityHighContrastAqua),
                                   ("dark-contrast", .accessibilityHighContrastDarkAqua)] {
             // Rows: current values, stale values after failure, and native highlight.
-            let strip = NSView(frame: NSRect(x: 0, y: 0, width: 8 + samples.count * 84, height: 108))
+            let strip = NSView(frame: NSRect(x: 0, y: 0, width: 8 + samples.count * 116, height: 108))
             strip.wantsLayer = true
             strip.layer?.backgroundColor = (name.hasPrefix("light") ? NSColor.white : .black).cgColor
             strip.appearance = NSAppearance(named: appearance)
+            var currentImages: [NSImage] = []
             for row in 0..<3 {
                 for (index, sample) in samples.enumerated() {
-                    let button = NSButton(frame: NSRect(x: 8 + index * 84, y: 7 + row * 36, width: 76, height: 22))
+                    var quotaState = QuotaDisplayState()
+                    let windows = sample.0.enumerated().map { index, value in
+                        QuotaWindow(id: "codex:\(index)", bucketID: "codex", bucketName: "Codex", isPrimary: index == 0,
+                                    usedPercent: value.map { 100 - $0 },
+                                    durationMinutes: sample.0.count == 2 && index == 0 ? 300 : 10_080, resetsAt: nil)
+                    }
+                    quotaState.apply(QuotaRefresh(snapshot: QuotaSnapshot(
+                        windows: windows,
+                        fetchedAt: referenceDate, accountID: nil)))
+                    if row == 1 { quotaState.apply(QuotaRefresh(error: .rpcFailed)) }
+                    let button = NSButton(frame: NSRect(x: 8 + index * 116, y: 7 + row * 36, width: 108, height: 22))
                     button.isBordered = false
                     button.imagePosition = .imageOnly
                     button.title = ""
-                    button.image = MenuBarController.statusImage(percent: sample.0, showsQuota: sample.2, taskCount: sample.1,
-                        quotaReliable: row != 1, appearance: strip.effectiveAppearance, highlighted: row == 2,
+                    let image = MenuBarController.statusImage(quotaWindows: quotaState.snapshot?.menuWindows ?? [],
+                        showsQuota: sample.2, taskCount: sample.1,
+                        appearance: strip.effectiveAppearance, highlighted: row == 2,
                         increasedContrast: name.hasSuffix("-contrast"))
+                    if row == 0 { currentImages.append(image) }
+                    if windows.count == 2 {
+                        let single = MenuBarController.statusImage(quotaWindows: Array(windows.prefix(1)),
+                            showsQuota: true, taskCount: sample.1)
+                        guard image.size.width - single.size.width == 28 else {
+                            throw PreviewError.invalidLayout("status-item-dual-width-\(name)-\(index)")
+                        }
+                    }
+                    if row == 1 {
+                        guard image.isTemplate == currentImages[index].isTemplate,
+                              image.tiffRepresentation == currentImages[index].tiffRepresentation else {
+                            throw PreviewError.invalidLayout("status-item-color-after-quota-failure-\(name)-\(index)")
+                        }
+                    }
+                    button.image = image
                     button.contentTintColor = name.hasPrefix("light") ? .black : .white
                     strip.addSubview(button)
                 }

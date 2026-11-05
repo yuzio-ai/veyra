@@ -165,7 +165,6 @@ struct MonitorPanel: View {
                     .frame(maxWidth: .infinity, minHeight: 44).monitorCard()
             }
             ResetCreditsCard(snapshot: store.quota.resetCredits, isLoading: store.quotaBusy)
-            if let error = store.quota.error { notice(error) }
         }
     }
 
@@ -261,10 +260,6 @@ struct MonitorPanel: View {
 
     private func sectionTitle(_ title: LocalizedStringKey) -> some View {
         Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
-    }
-    private func notice(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.circle")
-            .font(.system(size: 11)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -921,8 +916,30 @@ private struct MonitorTimeline<Content: View>: View {
     var body: some View {
         if let referenceDate { content(referenceDate) }
         else if active && enabled {
-            if let deadline { TimelineView(.explicit([deadline])) { content($0.date) } }
+            if let deadline { MonitorDeadlineTimeline(deadline: deadline, content: content) }
             else { TimelineView(.periodic(from: .now, by: interval)) { content($0.date) } }
         } else { content(.now) }
+    }
+}
+
+/// Deadline contexts from TimelineView can arrive ahead of wall-clock time.
+/// Sample the real time on appearance/change and wake once when the deadline expires.
+private struct MonitorDeadlineTimeline<Content: View>: View {
+    let deadline: Date
+    @ViewBuilder var content: (Date) -> Content
+    @State private var now = Date()
+
+    var body: some View {
+        content(now)
+            .task(id: deadline) {
+                now = Date()
+                do {
+                    while deadline > Date() {
+                        try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+                    }
+                } catch { return }
+                guard !Task.isCancelled else { return }
+                now = Date()
+            }
     }
 }

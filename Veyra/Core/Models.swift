@@ -87,6 +87,16 @@ struct QuotaSnapshot: Equatable, Sendable {
         windows.first { $0.bucketID == "codex" && $0.isPrimary }
             ?? windows.first { $0.bucketID == "codex" } ?? windows.first
     }
+    var menuWindows: [QuotaWindow] {
+        guard let bucketID = menuWindow?.bucketID else { return [] }
+        return Array(windows.filter { $0.bucketID == bucketID }.sorted { lhs, rhs in
+            let leftDuration = lhs.durationMinutes.flatMap { $0 > 0 ? $0 : nil } ?? Int64.max
+            let rightDuration = rhs.durationMinutes.flatMap { $0 > 0 ? $0 : nil } ?? Int64.max
+            if leftDuration != rightDuration { return leftDuration < rightDuration }
+            if lhs.isPrimary != rhs.isPrimary { return lhs.isPrimary }
+            return lhs.id < rhs.id
+        }.prefix(2))
+    }
 
     static func parse(_ value: JSONValue, at date: Date = Date()) -> QuotaSnapshot {
         var windows: [QuotaWindow] = []

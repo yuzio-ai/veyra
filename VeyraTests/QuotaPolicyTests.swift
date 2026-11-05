@@ -4,6 +4,36 @@ import Foundation
 final class QuotaPolicyTests: XCTestCase {
     private let date = Date(timeIntervalSince1970: 1_788_410_400)
 
+    func testMenuWindowsChooseOneBucketAndOrderShortCycleBeforeWeek() throws {
+        let snapshot = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":97,"windowDurationMins":10080},"secondary":{"usedPercent":20,"windowDurationMins":300}},"additional":{"primary":{"usedPercent":99,"windowDurationMins":15}}}}"#.utf8)), at: date)
+        XCTAssertEqual(snapshot.menuWindows.map(\.durationMinutes), [300, 10_080])
+        XCTAssertEqual(snapshot.menuWindows.map(\.remainingPercent), [80, 3])
+        XCTAssertTrue(snapshot.menuWindows.allSatisfy { $0.bucketID == "codex" })
+        XCTAssertEqual(snapshot.menuWindow?.durationMinutes, 10_080, "Legacy single-window selection remains unchanged")
+    }
+
+    func testMenuWindowsFallbackUnknownDurationsAndStablePrimaryOrder() throws {
+        let fallback = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimitsByLimitId":{"first":{"primary":{"usedPercent":20},"secondary":{"windowDurationMins":300}},"second":{"primary":{"usedPercent":50,"windowDurationMins":15}}}}"#.utf8)), at: date)
+        XCTAssertEqual(fallback.menuWindows.map(\.id), ["first:secondary", "first:primary"])
+        XCTAssertNil(fallback.menuWindows.first?.remainingPercent)
+        for duration in ["null", "0", "300"] {
+            let equal = QuotaSnapshot.parse(try JSONValue.decode(Data("{\"rateLimits\":{\"primary\":{\"windowDurationMins\":\(duration)},\"secondary\":{\"windowDurationMins\":\(duration)}}}".utf8)), at: date)
+            XCTAssertEqual(equal.menuWindows.map(\.isPrimary), [true, false])
+        }
+        XCTAssertTrue(QuotaSnapshot(windows: [], fetchedAt: date, accountID: nil).menuWindows.isEmpty)
+    }
+
+    func testDualMenuWindowsSurviveFailureAndClearOnAccountChange() throws {
+        let snapshot = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimits":{"primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":97,"windowDurationMins":10080}}}"#.utf8)), at: date)
+        var state = QuotaDisplayState()
+        state.apply(QuotaRefresh(snapshot: snapshot))
+        state.apply(QuotaRefresh(error: .rpcFailed))
+        XCTAssertEqual(state.snapshot?.menuWindows, snapshot.menuWindows)
+        state.apply(QuotaRefresh(error: .notLoggedIn, invalidatePrevious: true))
+        XCTAssertNil(state.snapshot)
+        XCTAssertNil(state.account)
+    }
+
     func testOnlineSnapshotReplacesRemovedBucketsAndEmptyResponseClearsQuota() throws {
         let first = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":80}},"additional-limit":{"primary":{"usedPercent":30}}}}"#.utf8)), at: date)
         let next = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimitsByLimitId":{"codex":{"secondary":{"usedPercent":50,"windowDurationMins":10080}}}}"#.utf8)), at: date.addingTimeInterval(60))

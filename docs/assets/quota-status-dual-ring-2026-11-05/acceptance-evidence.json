@@ -1,0 +1,180 @@
+{
+  "kind": "immutable acceptance evidence export",
+  "recorded_at": "2026-11-05T15:12:30.892685+08:00",
+  "candidate": {
+    "id": "candidate-02",
+    "commit": null,
+    "baseline_commit": "76bb5ad642778ab130988a38e30e84cbf690446e",
+    "manifest_sha256": "4b0532f2b1eb4394d3d02e5c657e80d533374cef7502f5ba8752e8b8464c9926",
+    "task_files": [
+      {
+        "path": "README.md",
+        "sha256": "f0a37bc928db1d74689cdf7e6f23b61b429707fe4e1356785689a97fe14c2ee8"
+      },
+      {
+        "path": "README.zh-CN.md",
+        "sha256": "d08fac95dcafb95063c272a711044059574b4c172cc3ce245e665b10798b7afd"
+      },
+      {
+        "path": "Veyra/App/MenuBarController.swift",
+        "sha256": "606fb7a3d99e41b0f22c3b87ff3c62aa457582e6b2e9bfe55db01d2d8d2f9d0b"
+      },
+      {
+        "path": "Veyra/App/MonitorPanel.swift",
+        "sha256": "34cffa154bf64f43e19a64dcb90b829aeedd61f5b85e138c2c2dae01144c4bfb"
+      },
+      {
+        "path": "Veyra/App/MonitorStore.swift",
+        "sha256": "46085a92e810ab17726f5e9529032263ea058987e9be96ebc38548b6c0d491ad"
+      },
+      {
+        "path": "Veyra/App/PreviewSupport.swift",
+        "sha256": "a6b7b3c63a3993b81e68984c45921e943d45fb41f94a4293dc3cdeda162eb69c"
+      },
+      {
+        "path": "Veyra/App/TaskDetailInteractionChecks.swift",
+        "sha256": "a82aeff2721b13ab85dac429e1d51a0a7c7ec0cd3883d76c45bbe7d830ce5bac"
+      },
+      {
+        "path": "Veyra/Core/Models.swift",
+        "sha256": "1f50750e8d3577062b5e6784439c2ccfc099ba5d6bbdc39a14df1d3497f38408"
+      },
+      {
+        "path": "VeyraTests/MonitorStoreTests.swift",
+        "sha256": "9e17fec84a9368e0613ba4016ca748a6c0496d9d60e4cdb67f362906dd763340"
+      },
+      {
+        "path": "VeyraTests/QuotaPolicyTests.swift",
+        "sha256": "98c022b441c2b34ce3b8f969e2107c5dd441f9e31df2dc9c09e6d8f9beb60248"
+      },
+      {
+        "path": "docs/development.zh-CN.md",
+        "sha256": "1a26fe612b17d71f98d7fe4a856fc7e0afaf5043fee95652f7eb85f2728bb69a"
+      },
+      {
+        "path": "docs/user-guide.zh-CN.md",
+        "sha256": "5ff1d87c87793ee4f2337c4aae6454cf79ef56a4d8921acf2edf6e7c053cbe25"
+      }
+    ]
+  },
+  "review": {
+    "reviewer": "/root/quota_closeout_review",
+    "implementation_and_fix_author": "/root",
+    "closed_finding": "QSR-001",
+    "open_findings": 0
+  },
+  "source_runs": {
+    "test": {
+      "id": "20261105T052237Z-df8d966e",
+      "result": "passed",
+      "full_xctest_count": 294,
+      "candidate_binding": "fixed original project verification entrypoint returned SKIP unchanged during independent review; source/tests/fixtures/configuration inherited unchanged"
+    },
+    "layouts": {
+      "id": "20261105T063124Z-2f0b3512",
+      "overall_result": "failed",
+      "completed_components": {
+        "en_layouts": 216,
+        "zh_layouts": 216,
+        "real_clock_cooldown_cases_each_language": 9,
+        "native_action_and_info_components": "passed"
+      },
+      "failure_after_components": "native-menu-light didNotOpen; preserved as failure"
+    },
+    "native_matrix": {
+      "id": "20261105T063907Z-0f8257f2",
+      "result": "passed",
+      "language": "en",
+      "native_only": true,
+      "styles": [
+        "light",
+        "dark",
+        "light-increased",
+        "dark-increased",
+        "light-opaque",
+        "dark-opaque"
+      ],
+      "candidate_binding": "same implementation; fixed original project verification entrypoint returned SKIP unchanged during independent review"
+    }
+  },
+  "limits": [
+    "layout bitmaps are not system glass-composition screenshots",
+    "keyboard events are synthetic, not hardware input",
+    "AX labels are verified by source/assertions, not manual VoiceOver",
+    "no new real-account end-to-end, signed release, installation, commit or publication"
+  ],
+  "exports": [
+    {
+      "file": "status-items-light.png",
+      "sha256": "c8664715283857ddd8d2853e849a467ac88327ca9fbad9d0d8dde0630f47ed4d",
+      "source_run_artifact": "20261105T063124Z-2f0b3512/en/status-items-light.png",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "status-items-dark.png",
+      "sha256": "c96e04e4f21ff7e7d95e5641fc740f7db94b77cb4cf61d46e99352deb2fd1c23",
+      "source_run_artifact": "20261105T063124Z-2f0b3512/en/status-items-dark.png",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "status-items-light-contrast.png",
+      "sha256": "ca9a7f2182fcc697ca6a2a6cc39b9e54fecf2095f9d9a772952d31bf1027184c",
+      "source_run_artifact": "20261105T063124Z-2f0b3512/en/status-items-light-contrast.png",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "status-items-dark-contrast.png",
+      "sha256": "f73df9fefdb54ed9455edc2f5ae9f4c1c9471c0e84c4abd077dcb4695411fc18",
+      "source_run_artifact": "20261105T063124Z-2f0b3512/en/status-items-dark-contrast.png",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "quota-cooldown-en.json",
+      "sha256": "e7fffe40efe02061c6bcb83479e224c4418a3ff4f41ce52e9612516905668361",
+      "source_run_artifact": "20261105T063124Z-2f0b3512/en/quota-cooldown-checks.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "quota-cooldown-zh.json",
+      "sha256": "e7fffe40efe02061c6bcb83479e224c4418a3ff4f41ce52e9612516905668361",
+      "source_run_artifact": "20261105T063124Z-2f0b3512/zh/quota-cooldown-checks.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "native-light.json",
+      "sha256": "71ff8265e7d8947e9bc7cbe07d4f6a64cea738d3b7f5dd0e62021f117e441e32",
+      "source_run_artifact": "20261105T063907Z-0f8257f2/en/native-light/menu-check.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "native-dark.json",
+      "sha256": "711622c6407545ace3eac5c2bb9b9b46d42ed6ad44262b432b39bd845963dffc",
+      "source_run_artifact": "20261105T063907Z-0f8257f2/en/native-dark/menu-check.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "native-light-increased.json",
+      "sha256": "2372e69817cb4c3e0f59430f1e3ab3de94f3d44fc2656e3f4125a0f64456ad0d",
+      "source_run_artifact": "20261105T063907Z-0f8257f2/en/native-light-increased/menu-check.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "native-dark-increased.json",
+      "sha256": "4b69563d6d12af48168a9b421e427ad9681f88ddeed93cc886d0779b49cb647b",
+      "source_run_artifact": "20261105T063907Z-0f8257f2/en/native-dark-increased/menu-check.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "native-light-opaque.json",
+      "sha256": "2934e855ff1f1a718b33c00ad7bd7c8676d7d3ebd8f7f6d1fb2e9ad0f1e7ca19",
+      "source_run_artifact": "20261105T063907Z-0f8257f2/en/native-light-opaque/menu-check.json",
+      "copy_method": "clonefile"
+    },
+    {
+      "file": "native-dark-opaque.json",
+      "sha256": "850b9245fde8ac68362aa26edcbcfe31887ddd211b5e02a7dee038aade8d2172",
+      "source_run_artifact": "20261105T063907Z-0f8257f2/en/native-dark-opaque/menu-check.json",
+      "copy_method": "clonefile"
+    }
+  ]
+}

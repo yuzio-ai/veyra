@@ -130,6 +130,7 @@ final class MonitorStore {
     var noSourcesFound: Bool { codexReadState == .notFound && dshReadState == .notFound && !canUseCodexServices }
     var codexHasNoTaskData: Bool { codexReadState == .notFound && canUseCodexServices }
     var menuQuotaPercent: Double? { showsQuota ? quota.snapshot?.menuWindow?.remainingPercent : nil }
+    var menuQuotaWindows: [QuotaWindow] { showsQuota ? (quota.snapshot?.menuWindows ?? []) : [] }
     var menuTaskCount: String {
         hasTaskSnapshot || (codexReadState == .notFound && dshReadState == .notFound) ? String(runningTasks.count) : "—"
     }
@@ -143,9 +144,11 @@ final class MonitorStore {
 
     private func updateMenuLabel() {
         let quotaLabel: String
-        if showsQuota, let window = quota.snapshot?.menuWindow {
+        if showsQuota, !menuQuotaWindows.isEmpty {
             let marker = quota.error == nil ? "" : "*"
-            quotaLabel = "\(window.durationLabel) \(DisplayFormat.percent(window.remainingPercent))\(marker)"
+            quotaLabel = menuQuotaWindows.map {
+                "\($0.durationLabel) \(DisplayFormat.percent($0.remainingPercent))\(marker)"
+            }.joined(separator: " · ")
         } else { quotaLabel = L10n.text("Quota —") }
         let label = showsQuota ? L10n.text("\(quotaLabel) · Running \(menuTaskCount)") : L10n.text("Running \(menuTaskCount)")
         let notices = [taskSourceWarningSummary, codexServiceWarning].compactMap { $0 }

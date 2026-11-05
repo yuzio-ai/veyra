@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Observation
 
 /// In-process controls and generated fixtures only; never reads an external AX tree.
 @MainActor
@@ -92,98 +93,11 @@ enum TaskDetailInteractionChecks {
         try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("task-detail-checks.json"))
         try await checkAPICostDisclosure(to: directory)
+        try await checkQuotaCooldown(to: directory)
         try await checkSourceNotices(to: directory)
         try await checkActionStyle(to: directory)
     }
 
-    private static func checkAPICostDisclosure(to directory: URL) async throws {
-        let store = MonitorStore()
-        PreviewSupport.configure(store, scenario: .apiCosts)
-        store.tasks = [store.tasks[0]]
-        let url = directory.appendingPathComponent("api-cost-fixture.jsonl")
-        let initial = #"{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}"# + "\n"
-            + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":250229,"cached_input_tokens":211840,"output_tokens":1404,"reasoning_output_tokens":420,"total_tokens":251633}}}}"# + "\n"
-            + #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"cost-single","turn_id":"previous","started_at_ms":1000,"completed_at_ms":5000,"item":{"type":"CommandExecution","id":"tool"}}}"# + "\n"
-            + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"previous","time_to_first_token_ms":1300}}"# + "\n"
-        try Data(initial.utf8).write(to: url)
-        store.tasks[0].apiCostSource = .codex(url)
-        let host = NSHostingView(rootView: MonitorPanel(store: store,
-            screenOverride: PanelScreenMetrics(visibleHeight: 1_200))
-            .environment(\.monitorOpaquePreview, true)
-            .environment(\.monitorReferenceDate, PreviewSupport.referenceDate))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 1),
-                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = host
-        window.makeKeyAndOrderFront(nil)
-        defer { window.close() }
-        func settle() async throws {
-            for _ in 0..<8 {
-                try await Task.sleep(for: .milliseconds(50))
-                host.layoutSubtreeIfNeeded()
-                window.setContentSize(NSSize(width: PanelSizing.width, height: host.fittingSize.height))
-            }
-        }
-        func toggle() throws {
-            guard let button = buttons(host).first(where: { $0.accessibilityIdentifier() == "monitor.tokens.cost-single" }) else {
-                throw CheckError.failed("missing API cost disclosure")
-            }
-            button.performClick(nil)
-        }
-        let before = await TaskAPICostReader.shared.lastReadByteCount
-        let statisticsBefore = await TaskSessionStatisticsReader.shared.lastReadByteCount
-        try await settle()
-        let collapsed = await TaskAPICostReader.shared.lastReadByteCount
-        guard before == collapsed else { throw CheckError.failed("collapsed cost must not read history") }
-        let statisticsCollapsed = await TaskSessionStatisticsReader.shared.lastReadByteCount
-        guard statisticsBefore == statisticsCollapsed else { throw CheckError.failed("collapsed statistics must not read history") }
-        try toggle(); try await settle()
-        let expanded = await TaskAPICostReader.shared.lastReadByteCount
-        guard expanded == initial.utf8.count else { throw CheckError.failed("expanded cost must load history once") }
-        let statisticsExpanded = await TaskSessionStatisticsReader.shared.lastReadByteCount
-        guard statisticsExpanded == initial.utf8.count else { throw CheckError.failed("expanded statistics must load history once") }
-        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-single.png"))
-        try toggle(); try await settle()
-        let extra = #"{"type":"turn_context","payload":{"model":"gpt-6.1-terra"}}"# + "\n"
-            + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":251229,"cached_input_tokens":211840,"output_tokens":1504,"total_tokens":252733}}}}"# + "\n"
-        let file = try FileHandle(forWritingTo: url)
-        try file.seekToEnd(); try file.write(contentsOf: Data(extra.utf8)); try file.close()
-        store.tasks[0] = TaskSnapshot(id: "cost-single", title: store.tasks[0].title, model: "gpt-6.1-terra",
-            source: .desktop, parentID: nil, startedAt: PreviewSupport.referenceDate,
-            updatedAt: PreviewSupport.referenceDate.addingTimeInterval(1),
-            tokens: TokenUsage(input: 251_229, output: 1_504, cachedInput: 211_840, total: 252_733), activity: .running,
-            apiCostSource: .codex(url))
-        try await settle()
-        let afterCollapse = await TaskAPICostReader.shared.lastReadByteCount
-        let statisticsAfterCollapse = await TaskSessionStatisticsReader.shared.lastReadByteCount
-        guard statisticsAfterCollapse == statisticsExpanded else { throw CheckError.failed("collapsed refresh must not scan statistics") }
-        guard afterCollapse == expanded else { throw CheckError.failed("collapsed refresh must not scan cost history") }
-        try toggle(); try await settle()
-        let incremental = await TaskAPICostReader.shared.lastReadByteCount
-        guard incremental == extra.utf8.count else { throw CheckError.failed("reexpanded cost must read only appended history") }
-        let statisticsIncremental = await TaskSessionStatisticsReader.shared.lastReadByteCount
-        guard statisticsIncremental == extra.utf8.count else { throw CheckError.failed("reexpanded statistics must read only appended history") }
-        let timingOnly = #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"cost-single","turn_id":"current","started_at_ms":4000,"completed_at_ms":8000,"item":{"type":"McpToolCall","id":"second-tool"}}}"# + "\n"
-            + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"current","time_to_first_token_ms":3000}}"# + "\n"
-        let timingFile = try FileHandle(forWritingTo: url)
-        try timingFile.seekToEnd(); try timingFile.write(contentsOf: Data(timingOnly.utf8)); try timingFile.close()
-        // A file revision alone must refresh statistics, even without another token_count.
-        store.tasks[0].rolloutModifiedAt = PreviewSupport.referenceDate.addingTimeInterval(2)
-        try await settle()
-        let liveTimingBytes = await TaskSessionStatisticsReader.shared.lastReadByteCount
-        guard liveTimingBytes == timingOnly.utf8.count else { throw CheckError.failed("active statistics must refresh on timing-only append") }
-        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-mixed.png"))
-        let record: [String: Any] = ["fixtureOnly": true,
-            "passed": ["collapsed-no-read", "expanded-history-read", "collapsed-refresh-no-read", "incremental-reexpand",
-                       "statistics-collapsed-no-read", "statistics-expanded-history-read", "statistics-collapsed-refresh-no-read",
-                       "statistics-incremental-reexpand", "statistics-timing-only-live-update"],
-            "initialBytes": expanded, "incrementalBytes": incremental]
-        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
-            .write(to: directory.appendingPathComponent("api-cost-disclosure-checks.json"))
-    }
-
-    /// Production native controls with safe callbacks, including the quit-shaped button.
-    /// No monitoring, settings window, or application termination is invoked here.
     private static func checkSourceNotices(to directory: URL) async throws {
         let suite = "veyra-source-notice-fixture-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
@@ -274,6 +188,191 @@ enum TaskDetailInteractionChecks {
             .write(to: directory.appendingPathComponent("source-warning-checks.json"))
     }
 
+    /// Mount the production panel without its fixed preview clock. The store stays
+    /// in preview mode, so clicking can never access an account or start monitoring.
+    private static func checkQuotaCooldown(to directory: URL) async throws {
+        let store = MonitorStore()
+        PreviewSupport.configure(store, scenario: .single)
+        let state = QuotaCooldownFixtureState()
+        let host = NSHostingView(rootView: QuotaCooldownFixture(store: store, state: state))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 600),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+
+        func button() throws -> MonitorActionNativeButton {
+            guard let button = buttons(host).compactMap({ $0 as? MonitorActionNativeButton })
+                .first(where: { $0.accessibilityIdentifier() == "monitor.calibrate" }) else {
+                throw CheckError.failed("current mounted quota button")
+            }
+            return button
+        }
+        func expectEnabled(_ enabled: Bool, _ phase: String) async throws {
+            let timeout = Date().addingTimeInterval(3)
+            while Date() < timeout {
+                host.layoutSubtreeIfNeeded()
+                if let control = try? button(), control.isEnabled == enabled { return }
+                try await Task.sleep(for: .milliseconds(30))
+            }
+            throw CheckError.failed("quota cooldown: \(phase)")
+        }
+        func waitPast(_ date: Date) async throws {
+            try await Task.sleep(for: .seconds(max(0, date.timeIntervalSinceNow) + 0.15))
+        }
+
+        try await expectEnabled(true, "initially ready")
+        let originalDeadline = Date().addingTimeInterval(1.2)
+        store.nextCalibrationAt = originalDeadline
+        store.quotaBusy = true
+        try await expectEnabled(false, "request in progress")
+        store.quotaBusy = false
+        try await Task.sleep(for: .milliseconds(150))
+        try await expectEnabled(false, "request finished before deadline")
+        for _ in 0..<10 { try button().performClick(nil) }
+        try button().keyDown(with: disabledKeyEvent(window: window))
+        try await expectEnabled(false, "repeated clicks and keyboard remain disabled")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("quota-cooldown-disabled.png"))
+
+        let extendedDeadline = Date().addingTimeInterval(3)
+        store.nextCalibrationAt = extendedDeadline
+        try await waitPast(originalDeadline)
+        try await expectEnabled(false, "old deadline cannot unlock extended cooldown")
+        state.shown = false
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        guard buttons(host).isEmpty else { throw CheckError.failed("quota fixture unmounted") }
+        state.shown = true
+        try await Task.sleep(for: .milliseconds(100))
+        try await expectEnabled(false, "reopened before deadline")
+        try await waitPast(extendedDeadline)
+        try await expectEnabled(true, "deadline restores button")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("quota-cooldown-ready.png"))
+
+        let secondDeadline = Date().addingTimeInterval(0.5)
+        store.nextCalibrationAt = secondDeadline
+        try await expectEnabled(false, "second cooldown")
+        state.shown = false
+        try await waitPast(secondDeadline)
+        state.shown = true
+        try await expectEnabled(true, "reopened after deadline")
+        store.nextCalibrationAt = Date().addingTimeInterval(2)
+        try await expectEnabled(false, "new deadline")
+        store.nextCalibrationAt = nil
+        try await expectEnabled(true, "cleared deadline")
+
+        let record: [String: Any] = ["fixtureOnly": true, "productionPanel": true, "realClock": true,
+            "passed": ["in-flight-disabled", "cooldown-disabled", "repeated-clicks-disabled", "deadline-extension",
+                       "reopen-before-deadline", "deadline-restores", "second-cooldown", "reopen-after-deadline", "deadline-cleared"]]
+        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+            .write(to: directory.appendingPathComponent("quota-cooldown-checks.json"))
+    }
+
+    @MainActor @Observable fileprivate final class QuotaCooldownFixtureState {
+        var shown = true
+    }
+
+    private struct QuotaCooldownFixture: View {
+        let store: MonitorStore
+        let state: QuotaCooldownFixtureState
+
+        var body: some View {
+            if state.shown {
+                MonitorPanel(store: store, screenOverride: PanelScreenMetrics(visibleHeight: 1_200))
+                    .environment(\.monitorOpaquePreview, true)
+            } else { Color.clear.frame(width: PanelSizing.width, height: 1) }
+        }
+    }
+
+    private static func checkAPICostDisclosure(to directory: URL) async throws {
+        let store = MonitorStore()
+        PreviewSupport.configure(store, scenario: .apiCosts)
+        store.tasks = [store.tasks[0]]
+        let url = directory.appendingPathComponent("api-cost-fixture.jsonl")
+        let initial = #"{"type":"turn_context","payload":{"model":"gpt-6.1-sol"}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":250229,"cached_input_tokens":211840,"output_tokens":1404,"reasoning_output_tokens":420,"total_tokens":251633}}}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"cost-single","turn_id":"previous","started_at_ms":1000,"completed_at_ms":5000,"item":{"type":"CommandExecution","id":"tool"}}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"previous","time_to_first_token_ms":1300}}"# + "\n"
+        try Data(initial.utf8).write(to: url)
+        store.tasks[0].apiCostSource = .codex(url)
+        let host = NSHostingView(rootView: MonitorPanel(store: store,
+            screenOverride: PanelScreenMetrics(visibleHeight: 1_200))
+            .environment(\.monitorOpaquePreview, true)
+            .environment(\.monitorReferenceDate, PreviewSupport.referenceDate))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 1),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func settle() async throws {
+            for _ in 0..<8 {
+                try await Task.sleep(for: .milliseconds(50))
+                host.layoutSubtreeIfNeeded()
+                window.setContentSize(NSSize(width: PanelSizing.width, height: host.fittingSize.height))
+            }
+        }
+        func toggle() throws {
+            guard let button = buttons(host).first(where: { $0.accessibilityIdentifier() == "monitor.tokens.cost-single" }) else {
+                throw CheckError.failed("missing API cost disclosure")
+            }
+            button.performClick(nil)
+        }
+        let before = await TaskAPICostReader.shared.lastReadByteCount
+        let statisticsBefore = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        try await settle()
+        let collapsed = await TaskAPICostReader.shared.lastReadByteCount
+        guard before == collapsed else { throw CheckError.failed("collapsed cost must not read history") }
+        let statisticsCollapsed = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsBefore == statisticsCollapsed else { throw CheckError.failed("collapsed statistics must not read history") }
+        try toggle(); try await settle()
+        let expanded = await TaskAPICostReader.shared.lastReadByteCount
+        guard expanded == initial.utf8.count else { throw CheckError.failed("expanded cost must load history once") }
+        let statisticsExpanded = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsExpanded == initial.utf8.count else { throw CheckError.failed("expanded statistics must load history once") }
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-single.png"))
+        try toggle(); try await settle()
+        let extra = #"{"type":"turn_context","payload":{"model":"gpt-6.1-terra"}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":251229,"cached_input_tokens":211840,"output_tokens":1504,"total_tokens":252733}}}}"# + "\n"
+        let file = try FileHandle(forWritingTo: url)
+        try file.seekToEnd(); try file.write(contentsOf: Data(extra.utf8)); try file.close()
+        store.tasks[0] = TaskSnapshot(id: "cost-single", title: store.tasks[0].title, model: "gpt-6.1-terra",
+            source: .desktop, parentID: nil, startedAt: PreviewSupport.referenceDate,
+            updatedAt: PreviewSupport.referenceDate.addingTimeInterval(1),
+            tokens: TokenUsage(input: 251_229, output: 1_504, cachedInput: 211_840, total: 252_733), activity: .running,
+            apiCostSource: .codex(url))
+        try await settle()
+        let afterCollapse = await TaskAPICostReader.shared.lastReadByteCount
+        let statisticsAfterCollapse = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsAfterCollapse == statisticsExpanded else { throw CheckError.failed("collapsed refresh must not scan statistics") }
+        guard afterCollapse == expanded else { throw CheckError.failed("collapsed refresh must not scan cost history") }
+        try toggle(); try await settle()
+        let incremental = await TaskAPICostReader.shared.lastReadByteCount
+        guard incremental == extra.utf8.count else { throw CheckError.failed("reexpanded cost must read only appended history") }
+        let statisticsIncremental = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard statisticsIncremental == extra.utf8.count else { throw CheckError.failed("reexpanded statistics must read only appended history") }
+        let timingOnly = #"{"type":"event_msg","payload":{"type":"item_completed","thread_id":"cost-single","turn_id":"current","started_at_ms":4000,"completed_at_ms":8000,"item":{"type":"McpToolCall","id":"second-tool"}}}"# + "\n"
+            + #"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"current","time_to_first_token_ms":3000}}"# + "\n"
+        let timingFile = try FileHandle(forWritingTo: url)
+        try timingFile.seekToEnd(); try timingFile.write(contentsOf: Data(timingOnly.utf8)); try timingFile.close()
+        // A file revision alone must refresh statistics, even without another token_count.
+        store.tasks[0].rolloutModifiedAt = PreviewSupport.referenceDate.addingTimeInterval(2)
+        try await settle()
+        let liveTimingBytes = await TaskSessionStatisticsReader.shared.lastReadByteCount
+        guard liveTimingBytes == timingOnly.utf8.count else { throw CheckError.failed("active statistics must refresh on timing-only append") }
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("api-cost-live-mixed.png"))
+        let record: [String: Any] = ["fixtureOnly": true,
+            "passed": ["collapsed-no-read", "expanded-history-read", "collapsed-refresh-no-read", "incremental-reexpand",
+                       "statistics-collapsed-no-read", "statistics-expanded-history-read", "statistics-collapsed-refresh-no-read",
+                       "statistics-incremental-reexpand", "statistics-timing-only-live-update"],
+            "initialBytes": expanded, "incrementalBytes": incremental]
+        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+            .write(to: directory.appendingPathComponent("api-cost-disclosure-checks.json"))
+    }
+
+    /// Production native controls with safe callbacks, including the quit-shaped button.
+    /// No monitoring, settings window, or application termination is invoked here.
     private static func checkActionStyle(to directory: URL) async throws {
         var presses = [0, 0, 0, 0]
         func fixture(enabled: Bool = true) -> ActionStyleFixture {

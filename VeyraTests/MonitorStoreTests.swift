@@ -127,6 +127,54 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(store.quota.snapshot, verified.snapshot)
         XCTAssertEqual(store.quota.error, QuotaFailure.timeout.message)
     }
+
+    func testDualQuotaLabelsCacheAndSuccessfulWindowRemoval() async throws {
+        try await L10n.$languageOverride.withValue("en") {
+            let folder = try SQLiteFixture(), fixture = MonitorFixture()
+            var online = verifiedQuota
+            online.snapshot = QuotaSnapshot.parse(try JSONValue.decode(Data(#"{"rateLimits":{"primary":{"usedPercent":97,"windowDurationMins":10080},"secondary":{"usedPercent":20,"windowDurationMins":300}}}"#.utf8)))
+            await fixture.setNetwork(online)
+            var now = Date(timeIntervalSince1970: 300)
+            let store = MonitorStore(readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+                                     now: { now }, defaults: defaults(home: folder.home))
+            await store.calibrateQuota()
+            XCTAssertEqual(store.menuQuotaWindows.map(\.durationMinutes), [300, 10_080])
+            XCTAssertEqual(store.menuLabel, "5h 80% · Week 3% · Running —")
+            XCTAssertTrue(store.menuAccessibilityLabel.contains("5h 80% · Week 3%"))
+            now = now.addingTimeInterval(61)
+            await fixture.setNetwork(QuotaRefresh(error: .rpcFailed, didRequestQuota: true))
+            await store.calibrateQuota()
+            XCTAssertEqual(store.menuQuotaWindows.count, 2)
+            XCTAssertEqual(store.menuLabel, "5h 80%* · Week 3%* · Running —")
+            XCTAssertTrue(store.menuAccessibilityLabel.contains("5h 80%* · Week 3%*"))
+            now = now.addingTimeInterval(301)
+            await fixture.setNetwork(verifiedQuota)
+            await store.calibrateQuota()
+            XCTAssertEqual(store.menuQuotaWindows.count, 1)
+            XCTAssertFalse(store.menuLabel.contains("Week"))
+            XCTAssertFalse(store.menuLabel.contains("*"))
+        }
+    }
+
+    func testRapidCalibrationClicksRespectMinimumIntervalAndResumeAtDeadline() async throws {
+        let folder = try SQLiteFixture(), fixture = MonitorFixture()
+        await fixture.setNetwork(verifiedQuota)
+        var now = Date(timeIntervalSince1970: 300)
+        let store = MonitorStore(readDsh: { _ in .empty }, fetchQuota: { _ in await fixture.network() },
+                                 now: { now }, defaults: defaults(home: folder.home))
+        await store.calibrateQuota()
+        for _ in 0..<10 { await store.calibrateQuota() }
+        var counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1)
+        now = now.addingTimeInterval(59)
+        await store.calibrateQuota()
+        counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 1)
+        now = now.addingTimeInterval(1)
+        await store.calibrateQuota()
+        counts = await fixture.counts()
+        XCTAssertEqual(counts.1, 2)
+    }
     func testAuthenticationChangeDuringCooldownInvalidatesWithoutRequestingQuota() async throws {
         let folder = try SQLiteFixture(), fixture = MonitorFixture()
         await fixture.setNetwork(verifiedQuota)

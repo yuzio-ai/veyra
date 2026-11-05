@@ -11,10 +11,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     private let store: MonitorStore
     private var previousApplication: NSRunningApplication?
     private var stopped = false
-    private var renderedQuota: Double?
+    private var renderedQuotaWindows: [QuotaWindow]?
     private var renderedShowsQuota: Bool?
     private var renderedTaskCount: String?
-    private var renderedQuotaReliable: Bool?
     private let appearanceObserver = StatusItemAppearanceObserver(frame: .zero)
 
     init(store: MonitorStore, updates: UpdateStore, openSettings: @escaping () -> Void) {
@@ -132,16 +131,14 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
     private func updateStatusImage(force: Bool = false) {
         guard !stopped, let button = statusItem.button else { return }
-        let percent = store.menuQuotaPercent, showsQuota = store.showsQuota, taskCount = store.menuTaskCount
-        let reliable = store.quota.error == nil
-        guard force || renderedQuota != percent || renderedShowsQuota != showsQuota
-            || renderedTaskCount != taskCount || renderedQuotaReliable != reliable else { return }
-        button.image = Self.statusImage(percent: percent, showsQuota: showsQuota, taskCount: taskCount,
-            quotaReliable: reliable, appearance: button.effectiveAppearance, highlighted: popover.isShown)
-        button.alternateImage = Self.statusImage(percent: percent, showsQuota: showsQuota, taskCount: taskCount,
+        let windows = store.menuQuotaWindows, showsQuota = store.showsQuota, taskCount = store.menuTaskCount
+        guard force || renderedQuotaWindows != windows || renderedShowsQuota != showsQuota
+            || renderedTaskCount != taskCount else { return }
+        button.image = Self.statusImage(quotaWindows: windows, showsQuota: showsQuota, taskCount: taskCount,
+            appearance: button.effectiveAppearance, highlighted: popover.isShown)
+        button.alternateImage = Self.statusImage(quotaWindows: windows, showsQuota: showsQuota, taskCount: taskCount,
             highlighted: true)
-        renderedQuota = percent; renderedShowsQuota = showsQuota; renderedTaskCount = taskCount
-        renderedQuotaReliable = reliable
+        renderedQuotaWindows = windows; renderedShowsQuota = showsQuota; renderedTaskCount = taskCount
     }
 
     private func updateLabel() {
@@ -159,73 +156,84 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
     }
 
-    /// One image captures one value, so the ring and its label always change together.
-    static func statusImage(percent: Double?, showsQuota: Bool, taskCount: String,
-                            quotaReliable: Bool = true, appearance: NSAppearance? = nil,
+    /// One image captures the complete quota snapshot and task count together.
+    static func statusImage(quotaWindows: [QuotaWindow], showsQuota: Bool, taskCount: String,
+                            appearance: NSAppearance? = nil,
                             highlighted: Bool = false, increasedContrast: Bool? = nil) -> NSImage {
         let imageHeight: CGFloat = 22
         let shapeHeight: CGFloat = 20
         let strokeWidth: CGFloat = 1.5
         let shapeInset = (imageHeight - shapeHeight) / 2
         let center = imageHeight / 2
-        let value = percent.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil }
-        let accent: NSColor? = showsQuota && quotaReliable && !highlighted
-            ? value.flatMap { $0 < 10 ? .systemRed : ($0 < 30 ? .systemOrange : nil) } : nil
+        let values: [Double?] = showsQuota
+            ? (quotaWindows.isEmpty ? [nil] : quotaWindows.prefix(2).map { window in
+                window.remainingPercent.flatMap { $0.isFinite ? min(100, max(0, $0)) : nil }
+            }) : []
+        // A failed refresh retains the last verified quota. Keep its warning color
+        // until the snapshot changes or is invalidated; freshness lives in the tooltip.
+        let accents: [NSColor?] = values.map { value in
+            guard !highlighted, let value else { return nil }
+            return value < 10 ? .systemRed : (value < 30 ? .systemOrange : nil)
+        }
+        let hasAccent = accents.contains { $0 != nil }
         let drawingAppearance = appearance ?? NSAppearance.currentDrawing()
         // Resolve against the status button's appearance, which can differ from
         // the app's appearance when the menu bar follows a different wallpaper.
         var foreground = NSColor.black
-        var resolvedAccent = accent
+        var resolvedAccents = accents
         drawingAppearance.performAsCurrentDrawingAppearance {
-            if accent != nil {
+            if hasAccent {
                 foreground = (NSColor.labelColor.usingColorSpace(.deviceRGB) ?? .labelColor).withAlphaComponent(1)
             }
-            resolvedAccent = accent?.usingColorSpace(.deviceRGB)
+            resolvedAccents = accents.map { $0?.usingColorSpace(.deviceRGB) }
         }
-        let label = DisplayFormat.percent(value).replacingOccurrences(of: "%", with: "")
         let taskText = taskCount as NSString
         let taskAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), .foregroundColor: foreground
         ]
         let taskSize = taskText.size(withAttributes: taskAttributes)
         let badgeWidth = max(imageHeight, ceil(taskSize.width) + 12)
-        let badgeX: CGFloat = showsQuota ? 28 : 0
+        let badgeX = CGFloat(values.count) * 28
         let appearanceName = drawingAppearance.bestMatch(from: [.accessibilityHighContrastAqua,
             .accessibilityHighContrastDarkAqua, .aqua, .darkAqua])
         let highContrast = increasedContrast ?? (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
             || appearanceName == .accessibilityHighContrastAqua || appearanceName == .accessibilityHighContrastDarkAqua)
         let image = NSImage(size: NSSize(width: badgeX + badgeWidth, height: imageHeight), flipped: false) { _ in
-            if showsQuota {
-                let rect = NSRect(x: shapeInset, y: shapeInset, width: shapeHeight, height: shapeHeight)
+            for (index, value) in values.enumerated() {
+                let originX = CGFloat(index) * 28
+                let centerX = originX + center
+                let accent = resolvedAccents[index] ?? foreground
+                let rect = NSRect(x: originX + shapeInset, y: shapeInset, width: shapeHeight, height: shapeHeight)
                 foreground.withAlphaComponent(highContrast ? 0.5 : 0.25).setStroke()
                 let track = NSBezierPath(ovalIn: rect)
                 track.lineWidth = strokeWidth; track.stroke()
                 if let value, value > 0 {
-                    (resolvedAccent ?? foreground).setStroke()
+                    accent.setStroke()
                     let arc = NSBezierPath()
                     arc.lineWidth = strokeWidth; arc.lineCapStyle = .round
-                    arc.appendArc(withCenter: NSPoint(x: center, y: center), radius: shapeHeight / 2,
+                    arc.appendArc(withCenter: NSPoint(x: centerX, y: center), radius: shapeHeight / 2,
                                   startAngle: 90, endAngle: 90 - 360 * value / 100, clockwise: true)
                     arc.stroke()
                 }
+                let label = DisplayFormat.percent(value).replacingOccurrences(of: "%", with: "")
                 let text = label as NSString
                 let attributes: [NSAttributedString.Key: Any] = [
                     .font: NSFont.monospacedDigitSystemFont(ofSize: label.count > 2 ? 9 : 10.5, weight: .semibold),
-                    .foregroundColor: value == 0 ? (resolvedAccent ?? foreground) : foreground
+                    .foregroundColor: accent
                 ]
                 let size = text.size(withAttributes: attributes)
-                text.draw(at: NSPoint(x: center - size.width / 2, y: center - size.height / 2), withAttributes: attributes)
+                text.draw(at: NSPoint(x: centerX - size.width / 2, y: center - size.height / 2), withAttributes: attributes)
             }
             let badge = NSBezierPath(roundedRect: NSRect(x: badgeX + shapeInset, y: shapeInset,
                                                        width: badgeWidth - 2 * shapeInset, height: shapeHeight),
                                      xRadius: 5, yRadius: 5)
-            foreground.setStroke()
-            badge.lineWidth = strokeWidth; badge.stroke()
+            foreground.withAlphaComponent(highContrast ? 0.7 : 0.45).setStroke()
+            badge.lineWidth = 1; badge.stroke()
             taskText.draw(at: NSPoint(x: badgeX + (badgeWidth - taskSize.width) / 2, y: center - taskSize.height / 2),
                           withAttributes: taskAttributes)
             return true
         }
-        image.isTemplate = accent == nil
+        image.isTemplate = !hasAccent
         return image
     }
 }

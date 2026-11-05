@@ -1,0 +1,16 @@
+{
+  "fixtureOnly" : true,
+  "passed" : [
+    "in-flight-disabled",
+    "cooldown-disabled",
+    "repeated-clicks-disabled",
+    "deadline-extension",
+    "reopen-before-deadline",
+    "deadline-restores",
+    "second-cooldown",
+    "reopen-after-deadline",
+    "deadline-cleared"
+  ],
+  "productionPanel" : true,
+  "realClock" : true
+}
