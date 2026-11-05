@@ -143,7 +143,8 @@ enum PreviewSupport {
         if scenario == .error {
             windows = [quota("codex", "Codex", primary: true, used: 94, minutes: 300)]
             store.quota.error = QuotaFailure.rpcFailed.message
-            store.taskError = L10n.text("Unable to read local task records. Check the data directory in Settings.")
+            store.taskError = L10n.text("Unable to read Codex task records. Check its data directory.")
+            store.dshWarning = L10n.text("Some dsh session records are unreadable.")
         }
         if scenario == .edgeCases {
             windows = [

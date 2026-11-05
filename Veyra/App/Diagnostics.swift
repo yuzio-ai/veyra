@@ -6,6 +6,12 @@ enum Diagnostics {
     static var menuWindow: (() -> NSWindow?)?
     static var toggleMenu: (() -> Void)?
 
+    static func traceMenuFocus(_ phase: String) {
+        guard CommandLine.arguments.contains("--exercise-menu-to") else { return }
+        let window = menuWindow?()
+        print("Menu focus \(ProcessInfo.processInfo.systemUptime): \(phase), active=\(NSApp.isActive), key=\(window?.isKeyWindow == true), visible=\(window?.isVisible == true), front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")")
+    }
+
     /// The fixed LaunchServices runner revokes this lease on timeout/interruption.
     /// Record identity before checking it, so even a delayed launch cannot outlive the runner.
     static func validatePreviewLease() throws {
@@ -42,6 +48,15 @@ enum Diagnostics {
     /// Images remain layout-only; this never requests screen recording permission.
     static func exerciseNextMenu(to directory: URL) {
         Task { @MainActor in
+            let center = NotificationCenter.default
+            let focusObservers = [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification,
+                                  NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification].map { name in
+                center.addObserver(forName: name, object: nil, queue: .main) { notification in
+                    let phase = notification.name.rawValue
+                    MainActor.assumeIsolated { traceMenuFocus(phase) }
+                }
+            }
+            defer { focusObservers.forEach { center.removeObserver($0) } }
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 for _ in 0..<300 {
@@ -428,19 +443,11 @@ enum Diagnostics {
         let request = UUID().uuidString
         let pid = host.processIdentifier
         print("Keyboard host request: appActive=\(NSApp.isActive), hostActive=\(host.isActive), host=\(pid)")
-        // Complete activation before asking the host to yield back. Activating
-        // an already-active app can cancel a yield it has just granted.
+        // The host owns activation and only acknowledges after its window has
+        // settled. Do not issue another activate request after its yield.
         if NSApp.isActive { NSApp.yieldActivation(to: host) }
-        if !host.isActive { host.activate(options: []) }
-        guard await waitFor({
-            !NSApp.isActive && host.isActive
-                && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
-        }) else {
-            print("Keyboard host activation failed: front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"), appActive=\(NSApp.isActive), hostActive=\(host.isActive)")
-            throw MenuCheckError.backgroundSetupFailed
-        }
         try request.write(to: directory.appendingPathComponent("focus-request"), atomically: true, encoding: .utf8)
-        guard await waitFor({
+        guard await waitForStable({
             !NSApp.isActive && host.isActive
                 && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
                 && (try? String(contentsOf: directory.appendingPathComponent("focus-ready"), encoding: .utf8)) == request
@@ -448,7 +455,7 @@ enum Diagnostics {
             print("Keyboard host timeout: appActive=\(NSApp.isActive), hostActive=\(host.isActive), front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"), ready=\(FileManager.default.fileExists(atPath: directory.appendingPathComponent("focus-ready").path))")
             throw MenuCheckError.backgroundSetupFailed
         }
-        print("Keyboard background fixture: active=\(NSApp.isActive), previous=\(pid), cooperativeYield=true, activationBeforeRequest=true")
+        print("Keyboard background fixture: active=\(NSApp.isActive), previous=\(pid), cooperativeYield=true, settledHostBeforeYield=true")
         return pid
     }
 

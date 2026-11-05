@@ -37,6 +37,29 @@ final class SQLiteFixture {
 }
 
 final class LocalTaskCacheTests: XCTestCase {
+    func testUnreadableHistoryKeepsWarningWhileSessionEventsRecoverRunningTask() async throws {
+        let fixture = try SQLiteFixture()
+        try fixture.threads()
+        let path = try fixture.log("history-fallback")
+        try fixture.insert("task", path: path)
+        try Data((#"{"type":"event_msg","timestamp":"2026-09-03T01:00:00Z","payload":{"type":"task_started","turn_id":"one"}}"# + "\n").utf8).appendTo(path)
+        // An existing history database with an incompatible schema must fail its query.
+        try fixture.execute("CREATE TABLE unrelated(value INTEGER)", database: "thread_history_1")
+        let reader = LocalTaskReader(now: { Date(timeIntervalSince1970: 1788400001) }) { _ in
+            ProcessEvidence(threadIDs: ["task"])
+        }
+        for _ in 0..<2 {
+            let result = try await reader.fetch(home: fixture.home)
+            XCTAssertEqual(result.tasks.first?.activity, .running)
+            XCTAssertEqual(result.warning, .historyUnavailable,
+                           "Recovering one task does not prove the entire fallback is complete")
+        }
+        try fixture.execute("CREATE TABLE thread_turns(thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER, status TEXT, started_at INTEGER, completed_at INTEGER)", database: "thread_history_1")
+        let recovered = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(recovered.tasks.first?.activity, .running)
+        XCTAssertNil(recovered.warning)
+    }
+
     func testUnnamedChildUsesOptionalMetadataAndRetainsArchivedParentWithoutCountingIt() async throws {
         let fixture = try SQLiteFixture(); try fixture.threads()
         let parentPath = try fixture.log("parent"), childPath = try fixture.log("child")

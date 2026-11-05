@@ -92,6 +92,7 @@ enum TaskDetailInteractionChecks {
         try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("task-detail-checks.json"))
         try await checkAPICostDisclosure(to: directory)
+        try await checkSourceNotices(to: directory)
         try await checkActionStyle(to: directory)
     }
 
@@ -183,6 +184,96 @@ enum TaskDetailInteractionChecks {
 
     /// Production native controls with safe callbacks, including the quit-shaped button.
     /// No monitoring, settings window, or application termination is invoked here.
+    private static func checkSourceNotices(to directory: URL) async throws {
+        let suite = "veyra-source-notice-fixture-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let store = MonitorStore(defaults: defaults, inspectServices: { _ in false },
+            resolveLocation: { _, _ in CodexLocation(home: directory, executable: nil) })
+        PreviewSupport.configure(store, scenario: .single)
+        store.taskWarning = .historyUnavailable
+        store.dshWarning = L10n.text("Some dsh session records are unreadable.")
+        let presenter = TaskInfoPresenter()
+        let host = NSHostingView(rootView: MonitorPanel(store: store,
+            screenOverride: PanelScreenMetrics(visibleHeight: 1_200), openSettings: {}, infoPresenter: presenter)
+            .environment(\.monitorOpaquePreview, true)
+            .environment(\.monitorReferenceDate, PreviewSupport.referenceDate))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: PanelSizing.width, height: 600),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { presenter.dismiss(restoringFocus: false); window.close() }
+
+        func settle() async throws {
+            for _ in 0..<5 {
+                try await Task.sleep(for: .milliseconds(50))
+                host.layoutSubtreeIfNeeded()
+                window.setContentSize(NSSize(width: PanelSizing.width, height: host.fittingSize.height))
+            }
+        }
+        func warningButtons() -> [NSButton] {
+            buttons(host).filter { $0.accessibilityIdentifier() == "monitor.info.taskSources" }
+        }
+        func expect(_ condition: Bool, _ name: String) throws {
+            if !condition { throw CheckError.failed(name) }
+        }
+
+        try await settle()
+        try expect(warningButtons().count == 1, "multiple task warnings share one explanation")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("source-warning-summary-light.png"))
+        let trigger = warningButtons()[0]
+        try expect(window.makeFirstResponder(trigger), "source explanation accepts keyboard focus")
+        guard let space = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+            characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49) else {
+            throw CheckError.failed("source explanation key event")
+        }
+        window.sendEvent(space)
+        try await settle()
+        try expect(presenter.shownIdentifier == "monitor.info.taskSources", "Space opens source explanation")
+        try expect(presenter.content?.details.map(\.label) == ["Codex", "dsh"], "source labels remain distinct")
+        try expect(presenter.content?.details.first?.value == TaskReadWarning.historyUnavailable.message,
+                   "history fallback reason remains available")
+        try presenter.saveContentPreview(to: directory.appendingPathComponent("source-warning-details.png"))
+
+        store.taskWarning = nil
+        try await settle()
+        try expect(presenter.content?.details.map(\.label) == ["dsh"], "open explanation removes recovered source")
+        trigger.cancelOperation(nil)
+        try await settle()
+        try expect(presenter.shownIdentifier == nil && window.firstResponder === trigger,
+                   "Escape returns focus to source trigger")
+        trigger.performClick(nil)
+        try await settle()
+        store.dshWarning = nil
+        try await settle()
+        try expect(warningButtons().isEmpty && presenter.shownIdentifier == nil,
+                   "all sources recovering removes notice and closes explanation")
+
+        store.executablePath = "/preview/missing-codex"
+        store.previewCodexServicesAvailable = false
+        store.refreshServiceAvailability()
+        try await settle()
+        try expect(store.codexServiceWarning != nil && !store.hasSourceWarning,
+                   "quota path warning keeps task health normal")
+        try expect(warningButtons().isEmpty, "quota path warning does not create task notice")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("quota-path-warning-light.png"))
+        store.taskError = L10n.text("Unable to read Codex task records. Check its data directory.")
+        try await settle()
+        try expect(warningButtons().count == 1 && store.hasSourceWarning,
+                   "task failure remains visible beside quota path warning")
+        window.appearance = NSAppearance(named: .darkAqua)
+        try await settle()
+        try expect(abs(host.bounds.width - PanelSizing.width) <= 1, "warning content preserves panel width")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("source-and-quota-warnings-dark.png"))
+        let record: [String: Any] = ["fixtureOnly": true, "inProcessControls": true,
+            "passed": ["single-summary", "source-details", "history-fallback", "keyboard-space", "escape-focus",
+                       "live-recovery", "removed-anchor-dismissal", "quota-task-isolation", "simultaneous-failures"]]
+        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+            .write(to: directory.appendingPathComponent("source-warning-checks.json"))
+    }
+
     private static func checkActionStyle(to directory: URL) async throws {
         var presses = [0, 0, 0, 0]
         func fixture(enabled: Bool = true) -> ActionStyleFixture {

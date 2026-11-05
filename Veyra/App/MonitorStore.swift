@@ -121,7 +121,11 @@ final class MonitorStore {
     var canUseCodexServices: Bool { isPreview ? previewCodexServicesAvailable : codexServicesAvailable }
     var previewCodexServicesAvailable = true { didSet { updateMenuLabel() } }
     var showsQuota: Bool { canUseCodexServices }
-    var hasSourceWarning: Bool { taskError != nil || taskWarning != nil || dshWarning != nil || codexServiceWarning != nil }
+    /// Task health is independent of the executable paths used for online quota.
+    var hasSourceWarning: Bool { taskError != nil || taskWarning != nil || dshWarning != nil }
+    var taskSourceWarningSummary: String? {
+        hasSourceWarning ? L10n.text("Some task data is unavailable. Running count may be incomplete.") : nil
+    }
     var sourceDetectionFinished: Bool { codexReadState != .detecting && dshReadState != .detecting }
     var noSourcesFound: Bool { codexReadState == .notFound && dshReadState == .notFound && !canUseCodexServices }
     var codexHasNoTaskData: Bool { codexReadState == .notFound && canUseCodexServices }
@@ -144,7 +148,8 @@ final class MonitorStore {
             quotaLabel = "\(window.durationLabel) \(DisplayFormat.percent(window.remainingPercent))\(marker)"
         } else { quotaLabel = L10n.text("Quota —") }
         let label = showsQuota ? L10n.text("\(quotaLabel) · Running \(menuTaskCount)") : L10n.text("Running \(menuTaskCount)")
-        let status = hasSourceWarning ? label + " · " + L10n.text("Some sources are unavailable. Running count may be incomplete.") : label
+        let notices = [taskSourceWarningSummary, codexServiceWarning].compactMap { $0 }
+        let status = ([label] + notices).joined(separator: " · ")
         if menuLabel != status { menuLabel = status }
     }
     func start() {

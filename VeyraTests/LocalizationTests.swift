@@ -89,7 +89,10 @@ final class LocalizationTests: XCTestCase {
                 XCTAssertEqual(store.menuLabel, base)
                 store.taskError = "fixture error"
                 XCTAssertEqual(store.menuTaskCount, "0")
-                XCTAssertTrue(store.menuLabel.contains(L10n.text("Some sources are unavailable. Running count may be incomplete.")))
+                XCTAssertTrue(store.menuLabel.contains(L10n.text("Some task data is unavailable. Running count may be incomplete.")))
+                XCTAssertEqual(store.taskSourceWarningSummary, language == "en"
+                    ? "Some task data is unavailable. Running count may be incomplete."
+                    : "部分任务数据暂不可用，运行数量可能不完整。")
                 store.taskError = nil
                 store.previewCodexServicesAvailable = false
                 XCTAssertEqual(store.menuLabel, language == "en" ? "Running 0" : "运行 0")

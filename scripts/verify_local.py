@@ -224,6 +224,15 @@ def prepare_focus_host_app():
     data['CFBundleDisplayName'] = 'Veyra Keyboard Fixture'
     data['LSUIElement'] = False
     info.write_bytes(plistlib.dumps(data))
+    # A copied unsigned build retains the same linker-signed identity and CDHash
+    # as the menu app. Bind this fixture's independent identity to its own copy.
+    bind_focus_host_identity(destination, data['CFBundleIdentifier'])
+
+
+def bind_focus_host_identity(destination, identifier):
+    subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', identifier,
+                    '--timestamp=none', str(destination)], check=True, timeout=60)
+    subprocess.run(['/usr/bin/codesign', '--verify', '--strict', str(destination)], check=True, timeout=60)
 
 
 def language(locale):

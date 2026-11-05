@@ -72,6 +72,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
     func show() {
         guard !stopped, !popover.isShown, let button = statusItem.button else { return }
+        Diagnostics.traceMenuFocus("show requested")
         let frontmost = NSWorkspace.shared.frontmostApplication
         previousApplication = frontmost?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : frontmost
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -86,7 +87,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             }
             window.collectionBehavior.insert(.fullScreenAuxiliary)
             window.makeKey()
+            Diagnostics.traceMenuFocus("made key before activation")
             NSApp.activate()
+            Diagnostics.traceMenuFocus("requested activation")
         }
         button.highlight(true)
         updateStatusImage(force: true)
@@ -94,6 +97,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
     func hide(restoringFocus: Bool = true) {
         guard popover.isShown else { return }
+        Diagnostics.traceMenuFocus("hide requested")
         let infoHadFocus = infoPresenter.window?.isKeyWindow == true
         infoPresenter.dismiss(restoringFocus: false)
         let previous = previousApplication
@@ -108,6 +112,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        Diagnostics.traceMenuFocus("popover closed")
         infoPresenter.dismiss(restoringFocus: false)
         statusItem.button?.highlight(false)
         updateStatusImage(force: true)

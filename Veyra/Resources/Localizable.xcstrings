@@ -1,6 +1,42 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Open Settings…" : {
+      "comment" : "Button that opens settings to repair unavailable Codex quota paths.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置…"
+          }
+        }
+      }
+    },
+    "Task data status" : {
+      "comment" : "Title of the explanation listing task monitoring problems by source.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Task data status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务数据状态"
+          }
+        }
+      }
+    },
     "·" : {
 
     },
@@ -3048,19 +3084,19 @@
         }
       }
     },
-    "Some sources are unavailable. Running count may be incomplete." : {
+    "Some task data is unavailable. Running count may be incomplete." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Some sources are unavailable. Running count may be incomplete."
+            "value" : "Some task data is unavailable. Running count may be incomplete."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "部分数据源不可用，运行中数量可能不完整。"
+            "value" : "部分任务数据暂不可用，运行数量可能不完整。"
           }
         }
       }

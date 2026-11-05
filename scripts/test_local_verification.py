@@ -111,6 +111,7 @@ class VerificationTests(unittest.TestCase):
                         patch.object(verify, 'OUTPUT', self.root / 'build/local-verification'),
                         patch.object(verify, 'source_digest', side_effect=lambda: verify.tree_digest([self.root / 'Veyra/example.swift'])),
                         patch.object(verify, 'toolchain_digest', return_value='toolchain-1'),
+                        patch.object(verify, 'bind_focus_host_identity'),
                         patch('sys.stdout', new=io.StringIO()), patch('sys.stderr', new=io.StringIO())]
         for item in self.patches:
             item.start()
@@ -448,6 +449,17 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(copied['CFBundleIdentifier'], 'com.veyra.fixture.keyboard-focus-host')
         self.assertFalse(copied['LSUIElement'])
         self.assertEqual(source.read_bytes(), original)
+        verify.bind_focus_host_identity.assert_called_once_with(verify.focus_host_app(), 'com.veyra.fixture.keyboard-focus-host')
+
+    def testFocusHostSigningFailureCannotRunNativeChecksOrBecomeSuccess(self):
+        with patch.object(verify, 'bind_focus_host_identity', side_effect=RuntimeError('fixture signing failed')), \
+                patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            with self.assertRaisesRegex(RuntimeError, 'fixture signing failed'):
+                verify.run(verify.arguments(['previews', 'menu', '--native-only']))
+        self.assertFalse(any(call.args[0].startswith('native-menu-') for call in execute.call_args_list))
+        result = next(verify.OUTPUT.glob('*/result.json'))
+        self.assertEqual(json.loads(result.read_text())['status'], 'failed')
+        self.assertEqual(list(verify.STATE.glob('success-*.json')), [])
 
     def testLaunchRequiresCurrentVerifiedRelease(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:

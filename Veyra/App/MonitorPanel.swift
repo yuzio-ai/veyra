@@ -43,6 +43,9 @@ struct MonitorPanel: View {
                 // including offscreen rows and disclosures, not a lazy estimate.
                 VStack(alignment: .leading, spacing: 16) {
                     if store.showsQuota { quotaSection }
+                    else if let warning = store.codexServiceWarning {
+                        QuotaServiceNotice(message: warning, openSettings: openSettings)
+                    }
                     tasksSection
                 }
                 .padding(.horizontal, 16)
@@ -220,10 +223,10 @@ struct MonitorPanel: View {
             if store.codexHasNoTaskData {
                 Text("Codex has no task data yet.").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            if let warning = store.codexServiceWarning { notice(warning) }
-            if let error = store.taskError { notice(error) }
-            if let warning = store.taskWarning { notice(warning.message) }
-            if let warning = store.dshWarning { notice(warning) }
+            if let summary = store.taskSourceWarningSummary {
+                TaskSourceNotice(summary: summary, codexError: store.taskError,
+                                 codexWarning: store.taskWarning?.message, dshWarning: store.dshWarning)
+            }
         }
     }
 
@@ -262,6 +265,54 @@ struct MonitorPanel: View {
     private func notice(_ text: String) -> some View {
         Label(text, systemImage: "exclamationmark.circle")
             .font(.system(size: 11)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct TaskSourceNotice: View {
+    let summary: String
+    let codexError: String?
+    let codexWarning: String?
+    let dshWarning: String?
+
+    private var explanation: TaskInfoContent {
+        var details: [TaskInfoDetail] = []
+        let codexMessages = [codexError, codexWarning].compactMap { $0 }
+        if !codexMessages.isEmpty {
+            details.append(TaskInfoDetail(label: "Codex", value: codexMessages.joined(separator: "\n")))
+        }
+        if let dshWarning { details.append(TaskInfoDetail(label: "dsh", value: dshWarning)) }
+        return TaskInfoContent(title: L10n.text("Task data status"), details: details)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Label(summary, systemImage: "exclamationmark.circle")
+                .font(.system(size: 11)).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            TaskInfoButton(identifier: "monitor.info.taskSources", content: explanation)
+                .frame(width: 18, height: 18)
+        }
+        .accessibilityIdentifier("monitor.taskSourceWarning")
+    }
+}
+
+private struct QuotaServiceNotice: View {
+    let message: String
+    let openSettings: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Codex quota").font(.system(size: 13, weight: .semibold))
+            Label(message, systemImage: "exclamationmark.circle")
+                .font(.system(size: 11)).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            if let openSettings {
+                Button("Open Settings…", action: openSettings).buttonStyle(.link)
+                    .font(.system(size: 11))
+                    .accessibilityIdentifier("monitor.quotaSettings")
+            }
+        }
+        .accessibilityIdentifier("monitor.quotaServiceWarning")
     }
 }
 

@@ -466,6 +466,35 @@ private actor Flag {
     func set(_ new: Bool) { value = new }
 }
 
+@MainActor
+extension MonitorStoreTests {
+    func testTaskWarningsShareOneSummaryAndClearAfterBothSourcesRecover() async throws {
+        let folder = try SQLiteFixture(), broken = Flag()
+        await broken.set(true)
+        let store = MonitorStore(readLocal: { _ in
+            TaskReadResult(tasks: [Self.codexTask()], fetchedAt: .now,
+                           warning: await broken.get() ? .historyUnavailable : nil)
+        }, readDsh: { _ in
+            Self.dshRead([Self.dshTask()], warning: await broken.get() ? "dsh unreadable" : nil)
+        }, defaults: dshIsolatedDefaults(home: folder.home))
+        await store.refreshAll()
+        let summary = try XCTUnwrap(store.taskSourceWarningSummary)
+        XCTAssertTrue(store.hasSourceWarning)
+        XCTAssertEqual(store.taskWarning, .historyUnavailable, "Unproven history fallback remains visible")
+        XCTAssertNotNil(store.dshWarning)
+        XCTAssertEqual(store.menuTaskCount, "2")
+        XCTAssertEqual(store.menuLabel.components(separatedBy: summary).count - 1, 1)
+
+        await broken.set(false)
+        await store.refreshAll()
+        XCTAssertNil(store.taskSourceWarningSummary)
+        XCTAssertFalse(store.hasSourceWarning)
+        XCTAssertEqual(store.menuTaskCount, "2")
+        XCTAssertFalse(store.menuLabel.contains(summary))
+        store.stop()
+    }
+}
+
 
 @MainActor
 extension MonitorStoreTests {
@@ -598,9 +627,15 @@ extension MonitorStoreTests {
         try FileManager.default.removeItem(at: executable)
         await store.refreshAll()
         XCTAssertFalse(store.showsQuota)
+        XCTAssertNotNil(store.codexServiceWarning)
+        XCTAssertFalse(store.hasSourceWarning, "Quota paths must not change task source health")
+        XCTAssertNil(store.taskSourceWarningSummary)
+        XCTAssertFalse(store.menuLabel.contains(L10n.text("Some task data is unavailable. Running count may be incomplete.")))
+        XCTAssertTrue(store.menuLabel.contains(try XCTUnwrap(store.codexServiceWarning)))
         try FileManager.default.createSymbolicLink(at: executable, withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
         await store.refreshAll()
         XCTAssertTrue(store.showsQuota)
+        XCTAssertNil(store.codexServiceWarning)
         await fixture.release(); await pending.value
         XCTAssertNil(store.quota.snapshot)
         XCTAssertFalse(store.quotaBusy)
