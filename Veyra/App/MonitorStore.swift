@@ -110,7 +110,6 @@ final class MonitorStore {
     var sourceDetectionFinished: Bool { codexReadState != .detecting }
     var noSourcesFound: Bool { codexReadState == .notFound && !canUseCodexServices }
     var codexHasNoTaskData: Bool { codexReadState == .notFound && canUseCodexServices }
-    var menuQuotaPercent: Double? { showsQuota ? quota.snapshot?.menuWindow?.remainingPercent : nil }
     var menuQuotaWindows: [QuotaWindow] { showsQuota ? (quota.snapshot?.menuWindows ?? []) : [] }
     var menuTaskCount: String {
         hasTaskSnapshot || codexReadState == .notFound ? String(runningTasks.count) : "—"

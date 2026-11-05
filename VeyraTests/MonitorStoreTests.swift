@@ -265,7 +265,7 @@ final class MonitorStoreTests: XCTestCase {
             XCTAssertEqual(store.tasks.map(\.id), ["running"])
             XCTAssertEqual(store.tasks.first?.tokens.total, 456)
             XCTAssertEqual(store.quota.snapshot, online.snapshot)
-            XCTAssertEqual(store.menuQuotaPercent, 80)
+            XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [80])
             XCTAssertFalse(store.menuLabel.contains("~"))
         }
         let counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
@@ -286,7 +286,7 @@ final class MonitorStoreTests: XCTestCase {
         await store.refreshAll()
         XCTAssertTrue(store.showsQuota)
         await fixture.release(); await request.value
-        XCTAssertEqual(store.menuQuotaPercent, 80)
+        XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [80])
         XCTAssertFalse(store.quotaBusy)
         XCTAssertEqual(try String(contentsOf: config, encoding: .utf8), contents)
         store.start(); await store.refreshAll(); await drain()
@@ -294,7 +294,7 @@ final class MonitorStoreTests: XCTestCase {
         var counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
         clock.advance(1); await drain()
         counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
-        XCTAssertEqual(store.menuQuotaPercent, 80)
+        XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [80])
         store.stop(); clock.finish(); await drain()
     }
 
@@ -476,7 +476,7 @@ extension MonitorStoreTests {
             await store.refreshAll()
             XCTAssertTrue(store.showsQuota)
             XCTAssertEqual(store.quota.snapshot, original)
-            XCTAssertEqual(store.menuQuotaPercent, 80)
+            XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [80])
             now = now.addingTimeInterval(61)
             await store.calibrateQuota()
             XCTAssertEqual(try String(contentsOf: config, encoding: .utf8), contents)
@@ -564,7 +564,7 @@ extension MonitorStoreTests {
         counts = await fixture.counts(); XCTAssertEqual(counts.1, 1)
         clock.advance(1); await drain()
         counts = await fixture.counts(); XCTAssertEqual(counts.1, 2)
-        XCTAssertEqual(store.menuQuotaPercent, 80)
+        XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [80])
         store.stop(); clock.finish(); await drain()
     }
 
@@ -602,7 +602,7 @@ extension MonitorStoreTests {
         XCTAssertFalse(store.quotaBusy)
         clock.advance(60)
         await store.calibrateQuota()
-        XCTAssertEqual(store.menuQuotaPercent, 80)
+        XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [80])
         store.stop(); clock.finish(); await drain()
     }
 
@@ -622,9 +622,9 @@ extension MonitorStoreTests {
         await old.waitUntilHeld()
         store.saveSettings(home: newHome.home.path, executable: "/usr/bin/true")
         await store.calibrateQuota()
-        XCTAssertEqual(store.menuQuotaPercent, 40)
+        XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [40])
         await old.release(); await pending.value
-        XCTAssertEqual(store.menuQuotaPercent, 40)
+        XCTAssertEqual(store.menuQuotaWindows.map(\.remainingPercent), [40])
         store.stop(); clock.finish(); await drain()
     }
 }

@@ -18,7 +18,7 @@
 
 中文六种外观中，费用场景均有五个展开任务、十二个模型分项；实际偏移为 0、50.75、101.5pt，窗口高度始终为 1836pt，`appWasActive` 与 `windowWasKey` 均为 true。
 
-已查看[浅色降低透明度中部布局](../../build/local-verification/20261101T043137Z-eda6f924/zh/native-light-opaque/api-cost-middle-layout.png)和[深色降低透明度底部布局](../../build/local-verification/20261101T043137Z-eda6f924/zh/native-dark-opaque/api-cost-bottom-layout.png)：金额、十二模型分项、DeepSeek 区间、部分估算及未知模型提示可读。
+已查看[浅色降低透明度中部布局](../../build/local-verification/20261101T043137Z-eda6f924/zh/native-light-opaque/api-cost-middle-layout.png)（历史产物缺失）和[深色降低透明度底部布局](../../build/local-verification/20261101T043137Z-eda6f924/zh/native-dark-opaque/api-cost-bottom-layout.png)（历史产物缺失）：金额、十二模型分项、DeepSeek 区间、部分估算及未知模型提示可读。
 
 ## 当前阻断与后续验收
 

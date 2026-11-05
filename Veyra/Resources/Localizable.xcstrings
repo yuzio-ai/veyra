@@ -620,23 +620,6 @@
         }
       }
     },
-    "API reference cost (estimated)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API reference cost (estimated)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API 参考费用（估算）"
-          }
-        }
-      }
-    },
     "Auto sync every hour while idle" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1805,23 +1788,6 @@
         }
       }
     },
-    "Input cache share" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Input cache share"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入缓存占比"
-          }
-        }
-      }
-    },
     "Key %u" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1920,23 +1886,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近记录的上下文占用，随 Token 统计更新。按记录中的窗口直接计算，不扣除固定基线，可能与 Codex 显示的百分比不同。"
-          }
-        }
-      }
-    },
-    "Mean first-token wait (TTFT)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mean first-token wait (TTFT)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "平均首 Token 等待（TTFT）"
           }
         }
       }
@@ -2107,23 +2056,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输出（含推理）"
-          }
-        }
-      }
-    },
-    "Output (reasoning)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Output (reasoning)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输出（推理）"
           }
         }
       }
@@ -2434,23 +2366,6 @@
         }
       }
     },
-    "Recorded tool time" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recorded tool time"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已记录工具用时"
-          }
-        }
-      }
-    },
     "Redo" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2481,23 +2396,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新"
-          }
-        }
-      }
-    },
-    "Refresh local tasks" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Refresh local tasks"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刷新本地任务"
           }
         }
       }
@@ -3114,23 +3012,6 @@
         }
       }
     },
-    "Subtask tokens" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Subtask tokens"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "本子任务 Token"
-          }
-        }
-      }
-    },
     "Sync after %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3280,23 +3161,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任务路径：%@"
-          }
-        }
-      }
-    },
-    "Task tokens" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Task tokens"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "本任务 Token"
           }
         }
       }
@@ -3586,23 +3450,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法读取 Codex 任务记录，请检查其数据目录。"
-          }
-        }
-      }
-    },
-    "Unable to read local task records. Check the data directory in Settings." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to read local task records. Check the data directory in Settings."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法读取本机任务记录，请在设置中检查数据目录。"
           }
         }
       }

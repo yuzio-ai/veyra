@@ -6,6 +6,8 @@
 
 归档规则：记录只对应其源码快照，其中的测试数量、界面尺寸、版本号和旧功能说明均不代表当前版本；发现与当前实现冲突时以源码和当前文档为准，不修改归档内容。
 
+标有“历史产物缺失”的截图链接保留原路径，表示当前工作区没有对应的本地构建产物。标注只说明产物可用性，不改变原验收结论；其余历史正文保持原样。
+
 ## 验证记录
 
 | 文件 | 记录日期 | 内容 | 归档原因 |
@@ -28,11 +30,12 @@
 | [api-cost-focus-investigation-2026-11-01.md](api-cost-focus-investigation-2026-11-01.md) | 2026-11-01 | API 费用焦点交接、中文六种原生外观和长列表滚动、锁屏原因确认 | 独立验收快照，保留后续补验边界 |
 | [api-cost-native-acceptance-2026-11-01.md](api-cost-native-acceptance-2026-11-01.md) | 2026-11-01 | 解锁后中英文完整菜单预览、十二组原生窗口外观与费用长列表滚动通过 | 最终补验快照，原生窗口与布局预览证据分别记录 |
 | [api-cost-screen-input-acceptance-2026-11-01.md](api-cost-screen-input-acceptance-2026-11-01.md) | 2026-11-01 | 中文六种原生外观的屏幕观察、合成输入与实体键鼠反馈范围；声音审查跳过 | 独立记录屏幕、输入和辅助功能证据边界 |
+| [task-source-warning-validation-2026-11-05.md](task-source-warning-validation-2026-11-05.md) | 2026-11-05 | 任务来源提示合并与键盘宿主焦点修复 | 对应当次源码快照，保留隔离与验收边界 |
+| [quota-status-dual-ring-validation-2026-11-05.md](quota-status-dual-ring-validation-2026-11-05.md) | 2026-11-05 | 额度双环、余量配色、任务数边框及冷却交互 | 对应当次候选与证据清单 |
+| [dsh-removal-validation.md](dsh-removal-validation.md) | 2026-11-05 | Codex 单来源清理及回归补漏 | DSH 支持退役，保留清理与验证边界 |
 
 能耗脚本本身仍在使用，方法见[开发文档](../development.zh-CN.md#能耗验证)。
 
 ## 已删除的退役资料
 
 2026-11-01 清理时删除了 `docs/design/dashboard-workspace/`（已退役 Dashboard 的 README、验证记录、概念图与运行截图）和 `docs/design/provider-*` 空目录。相关内容属于已移除功能，仍可从本次清理前的 git 提交中恢复。
-
-- [DSH 移除验收记录](dsh-removal-validation.md)：Codex 单来源清理及本次验证边界。

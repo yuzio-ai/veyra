@@ -32,9 +32,9 @@
 
 代表性预览：
 
-- [纯 dsh 深色面板](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/dsh-only-dark.png)
-- [无来源引导](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/no-sources-light.png)
-- [纯 dsh 模型设置说明](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/settings-dsh-models-light.png)
+- [纯 dsh 深色面板](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/dsh-only-dark.png)（历史产物缺失）
+- [无来源引导](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/no-sources-light.png)（历史产物缺失）
+- [纯 dsh 模型设置说明](../../build/local-verification/20261030T055045Z-6d5d2b4a/zh/settings-dsh-models-light.png)（历史产物缺失）
 
 复现命令：
 

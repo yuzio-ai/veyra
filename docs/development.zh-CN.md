@@ -53,8 +53,10 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 测试脚本最后运行 `scripts/verify_configuration.py`，只读校验工程配置与打包中 XCTest 无法覆盖的不变量：App Sandbox 关闭、应用 target 开启 Hardened Runtime 且测试 target 关闭、自动签名（Apple Development）、Team 只经未入库的 `Local.xcconfig` 提供（工程文件不含 `DEVELOPMENT_TEAM`）、混合 Info.plist 卫生（手工 plist 只保留 Xcode 无法生成的 key）、`LSUIElement` 菜单栏模式、macOS 14 部署目标、Swift 6 严格并发、应用仍链接系统 `libsqlite3`，以及测试 target 的成员例外覆盖全部共享 Core 源码和本地化资源且无失效条目。传入 `--app` 时同时检查测试宿主二进制的架构。带 `--derived-data` 且存在 Release 构建时，额外检查发行二进制同时包含 arm64 与 x86_64，以及合并后 Info.plist 的完整键集；没有 Release 构建时这些检查显示为跳过。单独运行：
 
 ```sh
-python3 scripts/verify_configuration.py --app "$PWD/build/Build/Products/Debug/Veyra.app/Contents/MacOS/Veyra"
+python3 scripts/verify_configuration.py
 ```
+
+上面的独立命令只检查源码和工程配置。测试宿主与产物检查使用上方的 Codex 固定验证入口；手动传入 `--app` 时应采用本次构建日志中的实际路径。`test.sh` 优先使用 `VEYRA_DERIVED_DATA_PATH`；未指定且仓库位于 `~/Documents`、`~/Desktop` 或 `~/Downloads` 时，默认派生目录为 `~/Library/Developer/Xcode/DerivedData/Veyra`，其他位置默认为仓库的 `build/`。
 
 脚本按普通文本读取 `project.pbxproj` 与 `Veyra/Info.plist`，不写入任何文件；版本号与 tag 一致性只在 HEAD 存在 `vX.Y.Z` 标签时比较。构建配置直接维护在 `project.pbxproj`，修改不变量时同步更新本脚本的期望值。
 

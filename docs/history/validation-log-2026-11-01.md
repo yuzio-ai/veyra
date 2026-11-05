@@ -14,7 +14,7 @@
 - [最终完整回归](../../build/local-verification/20261101T033557Z-98cb0451/result.json)：272 项 XCTest、29 项隔离诊断、5 项语言检查、37 项验证入口回归和 11 项能耗脚本回归通过；85 项配置检查无失败，Release 产物检查跳过。
 - 截图用量精确计算为 US$0.112002，展示为 `≈ US$0.112`。测试覆盖模型切换、重复记录、部分用量、重置、文件替换／截断、跨块与未完成行、缓存、取消及过期快照。
 - [费用展开专项夹具](../../build/local-verification/20261101T033325Z-d5581493/en/api-cost-disclosure-checks.json)：未展开不读、展开后首次读取 267 字节、收起后刷新不读、重新展开仅读取新增的 239 字节。
-- 该夹具的[单模型布局](../../build/local-verification/20261101T033325Z-d5581493/en/api-cost-live-single.png)和[多模型布局](../../build/local-verification/20261101T033325Z-d5581493/en/api-cost-live-mixed.png)已检查。它们是失败轮次中已完成的子项证据，不表示整轮预览通过。
+- 该夹具的[单模型布局](../../build/local-verification/20261101T033325Z-d5581493/en/api-cost-live-single.png)（历史产物缺失）和[多模型布局](../../build/local-verification/20261101T033325Z-d5581493/en/api-cost-live-mixed.png)（历史产物缺失）已检查。它们是失败轮次中已完成的子项证据，不表示整轮预览通过。
 
 ## 未完成的界面验收
 

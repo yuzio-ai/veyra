@@ -35,9 +35,9 @@
 - 悬停与按下图分别由原生 tracking 回调和 highlight 状态生成；已查看默认、焦点、悬停、按下与禁用图。
 - Token 夹具通过独立展开/收起、精确总数帮助与辅助功能、空格操作、内容高度收缩及多层长数值检查。
 - [菜单验证结果](../../build/local-verification/20261030T144331Z-4ba7b18e/result.json)
-- [中文额度与任务布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/single-light.png)
-- [中文父子任务折叠布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-collapsed.png)
-- [中文父子任务展开布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-expanded.png)
+- [中文额度与任务布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/single-light.png)（历史产物缺失）
+- [中文父子任务折叠布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-collapsed.png)（历史产物缺失）
+- [中文父子任务展开布局](../../build/local-verification/20261030T144331Z-4ba7b18e/zh/task-details-both-expanded.png)（历史产物缺失）
 
 ## 本轮追加：移除 Token 明细分隔线
 
@@ -46,7 +46,7 @@
 - [中文布局与 Token 交互](../../build/local-verification/20261030T145828Z-333ec3b2/zh/layouts.json)：466 项布局记录通过；独立展开/收起、空格操作、窗口收缩与长数值检查通过。该次整轮因焦点宿主未激活而失败，因此不作为整轮成功记录。
 - [最终中文原生菜单专项](../../build/local-verification/20261030T150205Z-7cf0a534/result.json)：单独重试后，六种外观、滚动、窗口收缩、开关切换、Escape 与焦点恢复全部通过。
 - [最终 Release 验证](../../build/local-verification/20261030T150409Z-eee62ad0/result.json)：通用构建、Release 配置与辅助工具编译通过。
-- [本轮展开布局](../../build/local-verification/20261030T145828Z-333ec3b2/zh/task-details-both-expanded.png)
+- [本轮展开布局](../../build/local-verification/20261030T145828Z-333ec3b2/zh/task-details-both-expanded.png)（历史产物缺失）
 - [本地开发签名构建记录](../../build/local-preview/token-details-spacing-20261030-230517/build-result.json)：支持 arm64、x86_64，签名校验通过；未自动启动应用。
 
 ## 证据边界

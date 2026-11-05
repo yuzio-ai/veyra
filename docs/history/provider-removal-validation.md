@@ -22,7 +22,7 @@
 | Universal Release | 无签名 arm64 + x86_64 构建、产物配置检查及辅助功能读取工具编译通过 | [Release 验证](../../build/local-verification/20261031T073002Z-7231749a/result.json) |
 | 清理扫描 | 生产代码及字符串目录无服务商管理、配置读写、Keychain 或取钥残留；专属资源无残留；diff 检查通过 | [扫描结果](../../build/provider-removal-work/removal-audit.json) |
 
-已目视检查英文浅色菜单、中文深色高对比度菜单、设置页及原生缩小窗口滚动截图。菜单截图见[英文](../../build/local-verification/20261031T070914Z-75089d96/en/single-light.png)与[中文](../../build/local-verification/20261031T071546Z-c12238af/zh/single-dark-increased.png)。
+已目视检查英文浅色菜单、中文深色高对比度菜单、设置页及原生缩小窗口滚动截图。菜单截图见[英文](../../build/local-verification/20261031T070914Z-75089d96/en/single-light.png)（历史产物缺失）与[中文](../../build/local-verification/20261031T071546Z-c12238af/zh/single-dark-increased.png)（历史产物缺失）。
 
 ## 菜单续验与修复
 
