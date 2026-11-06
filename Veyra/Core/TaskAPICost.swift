@@ -1,10 +1,9 @@
 import Foundation
 
 /// Reference prices only. Never used for quota accounting or an actual bill.
+/// Source: https://developers.openai.com/api/docs/pricing
 enum TaskAPICostCatalog {
     static let checkedOn = "2026-10-31"
-    static let currency = "USD"
-    static let openAISource = "https://developers.openai.com/api/docs/pricing"
 
     struct Rate: Sendable {
         let input: Decimal
@@ -68,7 +67,6 @@ enum TaskAPICostCatalog {
     ]
 
     static func prices(model: String) -> Rate? { openAI[model] }
-
 }
 
 struct TaskCostTokens: Equatable, Sendable {

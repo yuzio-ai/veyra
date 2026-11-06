@@ -16,7 +16,6 @@ final class TaskAPICostTests: XCTestCase {
         XCTAssertEqual(result.total?.amountUSD, decimal("0.112002"))
         XCTAssertEqual(TaskAPICostText.amount(result.total), "≈ US$0.112")
         XCTAssertFalse(result.isPartial)
-        XCTAssertEqual(TaskAPICostCatalog.currency, "USD")
         XCTAssertEqual(TaskAPICostCatalog.checkedOn, "2026-10-31")
         var withoutReasoning = usage; withoutReasoning.reasoningOutput = nil
         XCTAssertEqual(try estimate(withoutReasoning), result)
@@ -33,9 +32,6 @@ final class TaskAPICostTests: XCTestCase {
             XCTAssertEqual(result.issues, [.unknownModel(model)])
         }
     }
-
-
-
 
     func testMissingAndInvalidCountsNeverBecomeZero() {
         for usage in [TokenUsage(), TokenUsage(total: 100), TokenUsage(input: 1, output: 2),
@@ -74,7 +70,6 @@ final class TaskAPICostTests: XCTestCase {
         XCTAssertEqual(TaskAPICostText.amount(line), "≈ US$6.799")
         let fraction = Decimal(string: "0.009")!
         XCTAssertEqual(TaskAPICostText.summaryAmount(TaskAPICostLine(model: "fixture", amountUSD: fraction)), "< US$0.01")
-
     }
 
     func testMixedKnownUnknownAndMissingModelsProducePartialEstimateInStableOrder() throws {
@@ -107,7 +102,6 @@ final class TaskAPICostTests: XCTestCase {
             XCTAssertNotNil(estimate.total, model)
             XCTAssertTrue(estimate.issues.isEmpty, model)
         }
-
     }
 
     func testCostWarningsAreLocalized() {

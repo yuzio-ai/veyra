@@ -1448,23 +1448,6 @@
         }
       }
     },
-    "Desktop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desktop"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "桌面端"
-          }
-        }
-      }
-    },
     "Detect Again" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2379,23 +2362,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重做"
-          }
-        }
-      }
-    },
-    "Refresh" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Refresh"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刷新"
           }
         }
       }
