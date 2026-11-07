@@ -49,19 +49,25 @@ private struct UpdateStatusRow: View {
                 let date = referenceDate ?? context.date
                 VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
                     SettingsActionRow {
+                        Text("Current version \(updates.currentVersion)")
+                            .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("updates.current-version")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Check for Updates…") { Task { await updates.checkManually() } }
+                            .disabled(updates.isChecking || updates.nextManualCheckAt.map { date < $0 } == true)
+                            .accessibilityIdentifier("updates.check")
+                    }
+                    if let status = updates.settingsStatus {
                         HStack(spacing: SettingsLayout.labelSpacing) {
                             if updates.isChecking {
                                 ProgressView().controlSize(.small).accessibilityHidden(true)
                             }
-                            Text(updates.settingsStatus)
-                                .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                            Text(status)
+                                .font(.subheadline).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("updates.status")
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        Button("Check for Updates…") { Task { await updates.checkManually() } }
-                            .disabled(updates.isChecking || updates.nextManualCheckAt.map { date < $0 } == true)
-                            .accessibilityIdentifier("updates.check")
                     }
                     if !updates.isChecking, let next = updates.nextManualCheckAt, next > date {
                         Text(L10n.text("Check again after \(next.formatted(date: .omitted, time: .standard))"))

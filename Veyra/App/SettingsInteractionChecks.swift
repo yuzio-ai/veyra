@@ -24,7 +24,8 @@ enum SettingsInteractionChecks {
         let shortcuts = ShortcutStore(registrar: registrar, defaults: defaults)
         shortcuts.start()
         defer { shortcuts.stop() }
-        let updates = UpdateStore.preview(.idle)
+        // Exercise scrolling and compact layout while the version and checking status coexist.
+        let updates = UpdateStore.preview(.checking)
         try checkWindowRestoration()
         let bundledVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         try require(bundledVersion != nil && updates.currentVersion == bundledVersion, "preview uses built app version")

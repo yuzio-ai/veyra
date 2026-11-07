@@ -11,12 +11,12 @@ final class UpdateStore {
 
     private static let logger = Logger(subsystem: "ai.yuzio.veyra", category: "updates")
 
-    var settingsStatus: String {
+    var settingsStatus: String? {
         if isChecking { return L10n.text("Checking for updates…") }
         switch result {
-        case .notChecked, .available: return L10n.text("Current version \(currentVersion)")
-        case .upToDate: return L10n.text("Current version \(currentVersion) · You’re up to date")
-        case .failed: return L10n.text("Current version \(currentVersion) · Unable to check for updates right now")
+        case .notChecked, .available: return nil
+        case .upToDate: return L10n.text("You’re up to date")
+        case .failed: return L10n.text("Unable to check for updates right now")
         }
     }
 

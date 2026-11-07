@@ -1364,40 +1364,6 @@
         }
       }
     },
-    "Current version %@ · Unable to check for updates right now" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Current version %@ · Unable to check for updates right now"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前版本 %@ · 暂时无法检查更新"
-          }
-        }
-      }
-    },
-    "Current version %@ · You’re up to date" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Current version %@ · You’re up to date"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前版本 %@ · 已是最新版本"
-          }
-        }
-      }
-    },
     "Cut" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3387,6 +3353,23 @@
         }
       }
     },
+    "Unable to check for updates right now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to check for updates right now"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法检查更新"
+          }
+        }
+      }
+    },
     "Unable to check for updates. Check your connection and try again." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3963,6 +3946,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每周额度"
+          }
+        }
+      }
+    },
+    "You’re up to date" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You’re up to date"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已是最新版本"
           }
         }
       }

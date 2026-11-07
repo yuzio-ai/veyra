@@ -50,21 +50,29 @@ final class UpdateStoreTests: XCTestCase {
                     now: { clock.date }, fetch: { try await fixture.fetch() })
     }
 
-    func testSettingsStatusIsLocalizedAndHidesFailureDetails() {
+    func testSettingsStatusIsLocalizedAndSeparateFromCurrentVersion() {
         let version = "7.4.2"
         for language in ["en", "zh-Hans"] {
             L10n.$languageOverride.withValue(language) {
                 let chinese = language == "zh-Hans"
-                XCTAssertEqual(UpdateStore.preview(.idle, currentVersion: version).settingsStatus, chinese ? "当前版本 \(version)" : "Current version \(version)")
-                XCTAssertEqual(UpdateStore.preview(.current, currentVersion: version).settingsStatus, chinese
-                    ? "当前版本 \(version) · 已是最新版本" : "Current version \(version) · You’re up to date")
-                XCTAssertEqual(UpdateStore.preview(.checking).settingsStatus, chinese ? "正在检查更新…" : "Checking for updates…")
-                for state: UpdateStore.PreviewState in [.failed, .limited, .availableFailed] {
+                for state in UpdateStore.PreviewState.allCases {
                     let store = UpdateStore.preview(state, currentVersion: version)
-                    XCTAssertEqual(store.settingsStatus, chinese ? "当前版本 \(version) · 暂时无法检查更新"
-                        : "Current version \(version) · Unable to check for updates right now")
-                    XCTAssertFalse(store.settingsStatus.contains("GitHub"))
-                    if state == .availableFailed { XCTAssertNotNil(store.availableRelease) }
+                    XCTAssertEqual(store.currentVersion, version)
+                    switch state {
+                    case .idle, .available:
+                        XCTAssertNil(store.settingsStatus)
+                    case .checking:
+                        XCTAssertEqual(store.settingsStatus, chinese ? "正在检查更新…" : "Checking for updates…")
+                    case .current:
+                        XCTAssertEqual(store.settingsStatus, chinese ? "已是最新版本" : "You’re up to date")
+                    case .failed, .limited, .availableFailed:
+                        XCTAssertEqual(store.settingsStatus, chinese ? "暂时无法检查更新" : "Unable to check for updates right now")
+                    }
+                    if let status = store.settingsStatus {
+                        XCTAssertFalse(status.contains(version))
+                        XCTAssertFalse(status.contains("GitHub"))
+                    }
+                    if state == .available || state == .availableFailed { XCTAssertNotNil(store.availableRelease) }
                 }
             }
         }
