@@ -1,0 +1,282 @@
+[
+  {
+    "height" : 720,
+    "name" : "settings-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-checking-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-checking-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-checking-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-checking-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-available-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-available-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-available-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-available-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-current-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-current-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-current-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-current-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-failed-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-failed-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-failed-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-failed-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-limited-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-limited-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-limited-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-limited-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-availableFailed-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-availableFailed-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-availableFailed-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-availableFailed-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-manual-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-manual-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-manual-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-manual-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-detecting-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-detecting-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-detecting-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-detecting-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-missing-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-missing-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-missing-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-missing-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDirectory-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDirectory-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDirectory-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDirectory-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidExecutable-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidExecutable-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidExecutable-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidExecutable-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDraft-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDraft-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDraft-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-invalidDraft-dark-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-longPath-light",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-longPath-dark",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-longPath-light-increased",
+    "width" : 570
+  },
+  {
+    "height" : 720,
+    "name" : "settings-longPath-dark-increased",
+    "width" : 570
+  }
+]

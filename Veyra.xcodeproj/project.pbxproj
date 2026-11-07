@@ -37,6 +37,7 @@
 				Core/RolloutDisplay.swift,
 				Core/RolloutReader.swift,
 				Core/SQLiteReader.swift,
+				Core/SettingsWindowGeometry.swift,
 				Core/TaskAPICost.swift,
 				Core/TaskAPICostReader.swift,
 				Core/TaskPresentation.swift,

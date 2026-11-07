@@ -1,0 +1,137 @@
+{
+  "recordedAt": "2026-11-06T20:46:29+08:00",
+  "environment": {
+    "macOS": "27.0.1 (26A434)",
+    "Xcode": "27.2 (27B52)",
+    "execution": "unsandboxed fixed verification entrypoint; unsigned; isolated fixtures"
+  },
+  "baselineCommit": "e07f826ed1a83105d4451797cbfbaec4da32c613",
+  "sources": [
+    {
+      "path": "Veyra.xcodeproj/project.pbxproj",
+      "role": "task",
+      "snapshot": "after/Veyra.xcodeproj/project.pbxproj",
+      "sha256": "dddb11157197c65d9d421fa4ae40584586b95cdd015e0129437470da33044cba"
+    },
+    {
+      "path": "Veyra/App/MonitorSettings.swift",
+      "role": "task",
+      "snapshot": "after/Veyra/App/MonitorSettings.swift",
+      "sha256": "056a6e8af0aeb14ee60aaeaa697534a1cfa818bb5b0531e2b4c38a3cb8551047"
+    },
+    {
+      "path": "Veyra/App/ShortcutSettings.swift",
+      "role": "task",
+      "snapshot": "after/Veyra/App/ShortcutSettings.swift",
+      "sha256": "793a23c668dae7a655ec8c2af939741793ba6ef2cebbcdbe202b658ba540024d"
+    },
+    {
+      "path": "Veyra/App/UpdateViews.swift",
+      "role": "task",
+      "snapshot": "after/Veyra/App/UpdateViews.swift",
+      "sha256": "b430d9b32506bba88837afe375c1a29188154284b1a970954aca018a68f61989"
+    },
+    {
+      "path": "Veyra/App/VeyraApp.swift",
+      "role": "task",
+      "snapshot": "after/Veyra/App/VeyraApp.swift",
+      "sha256": "83af0ea21838fe9acb7890646eff8c093eaefff7f92ff105d362d453f3ac7720"
+    },
+    {
+      "path": "Veyra/App/SettingsInteractionChecks.swift",
+      "role": "task",
+      "snapshot": "after/Veyra/App/SettingsInteractionChecks.swift",
+      "sha256": "056df41e3074c5198db483a5c0e2cc070147fc04747e5f41f91043c7f161d24f"
+    },
+    {
+      "path": "Veyra/Core/SettingsWindowGeometry.swift",
+      "role": "task",
+      "snapshot": "after/Veyra/Core/SettingsWindowGeometry.swift",
+      "sha256": "fb8f6448f61bf9966482a01aca953f9be17f37f3455bb848c9fa1a507094a661"
+    },
+    {
+      "path": "VeyraTests/SettingsWindowGeometryTests.swift",
+      "role": "task",
+      "snapshot": "after/VeyraTests/SettingsWindowGeometryTests.swift",
+      "sha256": "d913bd31e26384d8e71977e4f472846ae93dbc5bb12c138f87c7816ce3827767"
+    },
+    {
+      "path": "Veyra/App/MonitorPanel.swift",
+      "role": "parallel dependency, not authored by this task",
+      "snapshot": "dependency-overrides/Veyra/App/MonitorPanel.swift",
+      "sha256": "35c136946c087c09eb13e1d768c4321feaa00783b5909d6e3a6b2fd5129d6929"
+    },
+    {
+      "path": "Veyra/App/TaskDetailInteractionChecks.swift",
+      "role": "parallel dependency, not authored by this task",
+      "snapshot": "dependency-overrides/Veyra/App/TaskDetailInteractionChecks.swift",
+      "sha256": "e4c85c9fb686763593efea1bca99334d9f2d6d921708d9661143399380f98118"
+    },
+    {
+      "path": "Veyra/App/TaskInfoViews.swift",
+      "role": "parallel dependency, not authored by this task",
+      "snapshot": "dependency-overrides/Veyra/App/TaskInfoViews.swift",
+      "sha256": "ad25c72a231087fc63cdd124b121dae5cb805a7cb6a1aac2515830afb58ebf44"
+    },
+    {
+      "path": "Veyra/Core/TaskPresentation.swift",
+      "role": "parallel dependency, not authored by this task",
+      "snapshot": "dependency-overrides/Veyra/Core/TaskPresentation.swift",
+      "sha256": "96ac941e87cdddd83d2e60a8591318d5309d1910be5229dbd434c5d4886521d7"
+    },
+    {
+      "path": "Veyra/Resources/Localizable.xcstrings",
+      "role": "parallel dependency, not authored by this task",
+      "snapshot": "dependency-overrides/Veyra/Resources/Localizable.xcstrings",
+      "sha256": "e5335ce062fdf26b69dfebac3001b7d3de86592f90522227e1349441e6ed8531"
+    },
+    {
+      "path": "VeyraTests/TaskPresentationTests.swift",
+      "role": "parallel dependency, not authored by this task",
+      "snapshot": "dependency-overrides/VeyraTests/TaskPresentationTests.swift",
+      "sha256": "cd1c3584f922a3f7bf5e22f6914cefad5ab06001202c1d4bc02e6dfff9390d5f"
+    }
+  ],
+  "checks": {
+    "xctest": {
+      "passed": 257,
+      "geometryTests": 8,
+      "failed": 0
+    },
+    "scriptRegressions": {
+      "passed": 51,
+      "failed": 0
+    },
+    "diagnosticsAndConfiguration": "passed",
+    "previews": {
+      "en": {
+        "layouts": 56,
+        "nativeChecks": 31
+      },
+      "zh": {
+        "layouts": 56,
+        "nativeChecks": 31
+      }
+    },
+    "releaseBuild": "passed",
+    "releaseConfiguration": "passed",
+    "externalAXRead": "not run",
+    "realAppLaunch": "not run"
+  },
+  "runs": {
+    "test": "20261106T124243Z-d0718dca",
+    "previews": "20261106T124324Z-21a34d65",
+    "release": "20261106T124451Z-680f80ec"
+  },
+  "limitations": [
+    "No physical display unplug/replug validation",
+    "No real cross-process app restart validation; recreated window restores persisted AppKit frame in isolated fixture",
+    "No manual Reduce Transparency/Increase Contrast system preference switching or VoiceOver validation",
+    "View bitmaps are not compositor/native glass evidence"
+  ],
+  "developmentFailure": {
+    "run": "20261106T124044Z-4e8a7a3e",
+    "cause": "Supplemental test incorrectly assumed SwiftUI Button is an NSButton",
+    "resolution": "Use actual NSScrollView bottom position and inspect bottom bitmaps; final 31 checks per language passed"
+  }
+}

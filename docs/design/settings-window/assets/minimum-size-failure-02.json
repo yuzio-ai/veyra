@@ -1,0 +1,363 @@
+{
+  "finding": "SWV-01",
+  "priority": "P2",
+  "blocking": true,
+  "type": "confirmed candidate requirement violation",
+  "baselineAttribution": "not established; no baseline runtime comparison",
+  "candidateManifestSHA256": "8c3434b0a03540385d77eb6644a69857ecee2620c5b871360971034a5d812c68",
+  "reproduction": "Open/reopen on sufficiently large display; verify target PID and bottom-right hit; CGEvent leftMouseDown, 16 leftMouseDragged steps, leftMouseUp; no AXSetSize in tested drag",
+  "expectedMinimumContent": [
+    570,
+    440
+  ],
+  "measuredChromeHeight": 32,
+  "expectedMinimumOuterFrame": [
+    570,
+    472
+  ],
+  "actualRecheckOuterFrame": [
+    360,
+    252
+  ],
+  "actualRecheckContent": [
+    360,
+    220
+  ],
+  "sourceLocations": [
+    "Veyra/App/MonitorSettings.swift:326",
+    "Veyra/App/MonitorSettings.swift:387",
+    "Veyra/Core/SettingsWindowGeometry.swift:6"
+  ],
+  "records": [
+    {
+      "name": "08-real-drag-minimum.json",
+      "sha256": "6075fe19eea94689f2df162e516c799d40cbeecb4d2247e6804d3db5065770b5",
+      "data": {
+        "timestamp": "2026-11-06T14:05:54.224Z",
+        "mode": "drag-minimum",
+        "pid": 85252,
+        "processIndex": 105,
+        "start": {
+          "x": 704,
+          "y": 877
+        },
+        "end": {
+          "x": 304,
+          "y": 377
+        },
+        "hitPID": 85252,
+        "posted": 19,
+        "before": {
+          "observedPID": 85252,
+          "frontmost": false,
+          "nativeActive": false,
+          "main": true,
+          "focused": true,
+          "position": [
+            136,
+            127
+          ],
+          "size": [
+            570,
+            752
+          ]
+        },
+        "after": {
+          "observedPID": 85252,
+          "frontmost": false,
+          "nativeActive": false,
+          "main": true,
+          "focused": true,
+          "position": [
+            136,
+            127
+          ],
+          "size": [
+            170,
+            252
+          ]
+        }
+      }
+    },
+    {
+      "name": "11-reopened-large-screen-before-drag.json",
+      "sha256": "8ba9371f1e7a23bcd83f3d93e5dfa7a3a2c027250ed886305e9c451385bddf21",
+      "data": {
+        "native": {
+          "activationPolicy": "1",
+          "active": true,
+          "frontmostPID": 85252,
+          "centerDisplay": {
+            "result": 0,
+            "count": 1,
+            "displayID": 3
+          }
+        },
+        "timestamp": "2026-11-06T14:08:57.323Z",
+        "pid": 85252,
+        "processIndex": 90,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "tag": "window",
+            "role": "AXWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              -500,
+              -1500
+            ],
+            "size": [
+              760,
+              752
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "content",
+            "role": "AXGroup",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              760,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollArea",
+            "role": "AXScrollArea",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              760,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.home",
+            "position": [
+              -448,
+              -1211
+            ],
+            "size": [
+              587,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.executable",
+            "position": [
+              -448,
+              -1145
+            ],
+            "size": [
+              587,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "lastButton",
+            "role": "AXButton",
+            "identifier": "updates.settings",
+            "position": [
+              122,
+              -948
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "scrollValue": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "12-real-drag-minimum-recheck.json",
+      "sha256": "80fe997e7ce55ca7c24e0ead1f08af798d4070333a23f00cfc18578aa6e0ec9f",
+      "data": {
+        "timestamp": "2026-11-06T14:09:02.899Z",
+        "mode": "drag-minimum",
+        "pid": 85252,
+        "processIndex": 90,
+        "start": {
+          "x": 258,
+          "y": -750
+        },
+        "end": {
+          "x": -142,
+          "y": -1250
+        },
+        "hitPID": 85252,
+        "posted": 19,
+        "before": {
+          "observedPID": 85252,
+          "frontmost": false,
+          "nativeActive": true,
+          "main": true,
+          "focused": true,
+          "position": [
+            -500,
+            -1500
+          ],
+          "size": [
+            760,
+            752
+          ]
+        },
+        "after": {
+          "observedPID": 85252,
+          "frontmost": false,
+          "nativeActive": true,
+          "main": true,
+          "focused": true,
+          "position": [
+            -500,
+            -1500
+          ],
+          "size": [
+            360,
+            252
+          ]
+        }
+      }
+    },
+    {
+      "name": "13-recheck-after-real-drag.json",
+      "sha256": "d9078982d0a27a00412c736e7280d9801e4c6ff984f8f1355b3fce56dfb6ea72",
+      "data": {
+        "native": {
+          "activationPolicy": "1",
+          "active": true,
+          "frontmostPID": 85252,
+          "centerDisplay": {
+            "result": 0,
+            "count": 1,
+            "displayID": 3
+          }
+        },
+        "timestamp": "2026-11-06T14:09:06.663Z",
+        "pid": 85252,
+        "processIndex": 90,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "tag": "window",
+            "role": "AXWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              -500,
+              -1500
+            ],
+            "size": [
+              360,
+              252
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "content",
+            "role": "AXGroup",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              360,
+              220
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollArea",
+            "role": "AXScrollArea",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              360,
+              220
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.home",
+            "position": [
+              -468,
+              -1154
+            ],
+            "size": [
+              210,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.executable",
+            "position": [
+              -468,
+              -1088
+            ],
+            "size": [
+              210,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollBar",
+            "role": "AXScrollBar",
+            "identifier": null,
+            "position": [
+              -158,
+              -1469
+            ],
+            "size": [
+              19,
+              214
+            ],
+            "scrollValue": 0
+          },
+          {
+            "tag": "lastButton",
+            "role": "AXButton",
+            "identifier": "updates.settings",
+            "position": [
+              -468,
+              -847
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "scrollValue": null
+          }
+        ]
+      }
+    }
+  ]
+}

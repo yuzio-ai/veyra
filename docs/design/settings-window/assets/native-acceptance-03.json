@@ -1,0 +1,826 @@
+{
+  "scope": "validate-03 historical evidence; native visual confirmations obtained, screen cases blocked by loginwindow",
+  "createdAt": "2026-11-07T00:57:04+08:00",
+  "candidateManifestSHA256": "cd5de43a5749f7081ab64789bf717c5d91c642d958682947c3f2f1281aa6259a",
+  "independentReview02SHA256": "ef294723049ed105d63136212a4ae05f07864d04d059743b5c28e2a59210e2c1",
+  "releaseExecutableSHA256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+  "freshReleaseVerification": {
+    "recordedAt": "2026-11-07T00:20:45+08:00",
+    "reason": "fixed launch rejected missing/current release-verification record; refreshed through fixed release-build entrypoint",
+    "command": "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py release-build",
+    "run": "20261106T161755Z-814f8e9e",
+    "result": {
+      "scope": {
+        "mode": "release-build"
+      },
+      "fingerprint": "2c7d60325213b1e6ab4acab0b2545be6353f754a478aa7e396584bb8d75ba8bf",
+      "status": "passed"
+    },
+    "fingerprintSameAsPrior": true,
+    "binarySHA256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+    "logs": [
+      {
+        "file": "validate-03-release-build.log",
+        "sha256": "b7cde0c5654b7c81999ecdf1d72267511ac34c4508de211b74021e647a9fcd84"
+      },
+      {
+        "file": "validate-03-release-configuration.log",
+        "sha256": "b9246106a7135825b99a1eec961130b3fc3c5a019f3f23a6904eda27730476e4"
+      }
+    ],
+    "fullTestsAndPreviews": "not rerun; existing same-input evidence remains applicable"
+  },
+  "humanObservations": {
+    "scope": "validate-03 user observations, evidence only",
+    "candidateManifestSHA256": "cd5de43a5749f7081ab64789bf717c5d91c642d958682947c3f2f1281aa6259a",
+    "recordedAt": "2026-11-07T00:16:39+08:00",
+    "participation": [
+      {
+        "question": "当前只检测到一块屏幕。现在能接入第二块屏幕，配合验证切屏及断开承载屏后的窗口回退吗？",
+        "answer": "可以，接好后通知"
+      },
+      {
+        "question": "当前未开启录屏权限。你能现场目视确认设置窗口在浅色、深色、降低透明度、增强对比度及滚动时是否正常吗？",
+        "answer": "可以现场确认"
+      }
+    ],
+    "participationIsVisualPass": false,
+    "observations": [
+      {
+        "id": "light-normal",
+        "recordedAt": "2026-11-07T00:25:51+08:00",
+        "readyRecord": "native-validation-03/13-light-normal-ready.json",
+        "readySHA256": "cd48dd46488c25ad5289658160e6866d5cd8c91ebb905f9b7a507ba076a91839",
+        "nativeMode": {
+          "darkMode": false,
+          "reduceTransparency": false,
+          "increaseContrast": false
+        },
+        "question": "浅色正常态已就绪（降低透明度、增强对比度均关闭）。请检查 BenQ 屏上的候选“设置”窗口：文字、按钮、路径字段是否清晰完整？再把窗口缩到最小并上下滚动，是否仍能访问全部操作？",
+        "userAnswer": "全部正常",
+        "evidenceKind": "user-reported native visual and manual resize/scroll check",
+        "passed": true
+      },
+      {
+        "id": "dark-normal",
+        "recordedAt": "2026-11-07T00:28:57+08:00",
+        "readyRecord": "native-validation-03/17-dark-normal-ready.json",
+        "readySHA256": "76d4461542af796c17f5f58a94970dfcb8db3b4a78061684d5f4b76160573061",
+        "nativeMode": {
+          "darkMode": true,
+          "reduceTransparency": false,
+          "increaseContrast": false
+        },
+        "question": "深色正常态已就绪（降低透明度、增强对比度均关闭）。请查看 BenQ 屏上的候选“设置”窗口并上下滚动：文字对比、按钮边界、路径字段及全部操作是否清楚、无遮挡？",
+        "userAnswer": "全部正常",
+        "evidenceKind": "user-reported native visual and manual scroll check",
+        "passed": true
+      },
+      {
+        "id": "light-combined",
+        "recordedAt": "2026-11-07T00:35:32+08:00",
+        "readyRecord": "native-validation-03/24-light-combined-ready.json",
+        "readySHA256": "a7a512006555dd4083f2a814c69aa1844348f013b6f578fd0441bda4d3a2f43c",
+        "nativeMode": {
+          "darkMode": false,
+          "reduceTransparency": true,
+          "increaseContrast": true
+        },
+        "question": "浅色组合态已就绪，“降低透明度”和“增强对比度”均已开启。请查看候选“设置”窗口并上下滚动：文字、按钮和路径字段是否清楚，全部操作是否可见、无遮挡？",
+        "userAnswer": "全部正常",
+        "evidenceKind": "user-reported native visual and manual scroll check",
+        "passed": true
+      },
+      {
+        "id": "dark-combined",
+        "recordedAt": "2026-11-07T00:37:34+08:00",
+        "readyRecord": "native-validation-03/28-dark-combined-ready.json",
+        "readySHA256": "bec3e82be808c97fc2e699ea9d5c6a626978eb8e49e9e9f91c0e946faffb244e",
+        "nativeMode": {
+          "darkMode": true,
+          "reduceTransparency": true,
+          "increaseContrast": true
+        },
+        "question": "深色组合态已就绪，“降低透明度”和“增强对比度”均开启。请最后检查候选“设置”窗口并上下滚动：文字、按钮和路径字段是否清楚，全部操作是否可见、无遮挡？",
+        "userAnswer": "全部正常",
+        "evidenceKind": "user-reported native visual and manual scroll check",
+        "passed": true
+      }
+    ],
+    "interruption": {
+      "recordedAt": "2026-11-07T00:57:04+08:00",
+      "observedRecord": "native-validation-03/36-readonly-recovery-desktop-state.json",
+      "observedSHA256": "9afbf9bb13b97da219f4c7585c62b7f8bcc809385cfd895b9e8d2833bb3156ea",
+      "frontmostBundle": "com.apple.loginwindow",
+      "unlockRequested": true,
+      "unlockReplyReceived": false,
+      "remainingRestoration": [
+        "reduceTransparency: true -> original false",
+        "increaseContrast: true -> original false"
+      ],
+      "safeCleanupRecord": "native-validation-03/cleanup.json",
+      "safeCleanupSHA256": "98c82ba5836e5fcc286721cb09066c01fc0f000dbb945ea5675d5bdad6d3f481"
+    }
+  },
+  "readyStates": [
+    {
+      "timestamp": "2026-11-06T16:22:21.211Z",
+      "pid": 57689,
+      "processIndex": 89,
+      "observedPID": 57689,
+      "screens": [
+        {
+          "displayID": 1,
+          "localizedName": "内建视网膜显示器",
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 1451,
+              "height": 949
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          }
+        },
+        {
+          "displayID": 3,
+          "localizedName": "BenQ MA320U",
+          "frame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": -896,
+              "y": -1890
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          }
+        }
+      ],
+      "activated": true,
+      "nativeActive": true,
+      "frontmostPID": 57689,
+      "identifier": "veyra.settings",
+      "position": [
+        -492,
+        -1333
+      ],
+      "size": [
+        570,
+        752
+      ],
+      "contentSize": [
+        570,
+        720
+      ],
+      "centerDisplay": {
+        "result": 0,
+        "count": 1,
+        "displayID": 3
+      },
+      "actual": {
+        "darkMode": false,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "timestamp": "2026-11-06T16:28:05.963Z",
+      "pid": 57689,
+      "processIndex": 87,
+      "observedPID": 57689,
+      "screens": [
+        {
+          "displayID": 1,
+          "localizedName": "内建视网膜显示器",
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 1451,
+              "height": 949
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          }
+        },
+        {
+          "displayID": 3,
+          "localizedName": "BenQ MA320U",
+          "frame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": -896,
+              "y": -1890
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          }
+        }
+      ],
+      "activated": true,
+      "nativeActive": true,
+      "frontmostPID": 57689,
+      "identifier": "veyra.settings",
+      "position": [
+        -492,
+        -1333
+      ],
+      "size": [
+        570,
+        472
+      ],
+      "contentSize": [
+        570,
+        440
+      ],
+      "centerDisplay": {
+        "result": 0,
+        "count": 1,
+        "displayID": 3
+      },
+      "actual": {
+        "darkMode": true,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "nativeControls": {
+        "settingsPID": 63419,
+        "contrast": {
+          "identifier": "AX_INCREASE_CONTRAST",
+          "value": 1,
+          "enabled": true
+        },
+        "transparency": {
+          "identifier": "AX_REDUCE_TRANSPARENCY",
+          "value": 1,
+          "enabled": true
+        }
+      },
+      "timestamp": "2026-11-06T16:34:58.101Z",
+      "pid": 57689,
+      "processIndex": 85,
+      "observedPID": 57689,
+      "screens": [
+        {
+          "displayID": 1,
+          "localizedName": "内建视网膜显示器",
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 1451,
+              "height": 948
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          }
+        },
+        {
+          "displayID": 3,
+          "localizedName": "BenQ MA320U",
+          "frame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": -896,
+              "y": -1890
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          }
+        }
+      ],
+      "activated": true,
+      "nativeActive": true,
+      "frontmostPID": 57689,
+      "identifier": "veyra.settings",
+      "position": [
+        -492,
+        -1332
+      ],
+      "size": [
+        570,
+        472
+      ],
+      "contentSize": [
+        570,
+        440
+      ],
+      "centerDisplay": {
+        "result": 0,
+        "count": 1,
+        "displayID": 3
+      },
+      "actual": {
+        "darkMode": false,
+        "reduceTransparency": true,
+        "increaseContrast": true
+      }
+    },
+    {
+      "nativeControls": {
+        "settingsPID": 63419,
+        "contrast": {
+          "identifier": "AX_INCREASE_CONTRAST",
+          "value": 1,
+          "enabled": true
+        },
+        "transparency": {
+          "identifier": "AX_REDUCE_TRANSPARENCY",
+          "value": 1,
+          "enabled": true
+        }
+      },
+      "timestamp": "2026-11-06T16:37:03.357Z",
+      "pid": 57689,
+      "processIndex": 85,
+      "observedPID": 57689,
+      "screens": [
+        {
+          "displayID": 1,
+          "localizedName": "内建视网膜显示器",
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 1451,
+              "height": 948
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          }
+        },
+        {
+          "displayID": 3,
+          "localizedName": "BenQ MA320U",
+          "frame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "cgBounds": {
+            "origin": {
+              "x": -896,
+              "y": -1890
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          }
+        }
+      ],
+      "activated": true,
+      "nativeActive": true,
+      "frontmostPID": 57689,
+      "identifier": "veyra.settings",
+      "position": [
+        -492,
+        -1332
+      ],
+      "size": [
+        570,
+        472
+      ],
+      "contentSize": [
+        570,
+        440
+      ],
+      "centerDisplay": {
+        "result": 0,
+        "count": 1,
+        "displayID": 3
+      },
+      "actual": {
+        "darkMode": true,
+        "reduceTransparency": true,
+        "increaseContrast": true
+      }
+    }
+  ],
+  "topologyObserved": {
+    "timestamp": "2026-11-06T16:22:17.677Z",
+    "frontmostPID": 32365,
+    "frontmostBundle": "com.openai.codex",
+    "screens": [
+      {
+        "index": 0,
+        "displayID": 1,
+        "localizedName": "内建视网膜显示器",
+        "builtIn": 1,
+        "frame": {
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 1512,
+            "height": 982
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": 61,
+            "y": 0
+          },
+          "size": {
+            "width": 1451,
+            "height": 949
+          }
+        },
+        "scale": 2,
+        "cgBounds": {
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 1512,
+            "height": 982
+          }
+        },
+        "mirrorsDisplayID": 0
+      },
+      {
+        "index": 1,
+        "displayID": 3,
+        "localizedName": "BenQ MA320U",
+        "builtIn": 0,
+        "frame": {
+          "origin": {
+            "x": -896,
+            "y": 982
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": -896,
+            "y": 982
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "scale": 2,
+        "cgBounds": {
+          "origin": {
+            "x": -896,
+            "y": -1890
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "mirrorsDisplayID": 0
+      }
+    ],
+    "accessibility": true,
+    "postEvent": true,
+    "screenCapture": false,
+    "leftButtonDown": false,
+    "pointer": {
+      "x": 709.80078125,
+      "y": -1613.87890625
+    },
+    "veyra": [
+      {
+        "pid": 44227,
+        "bundlePath": "/Applications/Veyra.app",
+        "executablePath": "/Applications/Veyra.app/Contents/MacOS/Veyra",
+        "active": false
+      },
+      {
+        "pid": 57689,
+        "bundlePath": "/private/tmp/veyra-local-verification/3c3c495984dc6c0d/release/Build/Products/Release/Veyra.app",
+        "executablePath": "/private/tmp/veyra-local-verification/3c3c495984dc6c0d/release/Build/Products/Release/Veyra.app/Contents/MacOS/Veyra",
+        "active": false
+      }
+    ]
+  },
+  "restoration": {
+    "originalActual": {
+      "darkMode": false,
+      "reduceTransparency": false,
+      "increaseContrast": false
+    },
+    "finalActual": {
+      "darkMode": false,
+      "reduceTransparency": true,
+      "increaseContrast": true
+    },
+    "appearancePolicyExactlyRestored": true,
+    "accessibilityPreferencesExactlyRestored": false,
+    "allGlobalPreferencesRestored": false,
+    "outstandingRestoration": [
+      "reduceTransparency: true -> original false",
+      "increaseContrast: true -> original false"
+    ],
+    "autosaveExactlyRestored": true,
+    "autosaveWritePerformed": true,
+    "originalWindowGeometryRestoredBeforeExit": false,
+    "windowGeometryRestorationLimitation": "UI inaccessible while frontmost loginwindow; only persisted original autosave restored after owned-process exit",
+    "original44227Touched": false,
+    "finalVeyraPIDs": [
+      44227
+    ],
+    "finalFrontmost": {
+      "pid": 403,
+      "bundle": "com.apple.loginwindow"
+    },
+    "ourExplicitCrossScreenMovesPerformed": 0,
+    "ourRealHIDMinimumTestsPerformed": 0,
+    "carrierDisplayRemovalTestPerformed": false,
+    "noInputWakeOrUnlockEventsDuringBlockedCleanup": true,
+    "screenCaptureAttempted": false,
+    "newTCCPermissionRequested": false
+  },
+  "ownedProcessesCleaned": [
+    {
+      "pid": 57689,
+      "pathVerified": true,
+      "birthVerified": true,
+      "absentAfterCleanup": true
+    },
+    {
+      "pid": 63419,
+      "pathVerified": true,
+      "birthVerified": true,
+      "absentAfterCleanup": true
+    }
+  ],
+  "sourceRecords": [
+    {
+      "name": "01-readonly-preflight.json",
+      "sha256": "7cbb6025bf5ba2d6fcbb5e6c06b88ec9e5d877f49fcea74e45750f7591081a50"
+    },
+    {
+      "name": "02-readonly-source.json",
+      "sha256": "facde607d045e1bc39e5962c44b470ec24f6699e660084bda2cc930c4c19fdc6"
+    },
+    {
+      "name": "03-original-preferences.json",
+      "sha256": "0b11e8f00160d574442744a815905cfc5957d0a93ff117963c578094fc8344c0"
+    },
+    {
+      "name": "07-process-source.log",
+      "sha256": "19bff1cbd5591480998934e122403f560ca28705bd25036c64786d9a80dadcd1"
+    },
+    {
+      "name": "12-current-display-topology.json",
+      "sha256": "f2560a4f0422ee8ab43fbaacdf6393f4481f5e85c0fb831574d6c2ee2e2b75bc"
+    },
+    {
+      "name": "13-light-normal-ready.json",
+      "sha256": "cd48dd46488c25ad5289658160e6866d5cd8c91ebb905f9b7a507ba076a91839"
+    },
+    {
+      "name": "17-dark-normal-ready.json",
+      "sha256": "76d4461542af796c17f5f58a94970dfcb8db3b4a78061684d5f4b76160573061"
+    },
+    {
+      "name": "21-combined-controls-before.json",
+      "sha256": "97e238e52564c1d184b3232d63f186d8d50fe9d7622dc5d0626021fbdb0a0f4f"
+    },
+    {
+      "name": "22-set-light-combined.json",
+      "sha256": "68e4fb173cab0ae641802e6cdb983cfcb439a07ce5b34ea5a72ff98e586984ae"
+    },
+    {
+      "name": "24-light-combined-ready.json",
+      "sha256": "a7a512006555dd4083f2a814c69aa1844348f013b6f578fd0441bda4d3a2f43c"
+    },
+    {
+      "name": "26-set-dark-combined.json",
+      "sha256": "d21cde0a62bd0d323a1035836ab00f82b4ccb008a057f7571d86b196300d51f5"
+    },
+    {
+      "name": "28-dark-combined-ready.json",
+      "sha256": "bec3e82be808c97fc2e699ea9d5c6a626978eb8e49e9e9f91c0e946faffb244e"
+    },
+    {
+      "name": "29-restore-original-global-controls.json",
+      "sha256": "e6ff2ad161b74e20b3796d385694bec0b9a4e273a2162c1ce3e2852608c8adec"
+    },
+    {
+      "name": "30-global-preferences-restored.json",
+      "sha256": "59172a5a3cb688135a132c0b1584afe9816ec59437bddfbc1767ba5bc79900f2"
+    },
+    {
+      "name": "36-readonly-recovery-desktop-state.json",
+      "sha256": "9afbf9bb13b97da219f4c7585c62b7f8bcc809385cfd895b9e8d2833bb3156ea"
+    },
+    {
+      "name": "38-restore-light-without-window.json",
+      "sha256": "66432bdbd33908a5ddaf3bf4327e8e411618b145bab7ffc62707fa3add43fe00"
+    },
+    {
+      "name": "39-post-light-restoration-preferences.json",
+      "sha256": "3c5d30cb3e952fe2192caa3592d2eca9dbd6cc59ff8eb277b0039a813431e823"
+    },
+    {
+      "name": "40-owned-process-cleanup.json",
+      "sha256": "669f681c7b45691fa87c6c43f7ea532296d58cd4f97af1c7a33eca686c431252"
+    },
+    {
+      "name": "41-restore-original-autosave.json",
+      "sha256": "d1624edc57c078ea46d04da489866681bf94431a7452453c1f9c7b28e9705aca"
+    },
+    {
+      "name": "42-final-preferences-and-restoration-gap.json",
+      "sha256": "f923cbf571ff7b3fe6e045772dac50850bc9432a89fc491d53af979b3de0612d"
+    },
+    {
+      "name": "44-final-readonly-environment.json",
+      "sha256": "5d51ff8db7d05317fce67946810969700185b1e0785639b78672511dc064f560"
+    },
+    {
+      "name": "cleanup.json",
+      "sha256": "98c82ba5836e5fcc286721cb09066c01fc0f000dbb945ea5675d5bdad6d3f481"
+    },
+    {
+      "name": "facts.md",
+      "sha256": "aac241a06e11d992606a4cb89b269b47c271389e06f05f4673e404fdf6e4418c"
+    },
+    {
+      "name": "../human-observations-03.json",
+      "sha256": "3bf49abc128cab393c459d22afadc753ac77bdfc8b18748908a124051b5aa3da"
+    },
+    {
+      "name": "../validate-03-release-refresh.json",
+      "sha256": "64a0d8fa55a90bf2b9af4a0fd08c4def1ebed4714f3d04f3ae896c2d0067f3c1"
+    }
+  ],
+  "limits": [
+    "native visual results are explicit user observations, not automated screenshots",
+    "four representative mode combinations only",
+    "screen-change minimum and carrier-screen removal not run",
+    "two accessibility flags remain enabled and must first be restored after unlock",
+    "record 30 filename includes restored but actual payload shows all flags true; no restoration pass inferred"
+  ]
+}

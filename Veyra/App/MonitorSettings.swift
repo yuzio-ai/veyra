@@ -3,7 +3,8 @@ import AppKit
 
 // Settings owns its rhythm; native controls own their drawing and focus appearance.
 enum SettingsLayout {
-    static let width: CGFloat = 570
+    static let width = SettingsWindowGeometry.defaultContentSize.width
+    static let maximumFormWidth: CGFloat = 720
     static let horizontalPadding: CGFloat = 32
     static let verticalPadding: CGFloat = 28
     static let sectionSpacing: CGFloat = 32
@@ -13,6 +14,30 @@ enum SettingsLayout {
     static let labelSpacing: CGFloat = 8
 }
 
+private struct SettingsCompactLayoutKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var settingsCompactLayout: Bool {
+        get { self[SettingsCompactLayoutKey.self] }
+        set { self[SettingsCompactLayoutKey.self] = newValue }
+    }
+}
+
+/// Change only the layout, preserving native control identity and editing state.
+struct SettingsActionRow<Content: View>: View {
+    @Environment(\.settingsCompactLayout) private var compact
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        let layout = compact
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SettingsLayout.labelSpacing))
+            : AnyLayout(HStackLayout(spacing: SettingsLayout.labelSpacing))
+        layout { content }
+    }
+}
+
 struct MonitorSettings: View {
     @Bindable var store: MonitorStore
     @Bindable var updates: UpdateStore
@@ -20,17 +45,27 @@ struct MonitorSettings: View {
     @State private var previewShortcuts = ShortcutStore(registrar: CarbonHotKeyRegistrar())
 
     var body: some View {
-        ScrollView {
-            content
+        GeometryReader { geometry in
+            ScrollView(.vertical) {
+                SettingsForm(store: store, updates: updates, shortcuts: shortcuts ?? previewShortcuts)
+                    .frame(maxWidth: SettingsLayout.maximumFormWidth)
+                    .frame(maxWidth: .infinity)
+            }
+            .environment(\.settingsCompactLayout, geometry.size.width < SettingsLayout.width)
         }
-        .frame(width: SettingsLayout.width)
-        .frame(idealHeight: 720)
+        .frame(idealWidth: SettingsLayout.width, idealHeight: SettingsWindowGeometry.defaultContentSize.height)
         .task { await store.detectConfiguration() }
     }
+}
 
-    private var content: some View {
+private struct SettingsForm: View {
+    let store: MonitorStore
+    let updates: UpdateStore
+    let shortcuts: ShortcutStore
+
+    var body: some View {
         VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing / 2) {
-            ShortcutSettingsSection(shortcuts: shortcuts ?? previewShortcuts)
+            ShortcutSettingsSection(shortcuts: shortcuts)
             Divider()
             CodexSettingsSection(store: store)
             Divider()
@@ -38,7 +73,7 @@ struct MonitorSettings: View {
         }
         .padding(.horizontal, SettingsLayout.horizontalPadding)
         .padding(.vertical, SettingsLayout.verticalPadding)
-        .frame(width: SettingsLayout.width)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -154,7 +189,7 @@ private struct CodexStatusRow: View {
     }
 
     var body: some View {
-        HStack(spacing: SettingsLayout.labelSpacing) {
+        SettingsActionRow {
             HStack(spacing: 6) {
                 if store.configurationState == .detecting {
                     ProgressView().controlSize(.small).accessibilityHidden(true)
@@ -168,7 +203,7 @@ private struct CodexStatusRow: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(message)
             .accessibilityIdentifier("settings.codex.status")
-            Spacer(minLength: SettingsLayout.labelSpacing)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if store.hasManualPaths {
                 Button("Restore automatic detection") {
                     // End native editing before invalidating any blur-triggered submission.
@@ -282,17 +317,89 @@ private struct NativePathField: NSViewRepresentable {
 
 @MainActor
 enum SettingsWindow {
+    static let autosaveName = "veyra.settings"
+
     static func make<Content: View>(hosting: NSHostingView<Content>,
-                                    contentSize: NSSize = NSSize(width: SettingsLayout.width, height: 720)) -> NSWindow {
-        // Track the content minimum without deriving a maximum from the form's layout.
-        hosting.sizingOptions = [.minSize]
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: contentSize),
+                                    contentSize: NSSize = SettingsWindowGeometry.defaultContentSize,
+                                    autosaveName: NSWindow.FrameAutosaveName? = nil) -> NSWindow {
+        // Keep SwiftUI out of the window's automatic minimum/maximum-size ownership.
+        hosting.sizingOptions = []
+        let window = SettingsHostWindow(contentRect: NSRect(origin: .zero, size: contentSize),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = L10n.text("Settings")
         window.identifier = NSUserInterfaceItemIdentifier("veyra.settings")
         window.isReleasedWhenClosed = false
-        window.contentView = hosting
-        window.contentMinSize = NSSize(width: SettingsLayout.width, height: 440)
+        // A hosting view used directly as contentView rewrites the window's size
+        // bounds during layout, even when sizingOptions is empty. Embed it so
+        // AppKit's screen-aware contentMinSize remains authoritative.
+        let container = NSView(frame: NSRect(origin: .zero, size: contentSize))
+        hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
+        container.addSubview(hosting)
+        window.contentView = container
+        let restored = autosaveName.map { window.setFrameUsingName($0) } ?? false
+        if !restored || !SettingsWindowGeometry.isValid(window.frame) {
+            window.setContentSize(contentSize)
+            window.centerOnPreferredScreen()
+        }
+        if let autosaveName { window.setFrameAutosaveName(autosaveName) }
+        window.prepareForDisplay()
         return window
+    }
+
+    static func prepareForDisplay(_ window: NSWindow) {
+        (window as? SettingsHostWindow)?.prepareForDisplay()
+    }
+}
+
+@MainActor
+private final class SettingsHostWindow: NSWindow {
+    private var observing = false
+    private var adjusting = false
+
+    private func preferredScreen(for frame: NSRect) -> NSScreen? {
+        let screens = NSScreen.screens
+        guard let index = SettingsWindowGeometry.screenIndex(
+            for: frame, visibleFrames: screens.map(\.visibleFrame), screenFrames: screens.map(\.frame),
+            mouseLocation: NSEvent.mouseLocation,
+            mainIndex: NSScreen.main.flatMap { screens.firstIndex(of: $0) }) else { return nil }
+        return screens[index]
+    }
+
+    func centerOnPreferredScreen() {
+        guard let screen = preferredScreen(for: .zero) else { return }
+        setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - frame.width / 2,
+                               y: screen.visibleFrame.midY - frame.height / 2))
+    }
+
+    func prepareForDisplay() {
+        fitToScreen()
+        guard !observing else { return }
+        observing = true
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(screenChanged), name: NSWindow.didChangeScreenNotification, object: self)
+        center.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    }
+
+    @objc private func screenChanged() {
+        if isVisible { fitToScreen() }
+    }
+
+    private func fitToScreen() {
+        guard !adjusting, let screen = preferredScreen(for: frame) else { return }
+        adjusting = true
+        defer { adjusting = false }
+        let chrome = max(0, frame.height - contentRect(forFrameRect: frame).height)
+        let placement = SettingsWindowGeometry.placement(for: frame, visibleFrame: screen.visibleFrame, chromeHeight: chrome)
+        contentMinSize = placement.minimumContentSize
+        if frame != placement.frame { setFrame(placement.frame, display: isVisible) }
+    }
+
+    override func close() {
+        if !frameAutosaveName.isEmpty { saveFrame(usingName: frameAutosaveName) }
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: self)
+        NotificationCenter.default.removeObserver(self, name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        observing = false
+        super.close()
     }
 }

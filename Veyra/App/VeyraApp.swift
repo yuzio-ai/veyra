@@ -112,10 +112,10 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         menuBar?.hide(restoringFocus: false)
         if settingsWindow == nil {
             let hosting = NSHostingView(rootView: MonitorSettings(store: MonitorStore.shared, updates: updates, shortcuts: shortcuts))
-            let window = SettingsWindow.make(hosting: hosting)
-            window.center()
+            let window = SettingsWindow.make(hosting: hosting, autosaveName: SettingsWindow.autosaveName)
             settingsWindow = window
         }
+        if let settingsWindow { SettingsWindow.prepareForDisplay(settingsWindow) }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
     }

@@ -1,0 +1,828 @@
+{
+  "scope": "validate-04 historical evidence; original values restored and two screen-change minimum cases passed; carrier removal not performed",
+  "createdAt": "2026-11-07T08:28:45+08:00",
+  "candidateManifestSHA256": "cd5de43a5749f7081ab64789bf717c5d91c642d958682947c3f2f1281aa6259a",
+  "independentReview02SHA256": "ef294723049ed105d63136212a4ae05f07864d04d059743b5c28e2a59210e2c1",
+  "releaseExecutableSHA256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+  "launch": {
+    "pid": 62368,
+    "started": "2026-11-07T08:05:21+08:00",
+    "pathVerified": true
+  },
+  "originalValues": {
+    "actual": {
+      "darkMode": false,
+      "reduceTransparency": false,
+      "increaseContrast": false
+    },
+    "appearancePolicy": {
+      "AppleInterfaceStyle": {
+        "key": "AppleInterfaceStyle",
+        "present": false,
+        "type": "absent",
+        "value": null
+      },
+      "AppleInterfaceStyleSwitchesAutomatically": {
+        "key": "AppleInterfaceStyleSwitchesAutomatically",
+        "present": false,
+        "type": "absent",
+        "value": null
+      }
+    },
+    "accessibilityPreferences": {
+      "domain": "com.apple.universalaccess",
+      "reduceTransparency": {
+        "key": "reduceTransparency",
+        "present": true,
+        "type": "boolean",
+        "value": false
+      },
+      "increaseContrast": {
+        "key": "increaseContrast",
+        "present": true,
+        "type": "boolean",
+        "value": false
+      }
+    }
+  },
+  "finalValues": {
+    "actual": {
+      "darkMode": false,
+      "reduceTransparency": false,
+      "increaseContrast": false
+    },
+    "appearancePolicy": {
+      "AppleInterfaceStyle": {
+        "key": "AppleInterfaceStyle",
+        "present": false,
+        "type": "absent",
+        "value": null
+      },
+      "AppleInterfaceStyleSwitchesAutomatically": {
+        "key": "AppleInterfaceStyleSwitchesAutomatically",
+        "present": false,
+        "type": "absent",
+        "value": null
+      }
+    },
+    "accessibilityPreferences": {
+      "domain": "com.apple.universalaccess",
+      "reduceTransparency": {
+        "key": "reduceTransparency",
+        "present": true,
+        "type": "boolean",
+        "value": false
+      },
+      "increaseContrast": {
+        "key": "increaseContrast",
+        "present": true,
+        "type": "boolean",
+        "value": false
+      }
+    }
+  },
+  "allFourPreferenceSectionsStrictlyRestored": true,
+  "nativeControlRestoration": {
+    "timestamp": "2026-11-07T00:04:04.189668+00:00",
+    "phase": "A: original global preference restoration only",
+    "originalSource": "../native-validation-03/03-original-preferences.json",
+    "strictMatches": {
+      "appearancePolicy": true,
+      "accessibilityPreferences": true,
+      "actual": true,
+      "autosave": true
+    },
+    "allOriginalFieldsRestored": true,
+    "allGlobalValuesAndPoliciesRestored": true,
+    "nativeControls": {
+      "contrast": {
+        "identifier": "AX_INCREASE_CONTRAST",
+        "value": 0,
+        "enabled": true
+      },
+      "transparency": {
+        "identifier": "AX_REDUCE_TRANSPARENCY",
+        "value": 0,
+        "enabled": true
+      }
+    },
+    "actual": {
+      "darkMode": false,
+      "reduceTransparency": false,
+      "increaseContrast": false
+    },
+    "appearancePolicy": {
+      "AppleInterfaceStyle": {
+        "key": "AppleInterfaceStyle",
+        "present": false,
+        "type": "absent",
+        "value": null
+      },
+      "AppleInterfaceStyleSwitchesAutomatically": {
+        "key": "AppleInterfaceStyleSwitchesAutomatically",
+        "present": false,
+        "type": "absent",
+        "value": null
+      }
+    },
+    "ownedSystemSettingsPID": 62012,
+    "temporaryIdleAssertion": {
+      "timestamp": "2026-11-07T00:02:30.819814+00:00",
+      "pid": 62005,
+      "command": [
+        "/usr/bin/caffeinate",
+        "-di",
+        "-t",
+        "900"
+      ],
+      "durationSeconds": 900,
+      "preCreationFrontmostBundle": "com.openai.codex",
+      "identity": "  PID STARTED                      COMM\n62005 Sat Nov  7 08:02:30 2026     /usr/bin/caffeinate\n",
+      "usesUserActivityU": false,
+      "changesLockOrPowerPreferences": false
+    },
+    "VeyraLaunched": false,
+    "noFurtherTestsPerformed": true,
+    "pausedForMainGO": true
+  },
+  "screenChangeCases": [
+    {
+      "timestamp": "2026-11-07T00:08:10.009Z",
+      "case": "internal-after-screen-change",
+      "pid": 62368,
+      "processIndex": 91,
+      "screens": [
+        {
+          "displayID": 1,
+          "localizedName": "内建视网膜显示器",
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 1451,
+              "height": 949
+            }
+          },
+          "visibleCG": {
+            "x": 61,
+            "y": 33,
+            "width": 1451,
+            "height": 949
+          }
+        },
+        {
+          "displayID": 3,
+          "localizedName": "BenQ MA320U",
+          "frame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleCG": {
+            "x": -896,
+            "y": -1890,
+            "width": 3360,
+            "height": 1890
+          }
+        }
+      ],
+      "coordinates": "CG/AX global coordinates, origin at main display top-left",
+      "source": "hidSystemState",
+      "start": {
+        "x": 958,
+        "y": 870
+      },
+      "end": {
+        "x": 558,
+        "y": 370
+      },
+      "attemptedTargetSize": [
+        360,
+        252
+      ],
+      "hitPID": 62368,
+      "events": {
+        "down": 1,
+        "dragged": 16,
+        "up": 1,
+        "pointerRestore": 1
+      },
+      "eventError": null,
+      "before": {
+        "centerDisplay": {
+          "result": 0,
+          "count": 1,
+          "displayID": 1
+        },
+        "observedPID": 62368,
+        "identifier": "veyra.settings",
+        "position": [
+          200,
+          120
+        ],
+        "size": [
+          760,
+          752
+        ],
+        "contentPosition": [
+          200,
+          152
+        ],
+        "contentSize": [
+          760,
+          720
+        ],
+        "scrollAreaSize": [
+          760,
+          720
+        ]
+      },
+      "after": {
+        "centerDisplay": {
+          "result": 0,
+          "count": 1,
+          "displayID": 1
+        },
+        "observedPID": 62368,
+        "identifier": "veyra.settings",
+        "position": [
+          200,
+          120
+        ],
+        "size": [
+          570,
+          472
+        ],
+        "contentPosition": [
+          200,
+          152
+        ],
+        "contentSize": [
+          570,
+          440
+        ],
+        "scrollAreaSize": [
+          570,
+          440
+        ]
+      },
+      "leftButtonDownBefore": false,
+      "leftButtonDownAfter": false,
+      "pointerBefore": {
+        "x": 919.3984375,
+        "y": -1308.8828125
+      },
+      "pointerAfter": {
+        "x": 919.3984375,
+        "y": -1308.8828125
+      },
+      "pointerRestored": true,
+      "expectedDisplayID": 1,
+      "targetScreen": {
+        "displayID": 1,
+        "localizedName": "内建视网膜显示器",
+        "frame": {
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 1512,
+            "height": 982
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": 61,
+            "y": 0
+          },
+          "size": {
+            "width": 1451,
+            "height": 949
+          }
+        },
+        "visibleCG": {
+          "x": 61,
+          "y": 33,
+          "width": 1451,
+          "height": 949
+        }
+      },
+      "reachedMinimum": true,
+      "originUnchanged": true,
+      "fullyVisibleAfter": true,
+      "displayUnchanged": true,
+      "passed": true
+    },
+    {
+      "timestamp": "2026-11-07T00:09:34.950Z",
+      "case": "external-after-screen-change",
+      "pid": 62368,
+      "processIndex": 91,
+      "screens": [
+        {
+          "displayID": 1,
+          "localizedName": "内建视网膜显示器",
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 1512,
+              "height": 982
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 1451,
+              "height": 949
+            }
+          },
+          "visibleCG": {
+            "x": 61,
+            "y": 33,
+            "width": 1451,
+            "height": 949
+          }
+        },
+        {
+          "displayID": 3,
+          "localizedName": "BenQ MA320U",
+          "frame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": -896,
+              "y": 982
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleCG": {
+            "x": -896,
+            "y": -1890,
+            "width": 3360,
+            "height": 1890
+          }
+        }
+      ],
+      "coordinates": "CG/AX global coordinates, origin at main display top-left",
+      "source": "hidSystemState",
+      "start": {
+        "x": 258,
+        "y": -750
+      },
+      "end": {
+        "x": -142,
+        "y": -1250
+      },
+      "attemptedTargetSize": [
+        360,
+        252
+      ],
+      "hitPID": 62368,
+      "events": {
+        "down": 1,
+        "dragged": 16,
+        "up": 1,
+        "pointerRestore": 1
+      },
+      "eventError": null,
+      "before": {
+        "centerDisplay": {
+          "result": 0,
+          "count": 1,
+          "displayID": 3
+        },
+        "observedPID": 62368,
+        "identifier": "veyra.settings",
+        "position": [
+          -500,
+          -1500
+        ],
+        "size": [
+          760,
+          752
+        ],
+        "contentPosition": [
+          -500,
+          -1468
+        ],
+        "contentSize": [
+          760,
+          720
+        ],
+        "scrollAreaSize": [
+          760,
+          720
+        ]
+      },
+      "after": {
+        "centerDisplay": {
+          "result": 0,
+          "count": 1,
+          "displayID": 3
+        },
+        "observedPID": 62368,
+        "identifier": "veyra.settings",
+        "position": [
+          -500,
+          -1500
+        ],
+        "size": [
+          570,
+          472
+        ],
+        "contentPosition": [
+          -500,
+          -1468
+        ],
+        "contentSize": [
+          570,
+          440
+        ],
+        "scrollAreaSize": [
+          570,
+          440
+        ]
+      },
+      "leftButtonDownBefore": false,
+      "leftButtonDownAfter": false,
+      "pointerBefore": {
+        "x": 919.3984375,
+        "y": -1308.8828125
+      },
+      "pointerAfter": {
+        "x": 919.3984375,
+        "y": -1308.8828125
+      },
+      "pointerRestored": true,
+      "expectedDisplayID": 3,
+      "targetScreen": {
+        "displayID": 3,
+        "localizedName": "BenQ MA320U",
+        "frame": {
+          "origin": {
+            "x": -896,
+            "y": 982
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": -896,
+            "y": 982
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "visibleCG": {
+          "x": -896,
+          "y": -1890,
+          "width": 3360,
+          "height": 1890
+        }
+      },
+      "reachedMinimum": true,
+      "originUnchanged": true,
+      "fullyVisibleAfter": true,
+      "displayUnchanged": true,
+      "passed": true
+    }
+  ],
+  "preparedCarrierRemoval": {
+    "timestamp": "2026-11-07T00:09:44.637967+00:00",
+    "targetPID": 62368,
+    "sourceWindow": "28-carrier-removal-ready-window.json",
+    "sourceSystem": "29-carrier-removal-ready-system.json",
+    "screens": [
+      {
+        "displayID": 1,
+        "localizedName": "内建视网膜显示器",
+        "frame": {
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 1512,
+            "height": 982
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": 61,
+            "y": 0
+          },
+          "size": {
+            "width": 1451,
+            "height": 949
+          }
+        },
+        "cgBounds": {
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 1512,
+            "height": 982
+          }
+        }
+      },
+      {
+        "displayID": 3,
+        "localizedName": "BenQ MA320U",
+        "frame": {
+          "origin": {
+            "x": -896,
+            "y": 982
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": -896,
+            "y": 982
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "cgBounds": {
+          "origin": {
+            "x": -896,
+            "y": -1890
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        }
+      }
+    ],
+    "screenIDs": [
+      1,
+      3
+    ],
+    "carrierDisplayID": 3,
+    "carrierName": "BenQ MA320U",
+    "carrierVisibleCG": {
+      "x": -896,
+      "y": -1890,
+      "width": 3360,
+      "height": 1890
+    },
+    "position": [
+      -500,
+      -1500
+    ],
+    "size": [
+      760,
+      752
+    ],
+    "contentSize": [
+      760,
+      720
+    ],
+    "fullyVisible": true,
+    "nativeActive": true,
+    "frontmostPID": 62368,
+    "actualGlobalValues": {
+      "darkMode": false,
+      "reduceTransparency": false,
+      "increaseContrast": false
+    },
+    "leftButtonDown": false,
+    "internalHIDPassed": true,
+    "BenQHIDPassed": true,
+    "nextActionOwner": "main/user only: disconnect BenQ MA320U ID3 while retaining built-in ID1",
+    "agentTopologyChanges": 0,
+    "paused": true
+  },
+  "userInteractionRecord": {
+    "scope": "validate-04 interaction evidence only",
+    "recordedAt": "2026-11-07T08:12:16+08:00",
+    "unlockReply": "已解锁",
+    "restorationVerifiedBy": "validate-04-restoration-receipt.json",
+    "carrierRemovalRequest": {
+      "question": "候选“设置”窗口已放在 BenQ MA320U 外接屏（ID3）。请断开这块 BenQ，保持笔记本内建屏开启；完成后选择“已断开 BenQ”。请先不要重连，以便读取自动回退结果。",
+      "readyRecord": "native-validation-04/30-carrier-removal-ready.json",
+      "readySHA256": "4d5fe959a05cda67e108268138afdc36a32509158da7d55dafbfac47a8964287",
+      "verifiedCarrierDisplayID": 3,
+      "expectedRemainingDisplayID": 1,
+      "reply": null,
+      "withdrawn": true,
+      "withdrawnAt": "2026-11-07T08:24:07+08:00",
+      "reason": "No user reply or actual removal observed; main withdrew immediate disconnection instruction before owned-window cleanup.",
+      "requiredBeforeFutureAction": "Recreate/place a controlled candidate on the actual BenQ carrier, verify topology and window center, then issue a fresh user disconnection prompt."
+    },
+    "ownedCandidateCleaned": true,
+    "carrierRemovalObserved": false,
+    "finalAllOriginalPreferencesRestored": true,
+    "closedAt": "2026-11-07T08:28:45+08:00"
+  },
+  "cleanup": {
+    "allOriginalPreferencesRestored": true,
+    "autosaveStrictlyRestored": true,
+    "autosaveWritePerformed": true,
+    "candidateWindowGoneWithOwnedProcess": true,
+    "geometryRestoredBeforeExit": false,
+    "geometryLimitation": "Error: Desktop no longer accessible",
+    "finalVeyraPIDs": [
+      44227
+    ],
+    "installedInstanceTouched": false,
+    "idleAssertion": {
+      "timestamp": "2026-11-07T00:25:22.188788+00:00",
+      "pid": 62005,
+      "expectedExpiry": "2026-11-07T00:17:30.819814+00:00",
+      "observedAfterExpiry": true,
+      "alreadyAbsent": true,
+      "observedPath": "",
+      "signalSent": false
+    },
+    "temporarySystemSettingsAbsent": true,
+    "forcedFinalPointerReset": false
+  },
+  "carrierRemoval": {
+    "prepared": true,
+    "observed": false,
+    "performed": false,
+    "postParametersChangeHIDPerformed": false,
+    "oldImmediatePromptWithdrawn": true,
+    "candidateStillPresent": false,
+    "requiredNext": "Create and place a fresh controlled candidate on verified actual BenQ display before issuing a fresh physical-disconnect request."
+  },
+  "reuse": {
+    "fourUserVisualConfirmations": "native-acceptance-03.json",
+    "fourUserVisualConfirmationsSHA256": "32d483ed2631b90b4ee477b9b524756437fb0a1f1d98bb7532d1a14c58f81a43",
+    "fullTestsAndBilingualPreviews": "unchanged successful evidence, not rerun",
+    "releaseVerification": "validate-03-release-refresh.json, unchanged source/toolchain/environment and executable"
+  },
+  "sourceRecords": [
+    {
+      "name": "01-preflight.json",
+      "sha256": "47e35ee41c2660a97d15d951e59665495eaa27de4b4ac25d6a169d4f4960d3cc"
+    },
+    {
+      "name": "07-restore-native-accessibility-controls.json",
+      "sha256": "565710d3f52e9affd33ae1f4cc2d08ec3390598acc4b063765e5bc5b9a3e7218"
+    },
+    {
+      "name": "08-fresh-restored-preferences.json",
+      "sha256": "2987397f808650f9afc42274da88072f0c5f0ae02b28dfb68b4c609ff5d4b221"
+    },
+    {
+      "name": "09-restoration-ready.json",
+      "sha256": "08a6614b69f1b59c0af9257ad0ce265659fea86cfd41613dcc1a2f40592ec008"
+    },
+    {
+      "name": "12-current-source.json",
+      "sha256": "76a86d3bedae36dc3763fde9a9078584e19fdd535d395704dc4ac9b72a978c3d"
+    },
+    {
+      "name": "13-process-source.log",
+      "sha256": "29c01a8387a6556842b5d72f0e50b2350956ef75be92dca01c635267585d33c9"
+    },
+    {
+      "name": "18-initial-auto-visibility.json",
+      "sha256": "51e120d12ea4aa7d3ee902c3bbf9aca9b58e265a7b5d799636d1c652481e7f69"
+    },
+    {
+      "name": "20-move-to-built-in.json",
+      "sha256": "927cbae48f5e8d0c6cde18c0e3c6bec749fc368d4a90774b4c09811be74bc911"
+    },
+    {
+      "name": "22-built-in-real-HID-minimum.json",
+      "sha256": "ef129fb13ed4c471229d5cb89cdfc3dd74ac18125dd02113795916213ad2ffbe"
+    },
+    {
+      "name": "24-return-to-BenQ.json",
+      "sha256": "7662e7e7492be5287140abb78e0913dd1fef265ad1ce55cf726366020d594535"
+    },
+    {
+      "name": "26-BenQ-real-HID-minimum.json",
+      "sha256": "db9c181994d0f775895afabfe7ab5a4fa1b94e5236a9bcfae12b3f102bf9b281"
+    },
+    {
+      "name": "30-carrier-removal-ready.json",
+      "sha256": "4d5fe959a05cda67e108268138afdc36a32509158da7d55dafbfac47a8964287"
+    },
+    {
+      "name": "31-readonly-topology-observation-before-user-reply.json",
+      "sha256": "d7d79337d84d01c52303e1cce0c090bbb16885086357279197c6fa3c55ee4371"
+    },
+    {
+      "name": "33-single-original-host-activation.json",
+      "sha256": "08656e0741ccb0ffccac625145776e7c6b6a0929cffec274623401dad3d4cbf2"
+    },
+    {
+      "name": "35-final-readonly-physical-condition.json",
+      "sha256": "7e4b305b0ea165dfb93698e290f1dc4ac3bc0369b9b4b59b2b41bc3f4cc8f441"
+    },
+    {
+      "name": "36-final-condition-global-preferences.json",
+      "sha256": "c4d4e9032cf06ab6abc96d468b6c67d15a58326f59222f94a7d739ab0e525e6d"
+    },
+    {
+      "name": "37-before-cleanup-readonly-topology-window.json",
+      "sha256": "218dd545b00bb4968e614229887c15b59b19edae0eafbc7cd2bc4dc8e220ff1f"
+    },
+    {
+      "name": "39-restore-original-geometry-and-close.json",
+      "sha256": "32f0c0a36619ab01f00008cc98e27cea1255e38a37ef6aea9eb61a9f4d37753d"
+    },
+    {
+      "name": "40-owned-process-cleanup.json",
+      "sha256": "ac0762f390493c5f6e59927f2fd6ea6a8bb5eebc4a9636f569aa26e486f52694"
+    },
+    {
+      "name": "41-restore-original-autosave.json",
+      "sha256": "2633d63256a78f1582ba9ad07b34ccde33accbf8919bc2ff0744b08b190f7b97"
+    },
+    {
+      "name": "42-final-restored-preferences.json",
+      "sha256": "4c8dea5d704e2ee93d00e9e1945da362e896617c10e5db0cc1193b4813e9b678"
+    },
+    {
+      "name": "43-idle-assertion-cleanup.json",
+      "sha256": "afbe011405fdb646015fab1670ef05d7fa83c05e7638b139e1af00db4a534500"
+    },
+    {
+      "name": "44-final-readonly-environment.json",
+      "sha256": "40015d7f4680f8bd4114c0c2ce2384b877be8a302066d529984ae24bca021267"
+    },
+    {
+      "name": "mouse-screen-change.js",
+      "sha256": "e98c7b4950ab0c46255a5ce11e90d83f3334dc8d2b6f852e657df79a2ccfa57d"
+    },
+    {
+      "name": "cleanup.json",
+      "sha256": "40f29b195598974e274adad4b9cf53a25cb667e3b64dc0fb315fa7e947e09254"
+    },
+    {
+      "name": "facts.md",
+      "sha256": "65aa5925986f6c81302670692d8d8c2da815a01377dfcd6bef592d0addbc08af"
+    },
+    {
+      "name": "../human-actions-04.json",
+      "sha256": "ca5cf8240cbb44b6b99b04a0343b0d5788e6269655bd9b80b2209ed67d9744a1"
+    },
+    {
+      "name": "../validate-04-restoration-receipt.json",
+      "sha256": "6be129a5bf82a5c6e6e321d8688bd63e6b0c1ed5f67bc7646aa081cf733bb6e4"
+    }
+  ]
+}

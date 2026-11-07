@@ -48,15 +48,17 @@ private struct UpdateStatusRow: View {
             TimelineView(.explicit([updates.nextManualCheckAt ?? .distantPast])) { context in
                 let date = referenceDate ?? context.date
                 VStack(alignment: .leading, spacing: SettingsLayout.labelSpacing) {
-                    HStack(spacing: SettingsLayout.labelSpacing) {
-                        if updates.isChecking {
-                            ProgressView().controlSize(.small).accessibilityHidden(true)
+                    SettingsActionRow {
+                        HStack(spacing: SettingsLayout.labelSpacing) {
+                            if updates.isChecking {
+                                ProgressView().controlSize(.small).accessibilityHidden(true)
+                            }
+                            Text(updates.settingsStatus)
+                                .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("updates.status")
                         }
-                        Text(updates.settingsStatus)
-                            .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("updates.status")
-                        Spacer(minLength: SettingsLayout.labelSpacing)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Check for Updates…") { Task { await updates.checkManually() } }
                             .disabled(updates.isChecking || updates.nextManualCheckAt.map { date < $0 } == true)
                             .accessibilityIdentifier("updates.check")
@@ -68,7 +70,7 @@ private struct UpdateStatusRow: View {
                 }
             }
             if let release = updates.availableRelease {
-                HStack(alignment: .firstTextBaseline, spacing: SettingsLayout.labelSpacing) {
+                SettingsActionRow {
                     VStack(alignment: .leading, spacing: SettingsLayout.descriptionSpacing) {
                         Text(L10n.text("New version available: \(release.version)"))
                             .font(.subheadline.weight(.medium)).monospacedDigit()
@@ -76,7 +78,7 @@ private struct UpdateStatusRow: View {
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                     .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: SettingsLayout.labelSpacing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     UpdateDownloadLink(release: release)
                 }
             }

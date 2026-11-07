@@ -13,11 +13,11 @@ struct ShortcutSettingsSection: View {
                 Text("Show or hide Veyra from any app.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
-            HStack {
+            SettingsActionRow {
                 Toggle("Enable global shortcut", isOn: Binding(get: { shortcuts.preferences.enabled },
                                                                set: { shortcuts.setEnabled($0) }))
                     .accessibilityIdentifier("settings.shortcut.enabled")
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 ShortcutRecorder(shortcuts: shortcuts, layoutRevision: layoutRevision)
                     .frame(width: 170, height: 26)
                 Button("Restore Default") { shortcuts.restoreDefault() }

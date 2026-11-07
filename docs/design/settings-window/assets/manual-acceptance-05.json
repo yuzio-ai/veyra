@@ -1,0 +1,53 @@
+{
+  "scope": "validate-05 manual user evidence; no agent UI automation",
+  "recordedAt": "2026-11-07T08:47:15+08:00",
+  "clientDate": "2026-11-07",
+  "candidateManifestSHA256": "cd5de43a5749f7081ab64789bf717c5d91c642d958682947c3f2f1281aa6259a",
+  "releaseExecutableSHA256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+  "independentReview02SHA256": "ef294723049ed105d63136212a4ae05f07864d04d059743b5c28e2a59210e2c1",
+  "userDirection": "你别操作了，直接告诉我步骤我来操作",
+  "manualProcedureGiven": {
+    "candidateLaunchCommand": "open -n \"/private/tmp/veyra-local-verification/3c3c495984dc6c0d/release/Build/Products/Release/Veyra.app\"",
+    "steps": [
+      "重新接上BenQ，保持笔记本内建屏开启",
+      "退出当前Veyra，用给定命令启动本轮候选",
+      "打开设置，将整个窗口放在BenQ内并置前",
+      "断开BenQ；先不重新打开、移动或缩放窗口，观察是否自动回内建屏且完整可见",
+      "再缩到最小并上下滚动，检查全部设置和按钮可访问"
+    ],
+    "afterTestInstruction": "退出候选，再打开应用程序里的日常Veyra"
+  },
+  "verbatimUserReply": "自动回退正常，缩小与滚动也正常。",
+  "reportedResults": {
+    "carrierRemovalAutomaticFallback": "正常",
+    "postRemovalShrinkAndScroll": "正常"
+  },
+  "evidenceKind": "user-reported manual native behavior following the supplied candidate procedure",
+  "acceptanceDecision": "passed with prior applicable evidence",
+  "boundaries": [
+    "本次手动运行的PID、实际屏幕ID和移除后frame未由代理实时采集",
+    "本次结果不是机器测量、截图或新增自动HID记录",
+    "不声称本轮手动移除后实测精确570×440 pt；该精确下限沿用已有两屏HID实测",
+    "用户手动实例的退出/当前进程未由代理检查",
+    "用户接管后未恢复UI自动化或应用/系统设置操作"
+  ],
+  "priorEvidence": [
+    {
+      "file": "native-acceptance-03.json",
+      "sha256": "32d483ed2631b90b4ee477b9b524756437fb0a1f1d98bb7532d1a14c58f81a43",
+      "reuse": "四态用户目视/人工滚动与对应原生状态"
+    },
+    {
+      "file": "native-acceptance-04.json",
+      "sha256": "9db7eb296cf5d49ee145b2264589ed0f20d0f1fc07b20bd8658f1d626f7e9245",
+      "reuse": "全部原值恢复；内建/BenQ切屏后真实HID与570×440内容区实测"
+    }
+  ],
+  "filesystemOnlyVerification": {
+    "candidateSnapshots": 40,
+    "currentCandidateFiles": 36,
+    "candidateAndBinaryMatch": true,
+    "businessSourceChangedByThisRound": false
+  },
+  "automationChecks": "既有257 XCTest、51脚本回归、双语各34控件/56布局及适用Release证据复用，本轮未执行"
+}

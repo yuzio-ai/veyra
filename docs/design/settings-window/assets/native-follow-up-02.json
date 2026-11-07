@@ -1,0 +1,2381 @@
+{
+  "recordedAt": "2026-11-06T22:30:29+08:00",
+  "skillVersion": "0.18.0",
+  "protocol": "0.8",
+  "candidateManifestSHA256": "8c3434b0a03540385d77eb6644a69857ecee2620c5b871360971034a5d812c68",
+  "acceptance": "failed",
+  "blockingFindings": [
+    {
+      "id": "SWV-01",
+      "priority": "P2",
+      "evidence": "minimum-size-failure-02.json",
+      "sha256": "4d3312fed85b639eec729c3738b66b1e1ebb268c571adef4aa6862a8f21fa329"
+    }
+  ],
+  "newRuntimeEvidence": [
+    {
+      "file": "01-preflight.json",
+      "sha256": "9550d6f73028220928270b8f5ef3e352263178d5f1aa768d50a9badc90bec254",
+      "data": {
+        "timestamp": "2026-11-06T14:00:44.015Z",
+        "screens": [
+          {
+            "index": 0,
+            "frame": {
+              "origin": {
+                "x": 0,
+                "y": 0
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": 61,
+                "y": 0
+              },
+              "size": {
+                "width": 3299,
+                "height": 1860
+              }
+            },
+            "scale": 2,
+            "displayID": 3
+          }
+        ],
+        "screenCapture": {
+          "error": "TypeError: $.CGPreflightScreenCaptureAccess is not a function. (In '$.CGPreflightScreenCaptureAccess()', '$.CGPreflightScreenCaptureAccess' is undefined)"
+        },
+        "postEvent": {
+          "error": "TypeError: $.CGPreflightPostEventAccess is not a function. (In '$.CGPreflightPostEventAccess()', '$.CGPreflightPostEventAccess' is undefined)"
+        },
+        "accessibility": true,
+        "appearance": {
+          "error": "TypeError: undefined is not an object (evaluating '$.NSApp.effectiveAppearance.name')"
+        },
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "file": "02-preflight-bound-functions.json",
+      "sha256": "8f88cf2542d6539e51edf52e95d9a92c4db8e489d2992afcc38cf75f9720cb1a",
+      "data": {
+        "timestamp": "2026-11-06T14:01:15.043Z",
+        "screens": [
+          {
+            "index": 0,
+            "frame": {
+              "origin": {
+                "x": 0,
+                "y": 0
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": 61,
+                "y": 0
+              },
+              "size": {
+                "width": 3299,
+                "height": 1860
+              }
+            },
+            "scale": 2,
+            "displayID": 3
+          }
+        ],
+        "screenCapture": false,
+        "postEvent": true,
+        "accessibility": true,
+        "darkMode": false,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "file": "03-candidate-baseline.json",
+      "sha256": "0134b4800227a8f64c10847b6f199358e6fd95d39a3924345b2a0d90b2698d40",
+      "data": {
+        "timestamp": "2026-11-06T14:02:20.641Z",
+        "pid": 85252,
+        "processIndex": 105,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "file": "05-open-hierarchy.json",
+      "sha256": "f843a61415f08caaca66edd4388ed2e4dc902548597d433b9e4f5e5979b8d288",
+      "data": {
+        "timestamp": "2026-11-06T14:02:37.595Z",
+        "pid": 85252,
+        "processIndex": 105,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "index": 0,
+            "parent": null,
+            "depth": 0,
+            "role": "AXWindow",
+            "subrole": "AXStandardWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              404,
+              557
+            ],
+            "size": [
+              570,
+              752
+            ],
+            "focused": true,
+            "main": true,
+            "minimized": false,
+            "enabled": null
+          },
+          {
+            "index": 1,
+            "parent": 0,
+            "depth": 1,
+            "role": "AXGroup",
+            "subrole": "AXHostingView",
+            "identifier": null,
+            "position": [
+              404,
+              589
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": null
+          },
+          {
+            "index": 2,
+            "parent": 1,
+            "depth": 2,
+            "role": "AXScrollArea",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              404,
+              589
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": null
+          },
+          {
+            "index": 3,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              436,
+              617
+            ],
+            "size": [
+              39,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 4,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              436,
+              639
+            ],
+            "size": [
+              159,
+              14
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 5,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXCheckBox",
+            "subrole": null,
+            "identifier": "settings.shortcut.enabled",
+            "position": [
+              436,
+              677
+            ],
+            "size": [
+              111,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 6,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXButton",
+            "subrole": null,
+            "identifier": "settings.shortcut.recorder",
+            "position": [
+              688,
+              674
+            ],
+            "size": [
+              170,
+              24
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 7,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXButton",
+            "subrole": null,
+            "identifier": "settings.shortcut.reset",
+            "position": [
+              866,
+              674
+            ],
+            "size": [
+              76,
+              24
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 8,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": "settings.shortcut.error",
+            "position": [
+              437,
+              719
+            ],
+            "size": [
+              201,
+              14
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 9,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              436,
+              766
+            ],
+            "size": [
+              41,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 10,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              436,
+              788
+            ],
+            "size": [
+              220,
+              14
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 11,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              436,
+              822
+            ],
+            "size": [
+              52,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 12,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXTextField",
+            "subrole": null,
+            "identifier": "settings.path.home",
+            "position": [
+              436,
+              846
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 13,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXButton",
+            "subrole": null,
+            "identifier": "settings.choose.home",
+            "position": [
+              881,
+              846
+            ],
+            "size": [
+              60,
+              24
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 14,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              436,
+              888
+            ],
+            "size": [
+              64,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 15,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXTextField",
+            "subrole": null,
+            "identifier": "settings.path.executable",
+            "position": [
+              436,
+              912
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 16,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXButton",
+            "subrole": null,
+            "identifier": "settings.choose.executable",
+            "position": [
+              881,
+              912
+            ],
+            "size": [
+              60,
+              24
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 17,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": "settings.codex.status",
+            "position": [
+              437,
+              959
+            ],
+            "size": [
+              120,
+              14
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 18,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXButton",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              840,
+              954
+            ],
+            "size": [
+              101,
+              24
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 19,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": "updates.settings",
+            "position": [
+              436,
+              1011
+            ],
+            "size": [
+              52,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 20,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": "updates.settings",
+            "position": [
+              436,
+              1051
+            ],
+            "size": [
+              77,
+              16
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 21,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXCheckBox",
+            "subrole": "AXToggle",
+            "identifier": "updates.settings",
+            "position": [
+              888,
+              1047
+            ],
+            "size": [
+              54,
+              24
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 22,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": "updates.settings",
+            "position": [
+              436,
+              1077
+            ],
+            "size": [
+              168,
+              14
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 23,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": "updates.settings",
+            "position": [
+              436,
+              1114
+            ],
+            "size": [
+              152,
+              14
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 24,
+            "parent": 2,
+            "depth": 3,
+            "role": "AXButton",
+            "subrole": null,
+            "identifier": "updates.settings",
+            "position": [
+              856,
+              1109
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "focused": null,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 25,
+            "parent": 0,
+            "depth": 1,
+            "role": "AXButton",
+            "subrole": "AXCloseButton",
+            "identifier": null,
+            "position": [
+              412,
+              565
+            ],
+            "size": [
+              16,
+              16
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 26,
+            "parent": 0,
+            "depth": 1,
+            "role": "AXButton",
+            "subrole": "AXZoomButton",
+            "identifier": null,
+            "position": [
+              458,
+              565
+            ],
+            "size": [
+              16,
+              16
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 27,
+            "parent": 26,
+            "depth": 2,
+            "role": "AXGroup",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              459,
+              566
+            ],
+            "size": [
+              14,
+              14
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": null
+          },
+          {
+            "index": 28,
+            "parent": 27,
+            "depth": 3,
+            "role": "AXGroup",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              459,
+              566
+            ],
+            "size": [
+              14,
+              14
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": null
+          },
+          {
+            "index": 29,
+            "parent": 0,
+            "depth": 1,
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton",
+            "identifier": null,
+            "position": [
+              435,
+              565
+            ],
+            "size": [
+              16,
+              16
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          },
+          {
+            "index": 30,
+            "parent": 0,
+            "depth": 1,
+            "role": "AXStaticText",
+            "subrole": null,
+            "identifier": null,
+            "position": [
+              486,
+              565
+            ],
+            "size": [
+              30,
+              16
+            ],
+            "focused": false,
+            "main": null,
+            "minimized": null,
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "file": "06-real-titlebar-click.json",
+      "sha256": "29937b860de4af2c2ac29c4a1a37f2811cdcfbd0e127f9b674ebed5e645e4230",
+      "data": {
+        "timestamp": "2026-11-06T14:04:21.289Z",
+        "mode": "click-titlebar",
+        "pid": 85252,
+        "processIndex": 105,
+        "start": {
+          "x": 421,
+          "y": 143
+        },
+        "end": {
+          "x": 421,
+          "y": 143
+        },
+        "hitPID": 85252,
+        "posted": 3,
+        "before": {
+          "observedPID": 85252,
+          "frontmost": false,
+          "nativeActive": false,
+          "main": true,
+          "focused": true,
+          "position": [
+            136,
+            127
+          ],
+          "size": [
+            570,
+            752
+          ]
+        },
+        "after": {
+          "observedPID": 85252,
+          "frontmost": false,
+          "nativeActive": false,
+          "main": true,
+          "focused": true,
+          "position": [
+            136,
+            127
+          ],
+          "size": [
+            570,
+            752
+          ]
+        }
+      }
+    },
+    {
+      "file": "07-preflight-after-display-attachment.json",
+      "sha256": "3faa0633e3041724d328b7802e61f9c6a79b1ee850ee6f14117e482cf740a559",
+      "data": {
+        "timestamp": "2026-11-06T14:04:45.744Z",
+        "screens": [
+          {
+            "index": 0,
+            "frame": {
+              "origin": {
+                "x": 0,
+                "y": 0
+              },
+              "size": {
+                "width": 1512,
+                "height": 982
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": 61,
+                "y": 0
+              },
+              "size": {
+                "width": 1451,
+                "height": 949
+              }
+            },
+            "scale": 2,
+            "displayID": 1
+          },
+          {
+            "index": 1,
+            "frame": {
+              "origin": {
+                "x": -896,
+                "y": 982
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": -896,
+                "y": 982
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "scale": 2,
+            "displayID": 3
+          }
+        ],
+        "screenCapture": false,
+        "postEvent": true,
+        "accessibility": true,
+        "darkMode": false,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "file": "10-external-display.json",
+      "sha256": "df72eca243cd503827a69b15c8233669b5cd4e88ddf856a1580bf48430f8a552",
+      "data": {
+        "native": {
+          "activationPolicy": "1",
+          "active": false,
+          "frontmostPID": 32365,
+          "centerDisplay": {
+            "result": 0,
+            "count": 1,
+            "displayID": 3
+          }
+        },
+        "timestamp": "2026-11-06T14:07:24.426Z",
+        "pid": 85252,
+        "processIndex": 91,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "tag": "window",
+            "role": "AXWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              -500,
+              -1500
+            ],
+            "size": [
+              570,
+              752
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "content",
+            "role": "AXGroup",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollArea",
+            "role": "AXScrollArea",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.home",
+            "position": [
+              -468,
+              -1211
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.executable",
+            "position": [
+              -468,
+              -1145
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "lastButton",
+            "role": "AXButton",
+            "identifier": "updates.settings",
+            "position": [
+              -48,
+              -948
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "scrollValue": null
+          }
+        ]
+      }
+    },
+    {
+      "file": "14-back-to-internal-display.json",
+      "sha256": "45f9b3cfd0c56cb969ef6d1e832c0bb53d53228872aaa45bafe7933df241b1de",
+      "data": {
+        "native": {
+          "activationPolicy": "1",
+          "active": false,
+          "frontmostPID": 32365,
+          "centerDisplay": {
+            "result": 0,
+            "count": 1,
+            "displayID": 1
+          }
+        },
+        "timestamp": "2026-11-06T14:10:33.572Z",
+        "pid": 85252,
+        "processIndex": 90,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "tag": "window",
+            "role": "AXWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              136,
+              127
+            ],
+            "size": [
+              570,
+              752
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "content",
+            "role": "AXGroup",
+            "identifier": null,
+            "position": [
+              136,
+              159
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollArea",
+            "role": "AXScrollArea",
+            "identifier": null,
+            "position": [
+              136,
+              159
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.home",
+            "position": [
+              168,
+              416
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.executable",
+            "position": [
+              168,
+              482
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "lastButton",
+            "role": "AXButton",
+            "identifier": "updates.settings",
+            "position": [
+              588,
+              679
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "scrollValue": null
+          }
+        ]
+      }
+    },
+    {
+      "file": "16-external-removal-ready-window.json",
+      "sha256": "e3356940d17a07df631a6b4e70225409c78c6396ac3daf6b10f77c096f2136d1",
+      "data": {
+        "native": {
+          "activationPolicy": "1",
+          "active": false,
+          "frontmostPID": 32365,
+          "centerDisplay": {
+            "result": 0,
+            "count": 1,
+            "displayID": 3
+          }
+        },
+        "timestamp": "2026-11-06T14:13:15.061Z",
+        "pid": 85252,
+        "processIndex": 90,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "tag": "window",
+            "role": "AXWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              -500,
+              -1500
+            ],
+            "size": [
+              570,
+              752
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "content",
+            "role": "AXGroup",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollArea",
+            "role": "AXScrollArea",
+            "identifier": null,
+            "position": [
+              -500,
+              -1468
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.home",
+            "position": [
+              -468,
+              -1211
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.executable",
+            "position": [
+              -468,
+              -1145
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "lastButton",
+            "role": "AXButton",
+            "identifier": "updates.settings",
+            "position": [
+              -48,
+              -948
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "scrollValue": null
+          }
+        ]
+      }
+    },
+    {
+      "file": "17-external-removal-ready-system.json",
+      "sha256": "6c1e020ed6f98fc4712769d2498096cf05b75c7cafa45401a36d15014b70dd17",
+      "data": {
+        "timestamp": "2026-11-06T14:13:18.439Z",
+        "screens": [
+          {
+            "index": 0,
+            "frame": {
+              "origin": {
+                "x": 0,
+                "y": 0
+              },
+              "size": {
+                "width": 1512,
+                "height": 982
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": 61,
+                "y": 0
+              },
+              "size": {
+                "width": 1451,
+                "height": 949
+              }
+            },
+            "scale": 2,
+            "displayID": 1
+          },
+          {
+            "index": 1,
+            "frame": {
+              "origin": {
+                "x": -896,
+                "y": 982
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": -896,
+                "y": 982
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "scale": 2,
+            "displayID": 3
+          }
+        ],
+        "leftButtonDown": false,
+        "screenCapture": false,
+        "postEvent": true,
+        "accessibility": true,
+        "darkMode": false,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "file": "18-appearance-policy-baseline.json",
+      "sha256": "10c5807a616bba74c26c3ea477c346a7b52c26b65dccfa5e8ef0c4e825d13109",
+      "data": {
+        "timestamp": "2026-11-06T14:15:33.394Z",
+        "AppleInterfaceStyle": null,
+        "AppleInterfaceStyleSwitchesAutomatically": null
+      }
+    },
+    {
+      "file": "19-after-physical-display-removal-system.json",
+      "sha256": "80ecaa1c0c554f391872776bbf0ba0a96a0c4e8e01dadb47f2e2a9a226a4aede",
+      "data": {
+        "timestamp": "2026-11-06T14:16:16.232Z",
+        "screens": [
+          {
+            "index": 0,
+            "frame": {
+              "origin": {
+                "x": 0,
+                "y": 0
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": 61,
+                "y": 0
+              },
+              "size": {
+                "width": 3299,
+                "height": 1860
+              }
+            },
+            "scale": 2,
+            "displayID": 3
+          }
+        ],
+        "leftButtonDown": false,
+        "screenCapture": false,
+        "postEvent": true,
+        "accessibility": true,
+        "darkMode": false,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "file": "20-after-physical-display-removal-window.json",
+      "sha256": "b3ff871be1ac943478f0188fba74638c7232c861b8c69292c63a89773244e6cf",
+      "data": {
+        "native": {
+          "activationPolicy": "1",
+          "active": false,
+          "frontmostPID": 32365,
+          "centerDisplay": {
+            "result": 0,
+            "count": 1,
+            "displayID": 3
+          }
+        },
+        "timestamp": "2026-11-06T14:16:23.795Z",
+        "pid": 85252,
+        "processIndex": 90,
+        "observedPID": 85252,
+        "active": false,
+        "windowCount": 1,
+        "nodes": [
+          {
+            "tag": "window",
+            "role": "AXWindow",
+            "identifier": "veyra.settings",
+            "position": [
+              396,
+              390
+            ],
+            "size": [
+              570,
+              752
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "content",
+            "role": "AXGroup",
+            "identifier": null,
+            "position": [
+              396,
+              422
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "scrollArea",
+            "role": "AXScrollArea",
+            "identifier": null,
+            "position": [
+              396,
+              422
+            ],
+            "size": [
+              570,
+              720
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.home",
+            "position": [
+              428,
+              679
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "pathField",
+            "role": "AXTextField",
+            "identifier": "settings.path.executable",
+            "position": [
+              428,
+              745
+            ],
+            "size": [
+              437,
+              24
+            ],
+            "scrollValue": null
+          },
+          {
+            "tag": "lastButton",
+            "role": "AXButton",
+            "identifier": "updates.settings",
+            "position": [
+              848,
+              942
+            ],
+            "size": [
+              86,
+              24
+            ],
+            "scrollValue": null
+          }
+        ]
+      }
+    },
+    {
+      "file": "26-global-display-switch-matrix.json",
+      "sha256": "d354ba79fb2ab20bfc9209dec4485d4c4d86483bf43281b7106df126fa46fe6d",
+      "data": {
+        "timestamp": "2026-11-06T14:23:30.163Z",
+        "launch": true,
+        "navigation": true,
+        "baseline": {
+          "tag": "baseline",
+          "timestamp": "2026-11-06T14:23:18.027Z",
+          "screens": [
+            {
+              "displayID": 3,
+              "frame": {
+                "origin": {
+                  "x": 0,
+                  "y": 0
+                },
+                "size": {
+                  "width": 3360,
+                  "height": 1890
+                }
+              },
+              "visibleFrame": {
+                "origin": {
+                  "x": 61,
+                  "y": 0
+                },
+                "size": {
+                  "width": 3299,
+                  "height": 1860
+                }
+              }
+            }
+          ],
+          "candidate": {
+            "observedPID": 85252,
+            "active": false,
+            "frontmostPID": -1,
+            "position": [
+              396,
+              390
+            ],
+            "size": [
+              570,
+              752
+            ]
+          },
+          "darkMode": false,
+          "reduceTransparency": false,
+          "increaseContrast": false,
+          "controlValues": {
+            "contrast": 0,
+            "transparency": 0
+          }
+        },
+        "events": [
+          {
+            "action": "set-dark",
+            "value": true,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "dark-true",
+              "timestamp": "2026-11-06T14:23:19.259Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  390
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": true,
+              "reduceTransparency": false,
+              "increaseContrast": false,
+              "controlValues": {
+                "contrast": 0,
+                "transparency": 0
+              }
+            }
+          },
+          {
+            "action": "set-transparency",
+            "value": true,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "transparency-true",
+              "timestamp": "2026-11-06T14:23:21.281Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  391
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": true,
+              "reduceTransparency": true,
+              "increaseContrast": false,
+              "controlValues": {
+                "contrast": 0,
+                "transparency": 1
+              }
+            }
+          },
+          {
+            "action": "set-dark",
+            "value": false,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "dark-false",
+              "timestamp": "2026-11-06T14:23:22.600Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  391
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": false,
+              "reduceTransparency": true,
+              "increaseContrast": false,
+              "controlValues": {
+                "contrast": 0,
+                "transparency": 1
+              }
+            }
+          },
+          {
+            "action": "set-contrast",
+            "value": true,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "contrast-true",
+              "timestamp": "2026-11-06T14:23:24.069Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  391
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": false,
+              "reduceTransparency": true,
+              "increaseContrast": true,
+              "controlValues": {
+                "contrast": 1,
+                "transparency": 1
+              }
+            }
+          },
+          {
+            "action": "set-dark",
+            "value": true,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "dark-true",
+              "timestamp": "2026-11-06T14:23:25.069Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  391
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": true,
+              "reduceTransparency": true,
+              "increaseContrast": true,
+              "controlValues": {
+                "contrast": 1,
+                "transparency": 1
+              }
+            }
+          },
+          {
+            "action": "set-contrast",
+            "value": false,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "contrast-false",
+              "timestamp": "2026-11-06T14:23:26.636Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  391
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": true,
+              "reduceTransparency": true,
+              "increaseContrast": false,
+              "controlValues": {
+                "contrast": 0,
+                "transparency": 1
+              }
+            }
+          },
+          {
+            "action": "set-transparency",
+            "value": false,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "transparency-false",
+              "timestamp": "2026-11-06T14:23:28.063Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  390
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": true,
+              "reduceTransparency": false,
+              "increaseContrast": false,
+              "controlValues": {
+                "contrast": 0,
+                "transparency": 0
+              }
+            }
+          },
+          {
+            "action": "set-dark",
+            "value": false,
+            "screens": [
+              {
+                "displayID": 3,
+                "frame": {
+                  "origin": {
+                    "x": 0,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3360,
+                    "height": 1890
+                  }
+                },
+                "visibleFrame": {
+                  "origin": {
+                    "x": 61,
+                    "y": 0
+                  },
+                  "size": {
+                    "width": 3299,
+                    "height": 1860
+                  }
+                }
+              }
+            ],
+            "observed": {
+              "tag": "dark-false",
+              "timestamp": "2026-11-06T14:23:29.114Z",
+              "screens": [
+                {
+                  "displayID": 3,
+                  "frame": {
+                    "origin": {
+                      "x": 0,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3360,
+                      "height": 1890
+                    }
+                  },
+                  "visibleFrame": {
+                    "origin": {
+                      "x": 61,
+                      "y": 0
+                    },
+                    "size": {
+                      "width": 3299,
+                      "height": 1860
+                    }
+                  }
+                }
+              ],
+              "candidate": {
+                "observedPID": 85252,
+                "active": false,
+                "frontmostPID": -1,
+                "position": [
+                  396,
+                  390
+                ],
+                "size": [
+                  570,
+                  752
+                ]
+              },
+              "darkMode": false,
+              "reduceTransparency": false,
+              "increaseContrast": false,
+              "controlValues": {
+                "contrast": 0,
+                "transparency": 0
+              }
+            }
+          }
+        ],
+        "error": null,
+        "restoreErrors": [],
+        "final": {
+          "tag": "restored",
+          "timestamp": "2026-11-06T14:23:29.674Z",
+          "screens": [
+            {
+              "displayID": 3,
+              "frame": {
+                "origin": {
+                  "x": 0,
+                  "y": 0
+                },
+                "size": {
+                  "width": 3360,
+                  "height": 1890
+                }
+              },
+              "visibleFrame": {
+                "origin": {
+                  "x": 61,
+                  "y": 0
+                },
+                "size": {
+                  "width": 3299,
+                  "height": 1860
+                }
+              }
+            }
+          ],
+          "candidate": {
+            "observedPID": 85252,
+            "active": false,
+            "frontmostPID": -1,
+            "position": [
+              396,
+              390
+            ],
+            "size": [
+              570,
+              752
+            ]
+          },
+          "darkMode": false,
+          "reduceTransparency": false,
+          "increaseContrast": false,
+          "controlValues": {
+            "contrast": 0,
+            "transparency": 0
+          }
+        },
+        "restorationPassed": true,
+        "limitation": "Global state and candidate geometry only; no screenshot/visual proof and no remote effectiveAppearance introspection."
+      }
+    },
+    {
+      "file": "27-native-activate-candidate.json",
+      "sha256": "2ac8fe1bd2c91e84324739ea18d2cef7ba33c4724a123570f54706824523ad07",
+      "data": {
+        "timestamp": "2026-11-06T14:24:50.931Z",
+        "mode": "candidate",
+        "screens": [
+          {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          }
+        ],
+        "requested": true,
+        "before": {
+          "candidatePID": 85252,
+          "nativeActive": false,
+          "frontmostPID": -1,
+          "main": true,
+          "focused": true,
+          "position": [
+            396,
+            390
+          ],
+          "size": [
+            570,
+            752
+          ]
+        },
+        "after": {
+          "candidatePID": 85252,
+          "nativeActive": true,
+          "frontmostPID": 85252,
+          "main": true,
+          "focused": true,
+          "position": [
+            396,
+            390
+          ],
+          "size": [
+            570,
+            752
+          ]
+        }
+      }
+    },
+    {
+      "file": "28-native-deactivate-to-original-host.json",
+      "sha256": "dc02f9784e67e0b2e03fa6597f75e105ff564da497176a72cb64ccc963c05b94",
+      "data": {
+        "timestamp": "2026-11-06T14:24:55.252Z",
+        "mode": "host",
+        "screens": [
+          {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          }
+        ],
+        "requested": true,
+        "before": {
+          "candidatePID": 85252,
+          "nativeActive": true,
+          "frontmostPID": 85252,
+          "main": true,
+          "focused": true,
+          "position": [
+            396,
+            390
+          ],
+          "size": [
+            570,
+            752
+          ]
+        },
+        "after": {
+          "candidatePID": 85252,
+          "nativeActive": false,
+          "frontmostPID": 32365,
+          "main": true,
+          "focused": true,
+          "position": [
+            396,
+            390
+          ],
+          "size": [
+            570,
+            752
+          ]
+        }
+      }
+    },
+    {
+      "file": "29-final-system-state.json",
+      "sha256": "74d2509e2669b9865a104698cb5135ba9e7499f32827c92a02ae0cb5216c6ad6",
+      "data": {
+        "timestamp": "2026-11-06T14:24:58.021Z",
+        "screens": [
+          {
+            "index": 0,
+            "frame": {
+              "origin": {
+                "x": 0,
+                "y": 0
+              },
+              "size": {
+                "width": 3360,
+                "height": 1890
+              }
+            },
+            "visibleFrame": {
+              "origin": {
+                "x": 61,
+                "y": 0
+              },
+              "size": {
+                "width": 3299,
+                "height": 1860
+              }
+            },
+            "scale": 2,
+            "displayID": 3
+          }
+        ],
+        "leftButtonDown": false,
+        "screenCapture": false,
+        "postEvent": true,
+        "accessibility": true,
+        "darkMode": false,
+        "reduceTransparency": false,
+        "increaseContrast": false
+      }
+    },
+    {
+      "file": "30-final-appearance-policy.json",
+      "sha256": "d103232a57dd1b11b82543e51a26442424e0f797f34ccfb9d763ef5ee1e2bfbf",
+      "data": {
+        "timestamp": "2026-11-06T14:25:00.688Z",
+        "AppleInterfaceStyle": null,
+        "AppleInterfaceStyleSwitchesAutomatically": null
+      }
+    },
+    {
+      "file": "31-restored-geometry-and-closed-windows.json",
+      "sha256": "019034f2a8e4af3a2c484846162fa4d6323974bf829edac5f901fba4b5598c39",
+      "data": {
+        "timestamp": "2026-11-06T14:26:36.648Z",
+        "before": {
+          "observedPID": 85252,
+          "position": [
+            396,
+            390
+          ],
+          "size": [
+            570,
+            752
+          ]
+        },
+        "screen": {
+          "count": 1,
+          "displayID": 3,
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 3299,
+              "height": 1860
+            }
+          },
+          "visibleCG": {
+            "x": 61,
+            "y": 30,
+            "width": 3299,
+            "height": 1860
+          }
+        },
+        "restored": {
+          "observedPID": 85252,
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            570,
+            752
+          ]
+        },
+        "candidateWindowCount": 0,
+        "systemSettings": {
+          "pid": 3090,
+          "closed": true
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "No native appearance screenshots: CGPreflightScreenCaptureAccess=false",
+    "The display physically removed was ID1 while the candidate window was on retained ID3; carrying-display removal fallback was not tested",
+    "Baseline runtime attribution for SWV-01 not established"
+  ],
+  "cleanup": {
+    "globalValuesRestored": true,
+    "automaticAppearancePolicyRestored": true,
+    "mouseReleased": true,
+    "candidatePIDTerminated": 85252,
+    "preexistingPIDsRetained": [
+      44227,
+      99705
+    ]
+  }
+}

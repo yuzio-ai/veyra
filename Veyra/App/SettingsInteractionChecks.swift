@@ -25,6 +25,7 @@ enum SettingsInteractionChecks {
         shortcuts.start()
         defer { shortcuts.stop() }
         let updates = UpdateStore.preview(.idle)
+        try checkWindowRestoration()
         let bundledVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         try require(bundledVersion != nil && updates.currentVersion == bundledVersion, "preview uses built app version")
         let available = UpdateStore.preview(.available).availableRelease
@@ -35,15 +36,21 @@ enum SettingsInteractionChecks {
         let hosting = NSHostingView(rootView: MonitorSettings(store: store, updates: updates, shortcuts: shortcuts)
             .background(Color(nsColor: .windowBackgroundColor)))
         let window = SettingsWindow.make(hosting: hosting)
+        let constructionMinimum = window.contentMinSize
         window.appearance = NSAppearance(named: .aqua)
         window.isReleasedWhenClosed = false
         window.title = L10n.text("Veyra Settings")
-        window.contentView = hosting
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         defer { window.close() }
         try await wait { store.configurationState == .valid && fields(in: hosting).count == 2 }
         hosting.layoutSubtreeIfNeeded()
+        let layoutMinimum = window.contentMinSize
+        let layoutFrameMinimum = window.minSize
+        try require(layoutMinimum == constructionMinimum,
+                    "minimum survives first hosting layout")
+        try require(layoutFrameMinimum == window.frameRect(forContentRect: NSRect(origin: .zero, size: constructionMinimum)).size,
+                    "frame minimum includes native window chrome")
         window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
         try require(window.toolbar == nil, "single-page settings have no tabs")
         window.setContentSize(NSSize(width: SettingsLayout.width, height: 440))
@@ -71,6 +78,42 @@ enum SettingsInteractionChecks {
         try require(executableField.accessibilityLabel() == L10n.text("Executable"), "executable accessibility label")
         try require(abs(homeField.frame.width - executableField.frame.width) < 1, "matching path widths")
         try require(homeField.lineBreakMode == .byTruncatingMiddle, "native middle truncation")
+
+        let defaultFieldWidth = homeField.frame.width
+        let originalRecorder = recorder(in: hosting)
+        let editorBeforeResize = try focus(homeField, in: window)
+        window.setContentSize(NSSize(width: 900, height: 720))
+        try await pause()
+        hosting.layoutSubtreeIfNeeded()
+        try require(homeField.frame.width > defaultFieldWidth + 80, "wide window expands path fields")
+        let cappedWidth = homeField.frame.width
+        window.setContentSize(NSSize(width: 1100, height: 720))
+        try await pause()
+        hosting.layoutSubtreeIfNeeded()
+        try require(abs(homeField.frame.width - cappedWidth) < 1, "form width remains capped")
+        try require(homeField.currentEditor() === editorBeforeResize, "resizing preserves native field editor")
+        window.contentMinSize = NSSize(width: 320, height: 300)
+        window.setContentSize(NSSize(width: 400, height: 400))
+        try await pause()
+        hosting.layoutSubtreeIfNeeded()
+        try require(recorder(in: hosting) === originalRecorder, "compact layout preserves recorder identity")
+        try require(homeField.currentEditor() === editorBeforeResize, "compact layout preserves editing")
+        try require(document.bounds.width <= scroll.contentView.bounds.width + 1, "compact form has no horizontal overflow")
+        try require(homeField.frame.width > 0 && executableField.frame.width > 0, "compact paths remain editable")
+        try PreviewSupport.saveBitmap(hosting, to: directory.appendingPathComponent("settings-native-compact.png"))
+        window.makeFirstResponder(nil)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: document.bounds.height - scroll.contentView.bounds.height))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try await pause()
+        try require(abs(scroll.contentView.bounds.maxY - document.bounds.maxY) < 1,
+                    "compact viewport reaches document bottom")
+        try PreviewSupport.saveBitmap(hosting, to: directory.appendingPathComponent("settings-native-compact-bottom.png"))
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
+        window.makeFirstResponder(nil)
+        SettingsWindow.prepareForDisplay(window)
+        window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
+        try await pause()
 
         guard let recorder = recorder(in: hosting) else { throw CheckError.failed("shortcut recorder exists") }
         recorder.performClick(nil)
@@ -129,6 +172,9 @@ enum SettingsInteractionChecks {
         window.setContentSize(NSSize(width: SettingsLayout.width, height: 720))
         try require(homeField.stringValue == "invalid/relative-path", "invalid draft remains editable")
         try require(defaults.string(forKey: "codexHome") == chosen.path, "invalid draft is not persisted")
+        try await pause()
+        hosting.layoutSubtreeIfNeeded()
+        try require(window.contentMinSize == constructionMinimum, "minimum survives validation layout")
         try PreviewSupport.saveBitmap(hosting, to: directory.appendingPathComponent("settings-native-invalid.png"))
 
         // Closing a retained Settings view drops its invalid draft on reopening.
@@ -136,6 +182,9 @@ enum SettingsInteractionChecks {
         try await pause()
         window.makeKeyAndOrderFront(nil)
         try await wait { homeField.stringValue == chosen.path }
+        try await pause()
+        hosting.layoutSubtreeIfNeeded()
+        try require(window.contentMinSize == constructionMinimum, "minimum survives window reopen")
 
         // Native Tab leaves the field; the full system key-view loop decides the next control.
         let editor = try focus(homeField, in: window)
@@ -153,11 +202,56 @@ enum SettingsInteractionChecks {
         try require(!store.hasManualPaths, "restore clears both overrides and drafts")
         let checks = ["preview-build-version", "preview-newer-version", "single-page-settings", "settings-overflow-scroll", "matching-widths", "accessibility-labels", "native-middle-truncation", "focus-without-override",
                       "select-all", "copy-paste", "return-commit", "focus-loss-commit", "invalid-draft", "close-and-reopen", "tab-navigation", "restore",
-                      "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur"]
+                      "shortcut-recording", "shortcut-validation", "shortcut-escape", "shortcut-caps-lock", "shortcut-focus-loss", "shortcut-window-blur",
+                      "window-frame-restoration", "window-frame-invalid", "window-frame-missing", "wide-path-fields", "form-width-cap",
+                      "resize-preserves-editor", "compact-preserves-controls", "compact-no-horizontal-overflow", "compact-bottom-scroll",
+                      "minimum-after-hosting-layout", "minimum-after-validation-layout", "minimum-after-reopen"]
         try JSONSerialization.data(withJSONObject: ["passed": checks, "currentVersion": updates.currentVersion,
-            "exampleAvailableVersion": available.version], options: [.prettyPrinted, .sortedKeys])
+            "exampleAvailableVersion": available.version,
+            "minimumContentAfterLayout": [layoutMinimum.width, layoutMinimum.height],
+            "minimumFrameAfterLayout": [layoutFrameMinimum.width, layoutFrameMinimum.height]], options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("settings-native-checks.json"))
         print("Passed \(checks.count) native Settings interaction checks")
+    }
+
+    private static func checkWindowRestoration() throws {
+        let name = "veyra.settings.fixture.\(UUID().uuidString)"
+        defer { NSWindow.removeFrame(usingName: name) }
+        let original = SettingsWindow.make(hosting: NSHostingView(rootView: Color.clear), autosaveName: name)
+        try require(original.contentMinSize == SettingsWindowGeometry.minimumContentSize, "normal content minimum")
+        let defaultSize = original.contentRect(forFrameRect: original.frame).size
+        let screen = original.screen ?? NSScreen.main
+        let chrome = original.frame.height - defaultSize.height
+        let expectedSize = screen.map {
+            NSSize(width: min(SettingsWindowGeometry.defaultContentSize.width, $0.visibleFrame.width),
+                   height: min(SettingsWindowGeometry.defaultContentSize.height, $0.visibleFrame.height - chrome))
+        } ?? SettingsWindowGeometry.defaultContentSize
+        try require(defaultSize == expectedSize, "missing frame uses default size bounded by screen")
+        original.setContentSize(NSSize(width: 680, height: 500))
+        let saved = original.frame
+        original.close()
+        original.setFrameAutosaveName("")
+        let restored = SettingsWindow.make(hosting: NSHostingView(rootView: Color.clear), autosaveName: name)
+        try require(abs(restored.frame.width - saved.width) < 1 && abs(restored.frame.height - saved.height) < 1,
+                    "recreated window restores size")
+        try require(abs(restored.frame.minX - saved.minX) < 1 && abs(restored.frame.minY - saved.minY) < 1,
+                    "recreated window restores position")
+        let before = restored.frame
+        SettingsWindow.prepareForDisplay(restored)
+        restored.close()
+        SettingsWindow.prepareForDisplay(restored)
+        try require(restored.frame == before, "reopening does not recenter")
+        restored.close()
+        restored.setFrameAutosaveName("")
+        NSWindow.removeFrame(usingName: name)
+        UserDefaults.standard.set("invalid fixture", forKey: "NSWindow Frame \(name)")
+        let invalid = SettingsWindow.make(hosting: NSHostingView(rootView: Color.clear), autosaveName: name)
+        defer { invalid.close(); invalid.setFrameAutosaveName("") }
+        try require(SettingsWindowGeometry.isValid(invalid.frame), "invalid saved frame recovers")
+        try require(invalid.contentRect(forFrameRect: invalid.frame).size == defaultSize, "invalid frame uses default size")
+        if let screen = invalid.screen ?? NSScreen.main {
+            try require(screen.visibleFrame.insetBy(dx: -1, dy: -1).contains(invalid.frame), "recovered frame stays visible")
+        }
     }
 
     private static func scrollView(in view: NSView) -> NSScrollView? {

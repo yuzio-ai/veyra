@@ -1,0 +1,2257 @@
+{
+  "recordedAt": "2026-11-06T21:27:48+08:00",
+  "candidateManifestSHA256": "8c3434b0a03540385d77eb6644a69857ecee2620c5b871360971034a5d812c68",
+  "reviewSHA256": "0c70a166d9b09067e8aaa644c7dda9f283afe27d4ee70ebf11cc67b7012259d1",
+  "acceptance": "blocked",
+  "reason": "environment_blocked: missing required native appearance and physical/multiscreen evidence",
+  "evidenceReuse": [
+    {
+      "mode": "test",
+      "result": "SKIP unchanged",
+      "originalRun": "20261106T124243Z-d0718dca"
+    },
+    {
+      "mode": "previews settings --language both",
+      "result": "SKIP unchanged",
+      "originalRun": "20261106T124324Z-21a34d65"
+    },
+    {
+      "mode": "release-build",
+      "result": "SKIP unchanged",
+      "originalRun": "20261106T124451Z-680f80ec"
+    }
+  ],
+  "nativeMethod": "System Events numeric process index, same-call PID checks; fixed launch separately approved; no field text/value capture",
+  "processes": [
+    {
+      "pid": 54439,
+      "startedAt": "2026-11-06T21:09:14+08:00"
+    },
+    {
+      "pid": 66765,
+      "startedAt": "2026-11-06T21:22:03+08:00"
+    }
+  ],
+  "binaryModifiedAt": "2026-11-06T20:45:09.731927+08:00",
+  "passedBehaviors": [
+    "default content 570x720",
+    "fields 437 to 587 points and capped at wider window",
+    "content 570x440 scrolls to update action",
+    "close/reopen preserves 760x652 at 520,450",
+    "new process restores 760x652 at 520,450"
+  ],
+  "states": [
+    {
+      "case": "01-open",
+      "sourceSHA256": "e6bdcbc5a4049b3281d881dcfbf3ff7d28db9ecf5473a7efaf6e75e1203511b5",
+      "metadata": {
+        "timestamp": "2026-11-06T13:14:29.954Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "role": "AXWindow",
+          "subrole": "AXStandardWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            570,
+            752
+          ],
+          "focused": true,
+          "main": true
+        },
+        {
+          "role": "AXGroup",
+          "subrole": "AXHostingView",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            720
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXScrollArea",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            720
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            436,
+            617
+          ],
+          "size": [
+            39,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            436,
+            639
+          ],
+          "size": [
+            159,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXCheckBox",
+          "subrole": null,
+          "identifier": "settings.shortcut.enabled",
+          "position": [
+            436,
+            677
+          ],
+          "size": [
+            111,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.shortcut.recorder",
+          "position": [
+            688,
+            674
+          ],
+          "size": [
+            170,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.shortcut.reset",
+          "position": [
+            866,
+            674
+          ],
+          "size": [
+            76,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "settings.shortcut.error",
+          "position": [
+            437,
+            719
+          ],
+          "size": [
+            201,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            436,
+            766
+          ],
+          "size": [
+            41,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            436,
+            788
+          ],
+          "size": [
+            220,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            436,
+            822
+          ],
+          "size": [
+            52,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXTextField",
+          "subrole": null,
+          "identifier": "settings.path.home",
+          "position": [
+            436,
+            846
+          ],
+          "size": [
+            437,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.choose.home",
+          "position": [
+            881,
+            846
+          ],
+          "size": [
+            60,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            436,
+            888
+          ],
+          "size": [
+            64,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXTextField",
+          "subrole": null,
+          "identifier": "settings.path.executable",
+          "position": [
+            436,
+            912
+          ],
+          "size": [
+            437,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.choose.executable",
+          "position": [
+            881,
+            912
+          ],
+          "size": [
+            60,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "settings.codex.status",
+          "position": [
+            437,
+            959
+          ],
+          "size": [
+            120,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            840,
+            954
+          ],
+          "size": [
+            101,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            436,
+            1011
+          ],
+          "size": [
+            52,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            436,
+            1051
+          ],
+          "size": [
+            77,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXCheckBox",
+          "subrole": "AXToggle",
+          "identifier": "updates.settings",
+          "position": [
+            888,
+            1047
+          ],
+          "size": [
+            54,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            436,
+            1077
+          ],
+          "size": [
+            168,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            436,
+            1114
+          ],
+          "size": [
+            152,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            856,
+            1109
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXCloseButton",
+          "identifier": null,
+          "position": [
+            412,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXZoomButton",
+          "identifier": null,
+          "position": [
+            458,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXGroup",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            459,
+            566
+          ],
+          "size": [
+            14,
+            14
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXGroup",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            459,
+            566
+          ],
+          "size": [
+            14,
+            14
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXMinimizeButton",
+          "identifier": null,
+          "position": [
+            435,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            486,
+            565
+          ],
+          "size": [
+            30,
+            16
+          ],
+          "focused": false,
+          "main": null
+        }
+      ]
+    },
+    {
+      "case": "02-wide760",
+      "sourceSHA256": "fadd3f151d370363db44a1d8a6b192bd58885eb524b27a38441019a49f2698bf",
+      "metadata": {
+        "timestamp": "2026-11-06T13:17:06.763Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "role": "AXWindow",
+          "subrole": "AXStandardWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            760,
+            752
+          ],
+          "focused": true,
+          "main": true
+        },
+        {
+          "role": "AXGroup",
+          "subrole": "AXHostingView",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            760,
+            720
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXScrollArea",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            760,
+            720
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            456,
+            617
+          ],
+          "size": [
+            39,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            456,
+            639
+          ],
+          "size": [
+            159,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXCheckBox",
+          "subrole": null,
+          "identifier": "settings.shortcut.enabled",
+          "position": [
+            456,
+            677
+          ],
+          "size": [
+            111,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.shortcut.recorder",
+          "position": [
+            858,
+            674
+          ],
+          "size": [
+            170,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.shortcut.reset",
+          "position": [
+            1036,
+            674
+          ],
+          "size": [
+            76,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "settings.shortcut.error",
+          "position": [
+            457,
+            719
+          ],
+          "size": [
+            201,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            456,
+            766
+          ],
+          "size": [
+            41,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            456,
+            788
+          ],
+          "size": [
+            220,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            456,
+            822
+          ],
+          "size": [
+            52,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXTextField",
+          "subrole": null,
+          "identifier": "settings.path.home",
+          "position": [
+            456,
+            846
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.choose.home",
+          "position": [
+            1051,
+            846
+          ],
+          "size": [
+            60,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            456,
+            888
+          ],
+          "size": [
+            64,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXTextField",
+          "subrole": null,
+          "identifier": "settings.path.executable",
+          "position": [
+            456,
+            912
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.choose.executable",
+          "position": [
+            1051,
+            912
+          ],
+          "size": [
+            60,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "settings.codex.status",
+          "position": [
+            457,
+            959
+          ],
+          "size": [
+            120,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            1010,
+            954
+          ],
+          "size": [
+            101,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            456,
+            1011
+          ],
+          "size": [
+            52,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            456,
+            1051
+          ],
+          "size": [
+            77,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXCheckBox",
+          "subrole": "AXToggle",
+          "identifier": "updates.settings",
+          "position": [
+            1058,
+            1047
+          ],
+          "size": [
+            54,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            456,
+            1077
+          ],
+          "size": [
+            168,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            456,
+            1114
+          ],
+          "size": [
+            152,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            1026,
+            1109
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXCloseButton",
+          "identifier": null,
+          "position": [
+            412,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXZoomButton",
+          "identifier": null,
+          "position": [
+            458,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXGroup",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            459,
+            566
+          ],
+          "size": [
+            14,
+            14
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXGroup",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            459,
+            566
+          ],
+          "size": [
+            14,
+            14
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXMinimizeButton",
+          "identifier": null,
+          "position": [
+            435,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            486,
+            565
+          ],
+          "size": [
+            30,
+            16
+          ],
+          "focused": false,
+          "main": null
+        }
+      ]
+    },
+    {
+      "case": "03-wide950",
+      "sourceSHA256": "aee2a5cbe7cc36491a4780df4a483d025331ee601166482de8606a8df53ef989",
+      "metadata": {
+        "timestamp": "2026-11-06T13:17:37.651Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "role": "AXWindow",
+          "subrole": "AXStandardWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            950,
+            752
+          ],
+          "focused": true,
+          "main": true
+        },
+        {
+          "role": "AXGroup",
+          "subrole": "AXHostingView",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            950,
+            720
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXScrollArea",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            950,
+            720
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            551,
+            617
+          ],
+          "size": [
+            39,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            551,
+            639
+          ],
+          "size": [
+            159,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXCheckBox",
+          "subrole": null,
+          "identifier": "settings.shortcut.enabled",
+          "position": [
+            551,
+            677
+          ],
+          "size": [
+            111,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.shortcut.recorder",
+          "position": [
+            953,
+            674
+          ],
+          "size": [
+            170,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.shortcut.reset",
+          "position": [
+            1131,
+            674
+          ],
+          "size": [
+            76,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "settings.shortcut.error",
+          "position": [
+            552,
+            719
+          ],
+          "size": [
+            201,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            551,
+            766
+          ],
+          "size": [
+            41,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            551,
+            788
+          ],
+          "size": [
+            220,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            551,
+            822
+          ],
+          "size": [
+            52,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXTextField",
+          "subrole": null,
+          "identifier": "settings.path.home",
+          "position": [
+            551,
+            846
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.choose.home",
+          "position": [
+            1146,
+            846
+          ],
+          "size": [
+            60,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            551,
+            888
+          ],
+          "size": [
+            64,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXTextField",
+          "subrole": null,
+          "identifier": "settings.path.executable",
+          "position": [
+            551,
+            912
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "settings.choose.executable",
+          "position": [
+            1146,
+            912
+          ],
+          "size": [
+            60,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "settings.codex.status",
+          "position": [
+            552,
+            959
+          ],
+          "size": [
+            120,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            1105,
+            954
+          ],
+          "size": [
+            101,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            551,
+            1011
+          ],
+          "size": [
+            52,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            551,
+            1051
+          ],
+          "size": [
+            77,
+            16
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXCheckBox",
+          "subrole": "AXToggle",
+          "identifier": "updates.settings",
+          "position": [
+            1153,
+            1047
+          ],
+          "size": [
+            54,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            551,
+            1077
+          ],
+          "size": [
+            168,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            551,
+            1114
+          ],
+          "size": [
+            152,
+            14
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": null,
+          "identifier": "updates.settings",
+          "position": [
+            1121,
+            1109
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "focused": null,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXCloseButton",
+          "identifier": null,
+          "position": [
+            412,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXZoomButton",
+          "identifier": null,
+          "position": [
+            458,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXGroup",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            459,
+            566
+          ],
+          "size": [
+            14,
+            14
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXGroup",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            459,
+            566
+          ],
+          "size": [
+            14,
+            14
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXButton",
+          "subrole": "AXMinimizeButton",
+          "identifier": null,
+          "position": [
+            435,
+            565
+          ],
+          "size": [
+            16,
+            16
+          ],
+          "focused": false,
+          "main": null
+        },
+        {
+          "role": "AXStaticText",
+          "subrole": null,
+          "identifier": null,
+          "position": [
+            486,
+            565
+          ],
+          "size": [
+            30,
+            16
+          ],
+          "focused": false,
+          "main": null
+        }
+      ]
+    },
+    {
+      "case": "04-minimum-top",
+      "sourceSHA256": "fa07b8d3d5e8bbd025e7d7b578037790a0e16eed1087c65e651cd994f2c4099e",
+      "metadata": {
+        "timestamp": "2026-11-06T13:18:18.116Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            400,
+            300
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            400,
+            268
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            400,
+            268
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            436,
+            902
+          ],
+          "size": [
+            250,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            436,
+            968
+          ],
+          "size": [
+            250,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollBar",
+          "role": "AXScrollBar",
+          "identifier": null,
+          "position": [
+            786,
+            588
+          ],
+          "size": [
+            19,
+            262
+          ],
+          "scrollValue": 0
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            436,
+            1209
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    },
+    {
+      "case": "05-normal-minimum-top",
+      "sourceSHA256": "560f6626ecb90d44adaaf9e6a000c79af9cb40e1df0ec8317458802fbcf2f8a6",
+      "metadata": {
+        "timestamp": "2026-11-06T13:18:57.152Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            570,
+            472
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            440
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            440
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            436,
+            846
+          ],
+          "size": [
+            420,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            436,
+            912
+          ],
+          "size": [
+            420,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollBar",
+          "role": "AXScrollBar",
+          "identifier": null,
+          "position": [
+            956,
+            588
+          ],
+          "size": [
+            19,
+            434
+          ],
+          "scrollValue": 0
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            839,
+            1109
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    },
+    {
+      "case": "06-normal-minimum-bottom",
+      "sourceSHA256": "ede111be8195ffd1c9d42939b79cf15b6f4b7ae045f6c344d0b0f69e33c42a90",
+      "metadata": {
+        "timestamp": "2026-11-06T13:19:07.104Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            570,
+            472
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            440
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            440
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            436,
+            714
+          ],
+          "size": [
+            420,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            436,
+            780
+          ],
+          "size": [
+            420,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollBar",
+          "role": "AXScrollBar",
+          "identifier": null,
+          "position": [
+            956,
+            588
+          ],
+          "size": [
+            19,
+            434
+          ],
+          "scrollValue": 1
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            839,
+            977
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    },
+    {
+      "case": "09-custom-before-close",
+      "sourceSHA256": "b9118e2636aea6fae736b99adea9b7ad9199f9128005cb833a0f4e1e70fe08cb",
+      "metadata": {
+        "timestamp": "2026-11-06T13:20:30.711Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            520,
+            450
+          ],
+          "size": [
+            760,
+            652
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            520,
+            482
+          ],
+          "size": [
+            760,
+            620
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            520,
+            482
+          ],
+          "size": [
+            760,
+            620
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            572,
+            739
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            572,
+            805
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            1142,
+            1002
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    },
+    {
+      "case": "12-reopened",
+      "sourceSHA256": "7e9d493ea7fbf1e700e8224ca5fd0c461d14db72b0898cc6d70a52942d660ccd",
+      "metadata": {
+        "timestamp": "2026-11-06T13:21:11.188Z",
+        "pid": 54439,
+        "processIndex": 100,
+        "observedPID": 54439,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            520,
+            450
+          ],
+          "size": [
+            760,
+            652
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            520,
+            482
+          ],
+          "size": [
+            760,
+            620
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            520,
+            482
+          ],
+          "size": [
+            760,
+            620
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            572,
+            739
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            572,
+            805
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            1142,
+            1002
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    },
+    {
+      "case": "14-new-process-baseline",
+      "sourceSHA256": "c90d6f290a3e9e233baeafe6c7b392e9743d42eee1e123ed62673f5bb77a4f89",
+      "metadata": {
+        "timestamp": "2026-11-06T13:22:37.857Z",
+        "pid": 66765,
+        "processIndex": 101,
+        "observedPID": 66765,
+        "active": false,
+        "windowCount": 0
+      },
+      "geometry": []
+    },
+    {
+      "case": "16-new-process-restored",
+      "sourceSHA256": "47b8a6a94ac723c3a6a6530381cb3c257062c6832e63024d56dde9717a66fca9",
+      "metadata": {
+        "timestamp": "2026-11-06T13:22:47.742Z",
+        "pid": 66765,
+        "processIndex": 101,
+        "observedPID": 66765,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            520,
+            450
+          ],
+          "size": [
+            760,
+            652
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            520,
+            482
+          ],
+          "size": [
+            760,
+            620
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            520,
+            482
+          ],
+          "size": [
+            760,
+            620
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            572,
+            739
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            572,
+            805
+          ],
+          "size": [
+            587,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            1142,
+            1002
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    },
+    {
+      "case": "17-restored-original-geometry",
+      "sourceSHA256": "3b378c911b8b5c240ce3388992a3f8f6f02070a0985d1f73e751512ce2c5b064",
+      "metadata": {
+        "timestamp": "2026-11-06T13:23:41.861Z",
+        "pid": 66765,
+        "processIndex": 101,
+        "observedPID": 66765,
+        "active": false,
+        "windowCount": 1
+      },
+      "geometry": [
+        {
+          "tag": "window",
+          "role": "AXWindow",
+          "identifier": "veyra.settings",
+          "position": [
+            404,
+            557
+          ],
+          "size": [
+            570,
+            752
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "content",
+          "role": "AXGroup",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            720
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "scrollArea",
+          "role": "AXScrollArea",
+          "identifier": null,
+          "position": [
+            404,
+            589
+          ],
+          "size": [
+            570,
+            720
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.home",
+          "position": [
+            436,
+            846
+          ],
+          "size": [
+            437,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "pathField",
+          "role": "AXTextField",
+          "identifier": "settings.path.executable",
+          "position": [
+            436,
+            912
+          ],
+          "size": [
+            437,
+            24
+          ],
+          "scrollValue": null
+        },
+        {
+          "tag": "lastButton",
+          "role": "AXButton",
+          "identifier": "updates.settings",
+          "position": [
+            856,
+            1109
+          ],
+          "size": [
+            86,
+            24
+          ],
+          "scrollValue": null
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "No native screenshot; screencapture failed with could not create image from rect (1)",
+    "frontmost remained false after both activate/deactivate requests; successful activation not established",
+    "No actual display removal/migration or global light/dark, Reduce Transparency, Increase Contrast switching",
+    "AX direct size 400x300 was accepted; this does not verify mouse-drag minimum-size constraints"
+  ],
+  "excludedEvidence": {
+    "cause": "AppleScript stored process reference was re-resolved by name to installed PID44227",
+    "scope": "all early UI conclusions before validated numeric-index binding",
+    "sideEffect": "installed settings window may have been opened/closed/reopened",
+    "configurationChanges": false,
+    "existingProcessesTerminated": false
+  },
+  "cleanup": {
+    "restoredOuterFrame": {
+      "position": [
+        404,
+        557
+      ],
+      "size": [
+        570,
+        752
+      ]
+    },
+    "newProcessIDsTerminated": [
+      54439,
+      66765
+    ],
+    "preexistingProcessIDsStillRunning": [
+      44227,
+      99705
+    ],
+    "allUIActionsStopped": true
+  }
+}

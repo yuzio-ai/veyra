@@ -1,0 +1,411 @@
+{
+  "finding": "SWV-01",
+  "scope": "fix author regression; not independent review or acceptance",
+  "createdAt": "2026-11-06T23:20:40+08:00",
+  "testedCandidateManifestSHA256": "8d0292a350932526d563f7a97881fbcb63ddb954e5e19edbe9152cba4bfed021",
+  "releaseExecutableSHA256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+  "releaseMtime": "2026-11-06T22:46:52.974810+08:00",
+  "launch": {
+    "pid": 18997,
+    "started": "2026-11-06T23:11:52+08:00",
+    "run": "20261106T151152Z-150c96dc",
+    "fixedPathVerified": true
+  },
+  "buildInputsUnchanged": {
+    "baselineCommit": "e07f826ed1a83105d4451797cbfbaec4da32c613",
+    "overrideCount": 14,
+    "overrideListSHA256": "b91883a699e8bf571ed0cbf75a11bce8b34920e5ba16ef9a92c3008b0dce7362"
+  },
+  "preflight": {
+    "timestamp": "2026-11-06T15:11:23.208Z",
+    "frontmostPID": 667,
+    "frontmostBundle": "com.apple.finder",
+    "screens": [
+      {
+        "displayID": 3,
+        "frame": {
+          "origin": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 3360,
+            "height": 1890
+          }
+        },
+        "visibleFrame": {
+          "origin": {
+            "x": 61,
+            "y": 0
+          },
+          "size": {
+            "width": 3299,
+            "height": 1860
+          }
+        },
+        "scale": 2
+      }
+    ],
+    "screenCapture": false,
+    "postEvent": true,
+    "accessibility": true,
+    "leftButtonDown": false,
+    "pointer": {
+      "x": 1331.31640625,
+      "y": 780.921875
+    },
+    "darkMode": false,
+    "reduceTransparency": false,
+    "increaseContrast": false
+  },
+  "method": "AX size assignment prepares the 760x752 frame only. The measured shrink is CGEvent leftMouseDown, 16 leftMouseDragged, leftMouseUp, with AX hit-owner checks and actual window/content/scroll-area readback. Coordinates are pt in CG/AX global space, main-display top-left origin.",
+  "cases": [
+    {
+      "timestamp": "2026-11-06T15:14:14.731Z",
+      "case": "first-mounted",
+      "pid": 18997,
+      "processIndex": 93,
+      "screens": [
+        {
+          "displayID": 3,
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 3299,
+              "height": 1860
+            }
+          }
+        }
+      ],
+      "coordinates": "CG/AX global coordinates, origin at main display top-left",
+      "source": "hidSystemState",
+      "start": {
+        "x": 1162,
+        "y": 1307
+      },
+      "end": {
+        "x": 762,
+        "y": 807
+      },
+      "attemptedTargetSize": [
+        360,
+        252
+      ],
+      "hitPID": 18997,
+      "events": {
+        "down": 1,
+        "dragged": 16,
+        "up": 1,
+        "pointerRestore": 1
+      },
+      "eventError": null,
+      "before": {
+        "observedPID": 18997,
+        "identifier": "veyra.settings",
+        "position": [
+          404,
+          557
+        ],
+        "size": [
+          760,
+          752
+        ],
+        "contentPosition": [
+          404,
+          589
+        ],
+        "contentSize": [
+          760,
+          720
+        ],
+        "scrollAreaSize": [
+          760,
+          720
+        ]
+      },
+      "after": {
+        "observedPID": 18997,
+        "identifier": "veyra.settings",
+        "position": [
+          404,
+          557
+        ],
+        "size": [
+          570,
+          472
+        ],
+        "contentPosition": [
+          404,
+          589
+        ],
+        "contentSize": [
+          570,
+          440
+        ],
+        "scrollAreaSize": [
+          570,
+          440
+        ]
+      },
+      "leftButtonDownBefore": false,
+      "leftButtonDownAfter": false,
+      "pointerBefore": {
+        "x": 1331.31640625,
+        "y": 780.921875
+      },
+      "pointerAfter": {
+        "x": 1331.31640625,
+        "y": 780.921875
+      },
+      "pointerRestored": true,
+      "reachedMinimum": true,
+      "passed": true
+    },
+    {
+      "timestamp": "2026-11-06T15:15:12.500Z",
+      "case": "reopened",
+      "pid": 18997,
+      "processIndex": 93,
+      "screens": [
+        {
+          "displayID": 3,
+          "frame": {
+            "origin": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "width": 3360,
+              "height": 1890
+            }
+          },
+          "visibleFrame": {
+            "origin": {
+              "x": 61,
+              "y": 0
+            },
+            "size": {
+              "width": 3299,
+              "height": 1860
+            }
+          }
+        }
+      ],
+      "coordinates": "CG/AX global coordinates, origin at main display top-left",
+      "source": "hidSystemState",
+      "start": {
+        "x": 1162,
+        "y": 1307
+      },
+      "end": {
+        "x": 762,
+        "y": 807
+      },
+      "attemptedTargetSize": [
+        360,
+        252
+      ],
+      "hitPID": 18997,
+      "events": {
+        "down": 1,
+        "dragged": 16,
+        "up": 1,
+        "pointerRestore": 1
+      },
+      "eventError": null,
+      "before": {
+        "observedPID": 18997,
+        "identifier": "veyra.settings",
+        "position": [
+          404,
+          557
+        ],
+        "size": [
+          760,
+          752
+        ],
+        "contentPosition": [
+          404,
+          589
+        ],
+        "contentSize": [
+          760,
+          720
+        ],
+        "scrollAreaSize": [
+          760,
+          720
+        ]
+      },
+      "after": {
+        "observedPID": 18997,
+        "identifier": "veyra.settings",
+        "position": [
+          404,
+          557
+        ],
+        "size": [
+          570,
+          472
+        ],
+        "contentPosition": [
+          404,
+          589
+        ],
+        "contentSize": [
+          570,
+          440
+        ],
+        "scrollAreaSize": [
+          570,
+          440
+        ]
+      },
+      "leftButtonDownBefore": false,
+      "leftButtonDownAfter": false,
+      "pointerBefore": {
+        "x": 1331.31640625,
+        "y": 780.921875
+      },
+      "pointerAfter": {
+        "x": 1331.31640625,
+        "y": 780.921875
+      },
+      "pointerRestored": true,
+      "reachedMinimum": true,
+      "passed": true
+    }
+  ],
+  "cleanup": {
+    "originalGeometry": {
+      "position": [
+        404,
+        557
+      ],
+      "size": [
+        570,
+        752
+      ]
+    },
+    "restoredGeometry": {
+      "position": [
+        404,
+        557
+      ],
+      "size": [
+        570,
+        752
+      ]
+    },
+    "geometryExactlyRestored": true,
+    "windowCountBeforeProcessCleanup": 0,
+    "autosaveStringExactlyEqual": true,
+    "autosaveWritePerformed": false,
+    "twoDragsExactly": 2,
+    "bothDragPointersRestored": true,
+    "finalLeftButtonDown": false,
+    "initialPointer": {
+      "x": 1331.31640625,
+      "y": 780.921875
+    },
+    "finalPointer": {
+      "x": 2437.921875,
+      "y": 1444.6796875
+    },
+    "finalPointerExactlyRestored": false,
+    "globalDisplayStatesEqual": true,
+    "globalDisplaySettingsChanged": false,
+    "finalVeyraPIDs": [
+      44227
+    ],
+    "original44227Touched": false
+  },
+  "targetProcessAbsentAfterCleanup": true,
+  "pointerBoundary": "Each drag immediately restored its own prior pointer coordinates. Later final coordinates differed for an unattributed reason; no further mouse events were posted, and no forced reset was attempted.",
+  "reusedAutomation": {
+    "source": "minimum-size-fix-01.json",
+    "status": "reused after byte/hash verification; not rerun",
+    "xctest": 257,
+    "scriptRegressions": 51,
+    "diagnostics": 35,
+    "languageChecks": 5,
+    "perLanguageNativeChecks": 34,
+    "perLanguageLayoutPreviews": 56,
+    "releaseBuild": "passed"
+  },
+  "authorFindingStatus": "fixed; independent review pending",
+  "acceptance": "pending",
+  "remaining": [
+    "independent review of the container fix relative to candidate-01",
+    "native visual appearance",
+    "screen transition constraints on the fixed binary",
+    "removal of the display carrying the settings window"
+  ],
+  "sourceRecords": [
+    {
+      "name": "01-preflight.json",
+      "sha256": "42f19f2285251dca16e609b0747ef4f3f27c8754bfc4399ce4882d79e7052306"
+    },
+    {
+      "name": "02-source.json",
+      "sha256": "c26b8e30b97c9b3f7d5f329b52ca956a8ed1843fd8325a5536770a1c16a2178f"
+    },
+    {
+      "name": "07-first-mounted-layout.json",
+      "sha256": "e5a8e6148af676ce928a99631823ddf3225e12dee4dfc5a3d2b6fbd4cb351b1f"
+    },
+    {
+      "name": "09-first-mounted-real-HID-drag.json",
+      "sha256": "a7794c18ea0c73abf0abf1fb68bfbcc970af514da41b1527165b1a9fef76f5b1"
+    },
+    {
+      "name": "13-reopened-real-HID-drag.json",
+      "sha256": "26d892901252bc5309a10e05764605ab6a1514be319b6e4b96a78e3d4a62420f"
+    },
+    {
+      "name": "15-restore-original-position.json",
+      "sha256": "8033052fd48d123bcd5c632fedadb381a45c8c73fb23a0f53319ce8da4f45483"
+    },
+    {
+      "name": "16-final-close.json",
+      "sha256": "b870de6d5f0eac82800f67ed1c003433dd2b90205fe785add8a66a6e86675b79"
+    },
+    {
+      "name": "17-process-cleanup.json",
+      "sha256": "e7c306e7d68a888e550c244b3ddd272b5808da70e69c8c43acc48ca612e71017"
+    },
+    {
+      "name": "19-autosave-final.json",
+      "sha256": "c7674089d16b7c238989acf6fc49092302e96afe6311b7504ccc1d5eac6f0d97"
+    },
+    {
+      "name": "20-final-global-mouse-state.json",
+      "sha256": "24f810f6f845fa3487da26fbc5e31e1fcc65a4993cfe3f9c92ddcc672f007f63"
+    },
+    {
+      "name": "mouse.js",
+      "sha256": "0b5912b7e6eeae05b8c9dde706e84e671e81aa8fed59772e0f68e0c9bb5acb30"
+    },
+    {
+      "name": "cleanup.json",
+      "sha256": "3b760a265049f68829b4dcc18c6817d2cd20d5d89f1d7615eb9fd8895f5ef60e"
+    },
+    {
+      "name": "facts.md",
+      "sha256": "328a75a752e2495334d521b9955477e66ce1e1e24ff77cf21a53fd1829fc58ac"
+    }
+  ]
+}

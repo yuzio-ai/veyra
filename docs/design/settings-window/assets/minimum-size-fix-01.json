@@ -1,0 +1,175 @@
+{
+  "finding": "SWV-01",
+  "stage": "fix author verification, not independent review or acceptance",
+  "createdAt": "2026-11-06T22:56:01+08:00",
+  "priorCandidate": {
+    "manifestSHA256": "8c3434b0a03540385d77eb6644a69857ecee2620c5b871360971034a5d812c68"
+  },
+  "red": {
+    "constructionContentMinimum": [
+      570,
+      440
+    ],
+    "afterHostingLayoutContentMinimum": [
+      0,
+      0
+    ],
+    "afterHostingLayoutFrameMinimum": [
+      0,
+      32
+    ],
+    "assertion": "minimum survives first hosting layout",
+    "status": "failed as expected before production fix"
+  },
+  "green": {
+    "afterHostingLayoutContentMinimum": [
+      570,
+      440
+    ],
+    "afterHostingLayoutFrameMinimum": [
+      570,
+      472
+    ],
+    "languages": [
+      {
+        "language": "en",
+        "checks": 34,
+        "layoutPreviews": 56,
+        "result": "docs/design/settings-window/assets/fix-01-en-settings-native-checks.json",
+        "sha256": "fb47fd642bb52a7f889ca27bab9f4f2da80cf3412d52996d125b7bde349d9cc8"
+      },
+      {
+        "language": "zh",
+        "checks": 34,
+        "layoutPreviews": 56,
+        "result": "docs/design/settings-window/assets/fix-01-zh-settings-native-checks.json",
+        "sha256": "fb47fd642bb52a7f889ca27bab9f4f2da80cf3412d52996d125b7bde349d9cc8"
+      }
+    ],
+    "compactFixture": {
+      "contentSizePt": [
+        400,
+        400
+      ],
+      "temporarilyLoweredMinimumPt": [
+        320,
+        300
+      ],
+      "bitmapSizePx": [
+        800,
+        800
+      ],
+      "scale": 2,
+      "controlsAndBottomScroll": "passed",
+      "scope": "native mounted fixture, not real small-screen hardware"
+    }
+  },
+  "verification": [
+    {
+      "command": "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py test",
+      "run": "20261106T144409Z-220e911a",
+      "scope": {
+        "mode": "test",
+        "only_testing": null
+      },
+      "fingerprint": "0a9d829233354d2cfe4a37072292848cec01b2eb8a0fd016b3a3706bac4d8d5d",
+      "status": "passed"
+    },
+    {
+      "command": "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py previews settings --language both",
+      "run": "20261106T144502Z-419d1c37",
+      "scope": {
+        "mode": "previews",
+        "target": "settings",
+        "language": "both",
+        "native_only": false
+      },
+      "fingerprint": "19859e6fd13bb5ccab07db07cfbf6342ea46fb99e823db3c25e8151b67f13a88",
+      "status": "passed"
+    },
+    {
+      "command": "/usr/bin/python3 -I -B /Users/zhubowen/Documents/yuzio-ai/veyra/scripts/verify_local.py release-build",
+      "run": "20261106T144633Z-13710c19",
+      "scope": {
+        "mode": "release-build"
+      },
+      "fingerprint": "2c7d60325213b1e6ab4acab0b2545be6353f754a478aa7e396584bb8d75ba8bf",
+      "status": "passed"
+    }
+  ],
+  "counts": {
+    "xctest": 257,
+    "scriptRegressions": 51,
+    "diagnostics": 35,
+    "languageChecks": 5
+  },
+  "release": {
+    "sha256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+    "mtime": "2026-11-06T22:46:52.974810+08:00",
+    "distributionVerification": false
+  },
+  "nativeHID": {
+    "status": "environment blocked, not run",
+    "targetPID": 13877,
+    "frontmostBundle": "com.apple.loginwindow",
+    "lockBooleanConfirmed": false,
+    "windowCount": 0,
+    "mouseEventsPosted": 0,
+    "sourceSHA256": "76d159a0eb4af8af66bb7cd068d92060b169e39719b17b6859068a41d1ae04fa",
+    "cleanup": {
+      "autosaveStringExactlyEqual": true,
+      "autosaveWritePerformed": false,
+      "pointerMutationPerformed": false,
+      "globalDisplaySettingsChanged": false,
+      "original44227Touched": false,
+      "finalVeyraPIDs": [
+        44227
+      ]
+    },
+    "targetProcessAbsentAfterCleanup": true,
+    "sourceRecords": [
+      {
+        "name": "01-source.json",
+        "sha256": "b20e5169b8b02c60d84170c65f26558f56bd99ff63f825644c9c696bbe0a7842"
+      },
+      {
+        "name": "02-preflight.json",
+        "sha256": "3adc61504a36f73ec6538fdc1fa3f2c5181d282df7c8f16c3df4ad7b89ff86fe"
+      },
+      {
+        "name": "10-readonly-session-state.json",
+        "sha256": "b6df3e42974e4ff6d83947b9b6629ce5246ae1ef9c2fb86b020d2edfc10596a7"
+      },
+      {
+        "name": "11-readonly-frontmost-recheck.json",
+        "sha256": "b6afd5e1a1e45796a6bbe4940a660724c61dcbc4d233d050cd208de6209b34c0"
+      },
+      {
+        "name": "cleanup.json",
+        "sha256": "b6657dc5bcd2764a5bead7fa4e114b340cd5622062a3e0e54508f0d77c53cafd"
+      },
+      {
+        "name": "facts.md",
+        "sha256": "8dabf3138ac380470ad8931dd5b41c8f5c41794014154e4f287a0c1d99724789"
+      }
+    ]
+  },
+  "remaining": [
+    "real HID resize after first mounted layout and after close/reopen; SWV-01 remains open",
+    "independent review of candidate-02",
+    "native visual inspection",
+    "removal of the display carrying the settings window"
+  ],
+  "configuration": {
+    "test": {
+      "checks": 85,
+      "failed": 0,
+      "skipped": 1
+    },
+    "release": {
+      "checks": 98,
+      "failed": 0,
+      "skipped": 1
+    }
+  }
+}
