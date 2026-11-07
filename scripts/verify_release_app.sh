@@ -88,6 +88,8 @@ if [[ ! -d "$app_path" ]]; then
     print -r -- "  FAIL: app bundle not found: $app_path" >&2
     exit 1
 fi
+# Keep exports and Xcode archives intact while retiring their search entries.
+trap '/usr/bin/python3 -I -B "$PWD/scripts/cleanup_app_copies.py" unregister --archives "$app_path" || exit 1' EXIT
 if [[ -x "$app_path/Contents/MacOS/Veyra" && -f "$app_path/Contents/Info.plist" ]]; then
     pass "bundle structure (executable + Info.plist)"
 else

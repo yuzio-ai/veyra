@@ -37,6 +37,23 @@ VEYRA_DERIVED_DATA_PATH=/tmp/veyra-tests ./scripts/test.sh
 
 派生数据与互斥锁位于 `/private/tmp/veyra-local-verification/<仓库路径哈希>/`，避开 Documents 的测试运行器限制。每次实际执行都在 `build/local-verification/<UTC 时间与随机 ID>/` 保留独立日志和 `result.json`。并发调用直接失败，不视为通过。收到 SIGINT、SIGTERM 或执行超时时，入口先终止工作进程组并回收直接子进程，再释放互斥锁；中断结果记为失败，不保存本次成功缓存。清理期间重复终止信号不会跳过回收。固定入口不接受任意派生目录、Xcode 参数或可执行路径。
 
+### 应用副本回收
+
+`build.sh`、`test.sh` 在退出时撤销本次构建产物的 LaunchServices 登记。固定验证入口在成功、失败和复用证据时也撤销 Debug、Release 与键盘焦点测试应用的登记，保留固定路径的构建缓存和验收日志。`verify_release_app.sh` 退出时撤销导出副本和 Veyra 发布归档的登记；归档及 ZIP 文件保持原样，`/Applications` 和 `~/Applications` 中的安装版保留登记。清理登记失败会使命令失败，不会成为新的成功验证证据。
+
+旧构建目录、验收解压副本和工作树测试缓存可用以下命令集中回收。第一条只列出计划，第二条实际执行并在 `build/app-cleanup/` 保存路径与操作报告：
+
+```sh
+/usr/bin/python3 -I -B scripts/cleanup_app_copies.py clean
+/usr/bin/python3 -I -B scripts/cleanup_app_copies.py clean --apply
+```
+
+脚本只删除已识别为 Veyra 的可丢弃 `.app`，不删除所在目录、日志、ZIP 或 `.xcarchive` 归档。它会撤销失效登记和归档副本的登记；未知位置的实际应用保留。运行中的应用、含符号链接的路径和正在验证的缓存跳过；检测到 `xcodebuild` 时拒绝执行删除。清理与验证共用非阻塞锁，不会停止应用进程。运行中跳过的副本须退出后重试。需要在能读取用户 LaunchServices 数据库和进程表的环境中执行，不能以沙箱返回的空登记结果作为清理成功证据。
+
+Xcode 或 Finder 再次打开归档仍可能重新登记其中的应用；发布验收会再次撤销登记，也可重跑上述回收命令。不要重置整个 LaunchServices 数据库。
+
+### 验证证据与权限
+
 源码、资源、工程、验证脚本、xcconfig、工具链、运行环境与构建产物均未变化时，入口复用相同范围的成功记录，并输出 `SKIP` 和原证据目录；使用 `--force` 可重跑。复用前同时校验原日志的内容哈希与结果文件，删除或损坏证据后会重新执行。失败、证据缺失、运行期间输入变化均不写入可复用记录。局部测试的成功不能替代完整测试。中间修改优先运行相关测试；最终运行一次完整 `test`。已有成功证据后，没有新修改或失败时不重复完整验证。
 
 窄范围规则模板为 `scripts/codex-local-verification.rules`。先校验，再安装到本仓库 `.codex/rules/local-verification.rules`：

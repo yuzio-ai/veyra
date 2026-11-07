@@ -11,5 +11,7 @@ while (( $# )); do
     esac
 done
 derived_data="${VEYRA_DERIVED_DATA_PATH:-$PWD/build}"
+# Xcode registers build products as launchable apps. Retire the entry on success or failure.
+trap '/usr/bin/python3 -I -B "$PWD/scripts/cleanup_app_copies.py" unregister "$derived_data/Build/Products/$configuration/Veyra.app" || exit 1' EXIT
 xcodebuild -project Veyra.xcodeproj -scheme Veyra -configuration "$configuration" -derivedDataPath "$derived_data" "${build_arguments[@]}" build
 print -r -- "App: $derived_data/Build/Products/$configuration/Veyra.app"

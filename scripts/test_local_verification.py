@@ -32,6 +32,7 @@ verify.STATE=root/'state';verify.OUTPUT=root/'output'
 worker='import os,signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);print("WORKER "+str(os.getpid()),flush=True);time.sleep(30)'
 verify.source_digest=lambda:'fixture-source'
 verify.toolchain_digest=lambda env:'fixture-toolchain'
+verify.unregister_local_apps=lambda:(root/'retired').touch()
 verify.commands=lambda options,output:[('worker',[sys.executable,'-I','-B','-c',worker],0.5 if mode=='timeout' else 30)]
 original=verify.subprocess.Popen
 class ObservedProcess(original):
@@ -90,6 +91,7 @@ class VerificationInterruptionTests(unittest.TestCase):
                     self.assertEqual(json.loads(results[0].read_text())['status'], 'failed')
                     self.assertEqual(list((root / 'state').glob('success-*.json')), [])
                     self.assertNotIn('PASS ', stdout)
+                    self.assertTrue((root / 'retired').exists())
                 finally:
                     (root / 'release').touch()
                     if worker is not None:
@@ -112,6 +114,7 @@ class VerificationTests(unittest.TestCase):
                         patch.object(verify, 'source_digest', side_effect=lambda: verify.tree_digest([self.root / 'Veyra/example.swift'])),
                         patch.object(verify, 'toolchain_digest', return_value='toolchain-1'),
                         patch.object(verify, 'bind_focus_host_identity'),
+                        patch.object(verify, 'unregister_local_apps'),
                         patch('sys.stdout', new=io.StringIO()), patch('sys.stderr', new=io.StringIO())]
         for item in self.patches:
             item.start()
@@ -175,6 +178,27 @@ class VerificationTests(unittest.TestCase):
             self.assertEqual(execute.call_count, 1)
             verify.run(verify.arguments(['test', '--force']))
             self.assertEqual(execute.call_count, 2)
+
+    def testBuildRegistrationIsRetiredAfterSuccessReuseAndFailure(self):
+        with patch.object(verify, 'unregister_local_apps') as retire:
+            with patch.object(verify, 'execute', side_effect=self.fake_execute):
+                verify.run(verify.arguments(['test']))
+                verify.run(verify.arguments(['test']))
+            with patch.object(verify, 'execute', side_effect=RuntimeError('fixture failure')):
+                with self.assertRaisesRegex(RuntimeError, 'fixture failure'):
+                    verify.run(verify.arguments(['test', '--force']))
+            self.assertEqual(retire.call_count, 3)
+
+    def testFailedRegistrationCleanupCannotBecomeReusableSuccess(self):
+        with patch.object(verify, 'unregister_local_apps', side_effect=RuntimeError('retire failed')):
+            with patch.object(verify, 'execute', side_effect=self.fake_execute):
+                with self.assertRaisesRegex(RuntimeError, 'retire failed'):
+                    verify.run(verify.arguments(['test']))
+        result = json.loads(next(verify.OUTPUT.glob('*/result.json')).read_text())
+        self.assertEqual(result['status'], 'failed')
+        with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:
+            verify.run(verify.arguments(['test']))
+            self.assertEqual(execute.call_count, 1)
 
     def testSourceToolchainAndArtifactChangesInvalidateSuccess(self):
         with patch.object(verify, 'execute', side_effect=self.fake_execute) as execute:

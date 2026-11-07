@@ -480,6 +480,15 @@ def execute(name, command, timeout, output, env):
     print(f'PASS {name}', flush=True)
 
 
+def unregister_local_apps():
+    # Keep the two fixed build caches, but remove their application-search entries.
+    # Never terminate an app or touch the installed copy here.
+    with finish_worker_cleanup():
+        subprocess.run([PYTHON, '-I', '-B', str(ROOT / 'scripts/cleanup_app_copies.py'), 'unregister',
+                        str(app('Debug')), str(app('Release')), str(focus_host_app())],
+                       check=True, timeout=60)
+
+
 def run(options):
     output = OUTPUT / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
     # GUI fixtures must not block on Documents/Desktop privacy prompts before AppKit starts.
@@ -515,6 +524,7 @@ def run(options):
         if options.mode in ('test', 'release-build', 'previews') and not options.force and artifacts:
             record = cached(stamp, expected, artifacts)
             if record:
+                unregister_local_apps()
                 print(f'SKIP unchanged {options.mode}: reusing successful evidence at {record["output"]}; use --force to rerun')
                 return 0
         if options.mode == 'launch' and not cached(stamp_path('release-build'), release_fingerprint, [app('Release')]):
@@ -597,9 +607,17 @@ def run(options):
             result['status'] = 'failed'
             raise
         finally:
-            if runtime_output != output and result['status'] != 'passed':
-                shutil.copytree(runtime_output, output, dirs_exist_ok=True)
-            (output / 'result.json').write_text(json.dumps(result, indent=2))
+            try:
+                if options.mode in ('test', 'release-build', 'previews'):
+                    unregister_local_apps()
+            except BaseException:
+                result['status'] = 'failed'
+                stamp.unlink(missing_ok=True)
+                raise
+            finally:
+                if runtime_output != output and result['status'] != 'passed':
+                    shutil.copytree(runtime_output, output, dirs_exist_ok=True)
+                (output / 'result.json').write_text(json.dumps(result, indent=2))
         print(f'PASS {options.mode}: {output}')
     return 0
 
