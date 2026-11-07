@@ -1,0 +1,81 @@
+{
+  "fixtureOnly": true,
+  "units": "logical points; measured panel content including fixed fixture header/quota sections",
+  "width": 360,
+  "states": {
+    "en": {
+      "collapsedContentHeight": {
+        "before": 698,
+        "after": 649,
+        "reduction": 49
+      },
+      "parentExpandedContentHeight": {
+        "before": 924,
+        "after": 850,
+        "reduction": 74
+      },
+      "bothExpandedContentHeight": {
+        "before": 1206,
+        "after": 1072,
+        "reduction": 134
+      },
+      "behavior_checks": [
+        "independent-expansion",
+        "independent-collapse",
+        "exact-total-help",
+        "exact-total-accessibility",
+        "keyboard-space",
+        "keyboard-return",
+        "snapshot-reorder-preserves-expansion",
+        "dynamic-shrink",
+        "nested-long-values",
+        "short-progress-one-line",
+        "multiline-progress-two-lines",
+        "blank-progress-no-spacing"
+      ],
+      "progressContentHeights": {
+        "absent": 613,
+        "blank": 613,
+        "multiline": 649,
+        "short": 635
+      }
+    },
+    "zh": {
+      "collapsedContentHeight": {
+        "before": 685,
+        "after": 636,
+        "reduction": 49
+      },
+      "parentExpandedContentHeight": {
+        "before": 891,
+        "after": 817,
+        "reduction": 74
+      },
+      "bothExpandedContentHeight": {
+        "before": 1120,
+        "after": 1019,
+        "reduction": 101
+      },
+      "behavior_checks": [
+        "independent-expansion",
+        "independent-collapse",
+        "exact-total-help",
+        "exact-total-accessibility",
+        "keyboard-space",
+        "keyboard-return",
+        "snapshot-reorder-preserves-expansion",
+        "dynamic-shrink",
+        "nested-long-values",
+        "short-progress-one-line",
+        "multiline-progress-two-lines",
+        "blank-progress-no-spacing"
+      ],
+      "progressContentHeights": {
+        "absent": 600,
+        "blank": 600,
+        "multiline": 636,
+        "short": 622
+      }
+    }
+  }
+}

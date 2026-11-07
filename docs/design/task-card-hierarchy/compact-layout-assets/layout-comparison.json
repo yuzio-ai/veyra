@@ -1,0 +1,2470 @@
+{
+  "en": {
+    "common_count": 204,
+    "height_increases": [],
+    "single_light": {
+      "before": 455,
+      "after": 447
+    },
+    "rows": [
+      {
+        "name": "api-costs-dark",
+        "before": 1789,
+        "after": 1657,
+        "width": 360
+      },
+      {
+        "name": "api-costs-dark-increased",
+        "before": 1789,
+        "after": 1657,
+        "width": 360
+      },
+      {
+        "name": "api-costs-light",
+        "before": 1789,
+        "after": 1657,
+        "width": 360
+      },
+      {
+        "name": "api-costs-light-increased",
+        "before": 1789,
+        "after": 1657,
+        "width": 360
+      },
+      {
+        "name": "cooldown-dark",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "cooldown-dark-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "cooldown-light",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "cooldown-light-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-dark",
+        "before": 1153,
+        "after": 1087,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-dark-increased",
+        "before": 1153,
+        "after": 1087,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-light",
+        "before": 1153,
+        "after": 1087,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-light-increased",
+        "before": 1153,
+        "after": 1087,
+        "width": 360
+      },
+      {
+        "name": "empty-dark",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "empty-dark-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "empty-light",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "empty-light-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "error-dark",
+        "before": 385,
+        "after": 385,
+        "width": 360
+      },
+      {
+        "name": "error-dark-increased",
+        "before": 385,
+        "after": 385,
+        "width": 360
+      },
+      {
+        "name": "error-light",
+        "before": 385,
+        "after": 385,
+        "width": 360
+      },
+      {
+        "name": "error-light-increased",
+        "before": 385,
+        "after": 385,
+        "width": 360
+      },
+      {
+        "name": "expanded-dark",
+        "before": 956,
+        "after": 923,
+        "width": 360
+      },
+      {
+        "name": "expanded-dark-increased",
+        "before": 956,
+        "after": 923,
+        "width": 360
+      },
+      {
+        "name": "expanded-light",
+        "before": 956,
+        "after": 923,
+        "width": 360
+      },
+      {
+        "name": "expanded-light-increased",
+        "before": 956,
+        "after": 923,
+        "width": 360
+      },
+      {
+        "name": "family-context-dark",
+        "before": 1137,
+        "after": 1105,
+        "width": 360
+      },
+      {
+        "name": "family-context-dark-increased",
+        "before": 1137,
+        "after": 1105,
+        "width": 360
+      },
+      {
+        "name": "family-context-light",
+        "before": 1137,
+        "after": 1105,
+        "width": 360
+      },
+      {
+        "name": "family-context-light-increased",
+        "before": 1137,
+        "after": 1105,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-dark",
+        "before": 1521,
+        "after": 1387,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-dark-increased",
+        "before": 1521,
+        "after": 1387,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-light",
+        "before": 1521,
+        "after": 1387,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-light-increased",
+        "before": 1521,
+        "after": 1387,
+        "width": 360
+      },
+      {
+        "name": "loading-dark",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "loading-dark-increased",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "loading-light",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "loading-light-increased",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "long-title-dark",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "long-title-dark-increased",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "long-title-light",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "long-title-light-increased",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "multiple-dark",
+        "before": 3653,
+        "after": 3525,
+        "width": 360
+      },
+      {
+        "name": "multiple-dark-increased",
+        "before": 3653,
+        "after": 3525,
+        "width": 360
+      },
+      {
+        "name": "multiple-light",
+        "before": 3653,
+        "after": 3525,
+        "width": 360
+      },
+      {
+        "name": "multiple-light-increased",
+        "before": 3653,
+        "after": 3525,
+        "width": 360
+      },
+      {
+        "name": "no-quota-dark",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-quota-dark-increased",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-quota-light",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-quota-light-increased",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-sources-dark",
+        "before": 142,
+        "after": 142,
+        "width": 360
+      },
+      {
+        "name": "no-sources-dark-increased",
+        "before": 142,
+        "after": 142,
+        "width": 360
+      },
+      {
+        "name": "no-sources-light",
+        "before": 142,
+        "after": 142,
+        "width": 360
+      },
+      {
+        "name": "no-sources-light-increased",
+        "before": 142,
+        "after": 142,
+        "width": 360
+      },
+      {
+        "name": "plan-business-dark",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-business-dark-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-business-light",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-business-light-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-dark",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-dark-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-light",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-light-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-dark",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-dark-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-light",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-light-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-dark",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-dark-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-light",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-light-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "quota-only-dark",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-only-dark-increased",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-only-light",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-only-light-increased",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-dark",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-dark-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-light",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-light-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-dark",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-dark-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-light",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-light-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quotas-dark",
+        "before": 751,
+        "after": 743,
+        "width": 360
+      },
+      {
+        "name": "quotas-dark-increased",
+        "before": 751,
+        "after": 743,
+        "width": 360
+      },
+      {
+        "name": "quotas-light",
+        "before": 751,
+        "after": 743,
+        "width": 360
+      },
+      {
+        "name": "quotas-light-increased",
+        "before": 751,
+        "after": 743,
+        "width": 360
+      },
+      {
+        "name": "refreshing-dark",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "refreshing-dark-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "refreshing-light",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "refreshing-light-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-dark",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-dark-increased",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-dark",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-dark-increased",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-light",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-light-increased",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-light",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-light-increased",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-dark",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-dark-increased",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-light",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-light-increased",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-dark",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-dark-increased",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-light",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-light-increased",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-dark",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-dark-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-light",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-light-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-dark",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-dark-increased",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-light",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-light-increased",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-dark",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-dark-increased",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-light",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-light-increased",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "settings-available-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-available-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-available-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-available-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "single-dark",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "single-dark-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "single-light",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "single-light-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "task-family-dark",
+        "before": 1086,
+        "after": 1004,
+        "width": 360
+      },
+      {
+        "name": "task-family-dark-increased",
+        "before": 1086,
+        "after": 1004,
+        "width": 360
+      },
+      {
+        "name": "task-family-light",
+        "before": 1086,
+        "after": 1004,
+        "width": 360
+      },
+      {
+        "name": "task-family-light-increased",
+        "before": 1086,
+        "after": 1004,
+        "width": 360
+      },
+      {
+        "name": "task-projects-dark",
+        "before": 3370,
+        "after": 3242,
+        "width": 360
+      },
+      {
+        "name": "task-projects-dark-increased",
+        "before": 3370,
+        "after": 3242,
+        "width": 360
+      },
+      {
+        "name": "task-projects-light",
+        "before": 3370,
+        "after": 3242,
+        "width": 360
+      },
+      {
+        "name": "task-projects-light-increased",
+        "before": 3370,
+        "after": 3242,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-dark",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-dark-increased",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-light",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-light-increased",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-dark",
+        "before": 1712,
+        "after": 1545,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-dark-increased",
+        "before": 1712,
+        "after": 1545,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-light",
+        "before": 1712,
+        "after": 1545,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-light-increased",
+        "before": 1712,
+        "after": 1545,
+        "width": 360
+      },
+      {
+        "name": "token-edges-dark",
+        "before": 1403,
+        "after": 1304,
+        "width": 360
+      },
+      {
+        "name": "token-edges-dark-increased",
+        "before": 1403,
+        "after": 1304,
+        "width": 360
+      },
+      {
+        "name": "token-edges-light",
+        "before": 1403,
+        "after": 1304,
+        "width": 360
+      },
+      {
+        "name": "token-edges-light-increased",
+        "before": 1403,
+        "after": 1304,
+        "width": 360
+      },
+      {
+        "name": "unknown-dark",
+        "before": 794,
+        "after": 778,
+        "width": 360
+      },
+      {
+        "name": "unknown-dark-increased",
+        "before": 794,
+        "after": 778,
+        "width": 360
+      },
+      {
+        "name": "unknown-light",
+        "before": 794,
+        "after": 778,
+        "width": 360
+      },
+      {
+        "name": "unknown-light-increased",
+        "before": 794,
+        "after": 778,
+        "width": 360
+      },
+      {
+        "name": "update-available-dark",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "update-available-dark-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "update-available-light",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      },
+      {
+        "name": "update-available-light-increased",
+        "before": 3271,
+        "after": 3143,
+        "width": 360
+      }
+    ]
+  },
+  "zh": {
+    "common_count": 204,
+    "height_increases": [],
+    "single_light": {
+      "before": 455,
+      "after": 447
+    },
+    "rows": [
+      {
+        "name": "api-costs-dark",
+        "before": 1737,
+        "after": 1605,
+        "width": 360
+      },
+      {
+        "name": "api-costs-dark-increased",
+        "before": 1737,
+        "after": 1605,
+        "width": 360
+      },
+      {
+        "name": "api-costs-light",
+        "before": 1737,
+        "after": 1605,
+        "width": 360
+      },
+      {
+        "name": "api-costs-light-increased",
+        "before": 1737,
+        "after": 1605,
+        "width": 360
+      },
+      {
+        "name": "cooldown-dark",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "cooldown-dark-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "cooldown-light",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "cooldown-light-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-dark",
+        "before": 1134,
+        "after": 1068,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-dark-increased",
+        "before": 1134,
+        "after": 1068,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-light",
+        "before": 1134,
+        "after": 1068,
+        "width": 360
+      },
+      {
+        "name": "edge-cases-light-increased",
+        "before": 1134,
+        "after": 1068,
+        "width": 360
+      },
+      {
+        "name": "empty-dark",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "empty-dark-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "empty-light",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "empty-light-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "error-dark",
+        "before": 375,
+        "after": 375,
+        "width": 360
+      },
+      {
+        "name": "error-dark-increased",
+        "before": 375,
+        "after": 375,
+        "width": 360
+      },
+      {
+        "name": "error-light",
+        "before": 375,
+        "after": 375,
+        "width": 360
+      },
+      {
+        "name": "error-light-increased",
+        "before": 375,
+        "after": 375,
+        "width": 360
+      },
+      {
+        "name": "expanded-dark",
+        "before": 943,
+        "after": 910,
+        "width": 360
+      },
+      {
+        "name": "expanded-dark-increased",
+        "before": 943,
+        "after": 910,
+        "width": 360
+      },
+      {
+        "name": "expanded-light",
+        "before": 943,
+        "after": 910,
+        "width": 360
+      },
+      {
+        "name": "expanded-light-increased",
+        "before": 943,
+        "after": 910,
+        "width": 360
+      },
+      {
+        "name": "family-context-dark",
+        "before": 1085,
+        "after": 1053,
+        "width": 360
+      },
+      {
+        "name": "family-context-dark-increased",
+        "before": 1085,
+        "after": 1053,
+        "width": 360
+      },
+      {
+        "name": "family-context-light",
+        "before": 1085,
+        "after": 1053,
+        "width": 360
+      },
+      {
+        "name": "family-context-light-increased",
+        "before": 1085,
+        "after": 1053,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-dark",
+        "before": 1482,
+        "after": 1348,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-dark-increased",
+        "before": 1482,
+        "after": 1348,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-light",
+        "before": 1482,
+        "after": 1348,
+        "width": 360
+      },
+      {
+        "name": "family-expanded-light-increased",
+        "before": 1482,
+        "after": 1348,
+        "width": 360
+      },
+      {
+        "name": "loading-dark",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "loading-dark-increased",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "loading-light",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "loading-light-increased",
+        "before": 317,
+        "after": 317,
+        "width": 360
+      },
+      {
+        "name": "long-title-dark",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "long-title-dark-increased",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "long-title-light",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "long-title-light-increased",
+        "before": 471,
+        "after": 463,
+        "width": 360
+      },
+      {
+        "name": "multiple-dark",
+        "before": 3445,
+        "after": 3317,
+        "width": 360
+      },
+      {
+        "name": "multiple-dark-increased",
+        "before": 3445,
+        "after": 3317,
+        "width": 360
+      },
+      {
+        "name": "multiple-light",
+        "before": 3445,
+        "after": 3317,
+        "width": 360
+      },
+      {
+        "name": "multiple-light-increased",
+        "before": 3445,
+        "after": 3317,
+        "width": 360
+      },
+      {
+        "name": "no-quota-dark",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-quota-dark-increased",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-quota-light",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-quota-light-increased",
+        "before": 305,
+        "after": 305,
+        "width": 360
+      },
+      {
+        "name": "no-sources-dark",
+        "before": 127,
+        "after": 127,
+        "width": 360
+      },
+      {
+        "name": "no-sources-dark-increased",
+        "before": 127,
+        "after": 127,
+        "width": 360
+      },
+      {
+        "name": "no-sources-light",
+        "before": 127,
+        "after": 127,
+        "width": 360
+      },
+      {
+        "name": "no-sources-light-increased",
+        "before": 127,
+        "after": 127,
+        "width": 360
+      },
+      {
+        "name": "plan-business-dark",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-business-dark-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-business-light",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-business-light-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-dark",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-dark-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-light",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-enterprise-light-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-dark",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-dark-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-light",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-prolite-light-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-dark",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-dark-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-light",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "plan-unknown-light-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "quota-only-dark",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-only-dark-increased",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-only-light",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-only-light-increased",
+        "before": 371,
+        "after": 371,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-dark",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-dark-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-light",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-high-light-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-dark",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-dark-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-light",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quota-ring-low-light-increased",
+        "before": 588,
+        "after": 588,
+        "width": 360
+      },
+      {
+        "name": "quotas-dark",
+        "before": 738,
+        "after": 730,
+        "width": 360
+      },
+      {
+        "name": "quotas-dark-increased",
+        "before": 738,
+        "after": 730,
+        "width": 360
+      },
+      {
+        "name": "quotas-light",
+        "before": 738,
+        "after": 730,
+        "width": 360
+      },
+      {
+        "name": "quotas-light-increased",
+        "before": 738,
+        "after": 730,
+        "width": 360
+      },
+      {
+        "name": "refreshing-dark",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "refreshing-dark-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "refreshing-light",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "refreshing-light-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-dark",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-dark-increased",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-dark",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-dark-increased",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-light",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-expired-light-increased",
+        "before": 394,
+        "after": 394,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-light",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-light-increased",
+        "before": 370,
+        "after": 370,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-dark",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-dark-increased",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-light",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-only-light-increased",
+        "before": 330,
+        "after": 330,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-dark",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-dark-increased",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-light",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-overflow-light-increased",
+        "before": 2626,
+        "after": 2626,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-dark",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-dark-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-light",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unavailable-light-increased",
+        "before": 345,
+        "after": 345,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-dark",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-dark-increased",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-light",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-unknown-light-increased",
+        "before": 393,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-dark",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-dark-increased",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-light",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "reset-credits-zero-light-increased",
+        "before": 322,
+        "after": 322,
+        "width": 360
+      },
+      {
+        "name": "settings-available-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-available-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-available-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-available-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-availableFailed-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-checking-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-current-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-detecting-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-failed-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDirectory-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidDraft-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-invalidExecutable-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-limited-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-longPath-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-manual-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-dark",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-dark-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-light",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "settings-missing-light-increased",
+        "before": null,
+        "after": null,
+        "width": 570
+      },
+      {
+        "name": "single-dark",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "single-dark-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "single-light",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "single-light-increased",
+        "before": 455,
+        "after": 447,
+        "width": 360
+      },
+      {
+        "name": "task-family-dark",
+        "before": 1047,
+        "after": 965,
+        "width": 360
+      },
+      {
+        "name": "task-family-dark-increased",
+        "before": 1047,
+        "after": 965,
+        "width": 360
+      },
+      {
+        "name": "task-family-light",
+        "before": 1047,
+        "after": 965,
+        "width": 360
+      },
+      {
+        "name": "task-family-light-increased",
+        "before": 1047,
+        "after": 965,
+        "width": 360
+      },
+      {
+        "name": "task-projects-dark",
+        "before": 3162,
+        "after": 3034,
+        "width": 360
+      },
+      {
+        "name": "task-projects-dark-increased",
+        "before": 3162,
+        "after": 3034,
+        "width": 360
+      },
+      {
+        "name": "task-projects-light",
+        "before": 3162,
+        "after": 3034,
+        "width": 360
+      },
+      {
+        "name": "task-projects-light-increased",
+        "before": 3162,
+        "after": 3034,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-dark",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-dark-increased",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-light",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "tasks-only-light-increased",
+        "before": 409,
+        "after": 393,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-dark",
+        "before": 1626,
+        "after": 1459,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-dark-increased",
+        "before": 1626,
+        "after": 1459,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-light",
+        "before": 1626,
+        "after": 1459,
+        "width": 360
+      },
+      {
+        "name": "token-breakdown-light-increased",
+        "before": 1626,
+        "after": 1459,
+        "width": 360
+      },
+      {
+        "name": "token-edges-dark",
+        "before": 1364,
+        "after": 1265,
+        "width": 360
+      },
+      {
+        "name": "token-edges-dark-increased",
+        "before": 1364,
+        "after": 1265,
+        "width": 360
+      },
+      {
+        "name": "token-edges-light",
+        "before": 1364,
+        "after": 1265,
+        "width": 360
+      },
+      {
+        "name": "token-edges-light-increased",
+        "before": 1364,
+        "after": 1265,
+        "width": 360
+      },
+      {
+        "name": "unknown-dark",
+        "before": 721,
+        "after": 705,
+        "width": 360
+      },
+      {
+        "name": "unknown-dark-increased",
+        "before": 721,
+        "after": 705,
+        "width": 360
+      },
+      {
+        "name": "unknown-light",
+        "before": 721,
+        "after": 705,
+        "width": 360
+      },
+      {
+        "name": "unknown-light-increased",
+        "before": 721,
+        "after": 705,
+        "width": 360
+      },
+      {
+        "name": "update-available-dark",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "update-available-dark-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "update-available-light",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      },
+      {
+        "name": "update-available-light-increased",
+        "before": 3063,
+        "after": 2935,
+        "width": 360
+      }
+    ]
+  }
+}

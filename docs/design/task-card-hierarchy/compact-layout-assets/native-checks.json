@@ -1,0 +1,781 @@
+{
+  "scope": "six fixed native fixture popovers; en; automated behavior and appearance resolution; not WindowServer material or VoiceOver manual acceptance",
+  "status": "passed",
+  "source_run": "20261106T112925Z-70a19232",
+  "styles": {
+    "light": {
+      "appearance": {
+        "effectiveAppearance": "NSAppearanceNameAqua",
+        "increasedContrast": false,
+        "position": "appearance",
+        "reduceTransparency": false,
+        "requestedAppearance": "NSAppearanceNameAqua",
+        "resolvedAppearance": "NSAppearanceNameAqua"
+      },
+      "positions": [
+        "appearance",
+        "top",
+        "middle",
+        "bottom",
+        "shrunk",
+        "info-refresh",
+        "info-popover",
+        "controls",
+        "tasks-only",
+        "api-costs",
+        "no-sources"
+      ],
+      "records": [
+        {
+          "effectiveAppearance": "NSAppearanceNameAqua",
+          "increasedContrast": false,
+          "position": "appearance",
+          "reduceTransparency": false,
+          "requestedAppearance": "NSAppearanceNameAqua",
+          "resolvedAppearance": "NSAppearanceNameAqua"
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 0,
+          "position": "top",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 881.5,
+          "position": "middle",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 1763,
+          "position": "bottom",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "position": "shrunk",
+          "windowHeight": 521
+        },
+        {
+          "concurrentTaskRefresh": true,
+          "dataDrivenContent": true,
+          "offset": 200,
+          "position": "info-refresh",
+          "preservesController": true,
+          "preservesDocument": true,
+          "preservesFocus": true,
+          "updatedTotal": "≈ US$31.000"
+        },
+        {
+          "firstEscapeKeepsMenu": true,
+          "nativePopover": true,
+          "position": "info-popover",
+          "restoresTriggerFocus": true
+        },
+        {
+          "appWasActive": true,
+          "forcedRecoveryBaseline": true,
+          "keyboardDispatch": "native-window",
+          "keyboardFirstResponder": "task-disclosure",
+          "openedFromBackground": true,
+          "position": "controls",
+          "previousApplicationRestored": true,
+          "restoredVisibilityBeforeToggle": true,
+          "toggleAndEscapePassed": true,
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "escapePassed": true,
+          "openedFromBackground": true,
+          "position": "tasks-only",
+          "previousApplicationRestored": true,
+          "quotaHidden": true,
+          "runningCount": "2",
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "expanded": 5,
+          "modelCount": 12,
+          "nativePopover": true,
+          "overflow": 1163,
+          "position": "api-costs",
+          "reopenedAfterLayout": false,
+          "scrolls": [
+            {
+              "offset": 0,
+              "position": "top",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 581.5,
+              "position": "middle",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 1163,
+              "position": "bottom",
+              "windowHeight": 1836
+            }
+          ],
+          "source": "deterministic-fixtures",
+          "windowWasKey": true
+        },
+        {
+          "position": "no-sources",
+          "runningCount": "0",
+          "warning": false
+        }
+      ]
+    },
+    "dark": {
+      "appearance": {
+        "effectiveAppearance": "NSAppearanceNameDarkAqua",
+        "increasedContrast": false,
+        "position": "appearance",
+        "reduceTransparency": false,
+        "requestedAppearance": "NSAppearanceNameDarkAqua",
+        "resolvedAppearance": "NSAppearanceNameDarkAqua"
+      },
+      "positions": [
+        "appearance",
+        "top",
+        "middle",
+        "bottom",
+        "shrunk",
+        "info-refresh",
+        "info-popover",
+        "controls",
+        "tasks-only",
+        "api-costs",
+        "no-sources"
+      ],
+      "records": [
+        {
+          "effectiveAppearance": "NSAppearanceNameDarkAqua",
+          "increasedContrast": false,
+          "position": "appearance",
+          "reduceTransparency": false,
+          "requestedAppearance": "NSAppearanceNameDarkAqua",
+          "resolvedAppearance": "NSAppearanceNameDarkAqua"
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 0,
+          "position": "top",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 881.5,
+          "position": "middle",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 1763,
+          "position": "bottom",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "position": "shrunk",
+          "windowHeight": 521
+        },
+        {
+          "concurrentTaskRefresh": true,
+          "dataDrivenContent": true,
+          "offset": 200,
+          "position": "info-refresh",
+          "preservesController": true,
+          "preservesDocument": true,
+          "preservesFocus": true,
+          "updatedTotal": "≈ US$31.000"
+        },
+        {
+          "firstEscapeKeepsMenu": true,
+          "nativePopover": true,
+          "position": "info-popover",
+          "restoresTriggerFocus": true
+        },
+        {
+          "appWasActive": true,
+          "forcedRecoveryBaseline": true,
+          "keyboardDispatch": "native-window",
+          "keyboardFirstResponder": "task-disclosure",
+          "openedFromBackground": true,
+          "position": "controls",
+          "previousApplicationRestored": true,
+          "restoredVisibilityBeforeToggle": true,
+          "toggleAndEscapePassed": true,
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "escapePassed": true,
+          "openedFromBackground": true,
+          "position": "tasks-only",
+          "previousApplicationRestored": true,
+          "quotaHidden": true,
+          "runningCount": "2",
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "expanded": 5,
+          "modelCount": 12,
+          "nativePopover": true,
+          "overflow": 1163,
+          "position": "api-costs",
+          "reopenedAfterLayout": false,
+          "scrolls": [
+            {
+              "offset": 0,
+              "position": "top",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 581.5,
+              "position": "middle",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 1163,
+              "position": "bottom",
+              "windowHeight": 1836
+            }
+          ],
+          "source": "deterministic-fixtures",
+          "windowWasKey": true
+        },
+        {
+          "position": "no-sources",
+          "runningCount": "0",
+          "warning": false
+        }
+      ]
+    },
+    "light-increased": {
+      "appearance": {
+        "effectiveAppearance": "NSAppearanceNameAqua",
+        "increasedContrast": true,
+        "position": "appearance",
+        "reduceTransparency": false,
+        "requestedAppearance": "NSAppearanceNameAccessibilityAqua",
+        "resolvedAppearance": "NSAppearanceNameAqua"
+      },
+      "positions": [
+        "appearance",
+        "top",
+        "middle",
+        "bottom",
+        "shrunk",
+        "info-refresh",
+        "info-popover",
+        "controls",
+        "tasks-only",
+        "api-costs",
+        "no-sources"
+      ],
+      "records": [
+        {
+          "effectiveAppearance": "NSAppearanceNameAqua",
+          "increasedContrast": true,
+          "position": "appearance",
+          "reduceTransparency": false,
+          "requestedAppearance": "NSAppearanceNameAccessibilityAqua",
+          "resolvedAppearance": "NSAppearanceNameAqua"
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 0,
+          "position": "top",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 881.5,
+          "position": "middle",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 1763,
+          "position": "bottom",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "position": "shrunk",
+          "windowHeight": 521
+        },
+        {
+          "concurrentTaskRefresh": true,
+          "dataDrivenContent": true,
+          "offset": 200,
+          "position": "info-refresh",
+          "preservesController": true,
+          "preservesDocument": true,
+          "preservesFocus": true,
+          "updatedTotal": "≈ US$31.000"
+        },
+        {
+          "firstEscapeKeepsMenu": true,
+          "nativePopover": true,
+          "position": "info-popover",
+          "restoresTriggerFocus": true
+        },
+        {
+          "appWasActive": true,
+          "forcedRecoveryBaseline": true,
+          "keyboardDispatch": "native-window",
+          "keyboardFirstResponder": "task-disclosure",
+          "openedFromBackground": true,
+          "position": "controls",
+          "previousApplicationRestored": true,
+          "restoredVisibilityBeforeToggle": true,
+          "toggleAndEscapePassed": true,
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "escapePassed": true,
+          "openedFromBackground": true,
+          "position": "tasks-only",
+          "previousApplicationRestored": true,
+          "quotaHidden": true,
+          "runningCount": "2",
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "expanded": 5,
+          "modelCount": 12,
+          "nativePopover": true,
+          "overflow": 1163,
+          "position": "api-costs",
+          "reopenedAfterLayout": false,
+          "scrolls": [
+            {
+              "offset": 0,
+              "position": "top",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 581.5,
+              "position": "middle",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 1163,
+              "position": "bottom",
+              "windowHeight": 1836
+            }
+          ],
+          "source": "deterministic-fixtures",
+          "windowWasKey": true
+        },
+        {
+          "position": "no-sources",
+          "runningCount": "0",
+          "warning": false
+        }
+      ]
+    },
+    "dark-increased": {
+      "appearance": {
+        "effectiveAppearance": "NSAppearanceNameDarkAqua",
+        "increasedContrast": true,
+        "position": "appearance",
+        "reduceTransparency": false,
+        "requestedAppearance": "NSAppearanceNameAccessibilityDarkAqua",
+        "resolvedAppearance": "NSAppearanceNameDarkAqua"
+      },
+      "positions": [
+        "appearance",
+        "top",
+        "middle",
+        "bottom",
+        "shrunk",
+        "info-refresh",
+        "info-popover",
+        "controls",
+        "tasks-only",
+        "api-costs",
+        "no-sources"
+      ],
+      "records": [
+        {
+          "effectiveAppearance": "NSAppearanceNameDarkAqua",
+          "increasedContrast": true,
+          "position": "appearance",
+          "reduceTransparency": false,
+          "requestedAppearance": "NSAppearanceNameAccessibilityDarkAqua",
+          "resolvedAppearance": "NSAppearanceNameDarkAqua"
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 0,
+          "position": "top",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 881.5,
+          "position": "middle",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 1763,
+          "position": "bottom",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "position": "shrunk",
+          "windowHeight": 521
+        },
+        {
+          "concurrentTaskRefresh": true,
+          "dataDrivenContent": true,
+          "offset": 200,
+          "position": "info-refresh",
+          "preservesController": true,
+          "preservesDocument": true,
+          "preservesFocus": true,
+          "updatedTotal": "≈ US$31.000"
+        },
+        {
+          "firstEscapeKeepsMenu": true,
+          "nativePopover": true,
+          "position": "info-popover",
+          "restoresTriggerFocus": true
+        },
+        {
+          "appWasActive": true,
+          "forcedRecoveryBaseline": true,
+          "keyboardDispatch": "native-window",
+          "keyboardFirstResponder": "task-disclosure",
+          "openedFromBackground": true,
+          "position": "controls",
+          "previousApplicationRestored": true,
+          "restoredVisibilityBeforeToggle": true,
+          "toggleAndEscapePassed": true,
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "escapePassed": true,
+          "openedFromBackground": true,
+          "position": "tasks-only",
+          "previousApplicationRestored": true,
+          "quotaHidden": true,
+          "runningCount": "2",
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "expanded": 5,
+          "modelCount": 12,
+          "nativePopover": true,
+          "overflow": 1163,
+          "position": "api-costs",
+          "reopenedAfterLayout": false,
+          "scrolls": [
+            {
+              "offset": 0,
+              "position": "top",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 581.5,
+              "position": "middle",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 1163,
+              "position": "bottom",
+              "windowHeight": 1836
+            }
+          ],
+          "source": "deterministic-fixtures",
+          "windowWasKey": true
+        },
+        {
+          "position": "no-sources",
+          "runningCount": "0",
+          "warning": false
+        }
+      ]
+    },
+    "light-opaque": {
+      "appearance": {
+        "effectiveAppearance": "NSAppearanceNameAqua",
+        "increasedContrast": false,
+        "position": "appearance",
+        "reduceTransparency": true,
+        "requestedAppearance": "NSAppearanceNameAqua",
+        "resolvedAppearance": "NSAppearanceNameAqua"
+      },
+      "positions": [
+        "appearance",
+        "top",
+        "middle",
+        "bottom",
+        "shrunk",
+        "info-refresh",
+        "info-popover",
+        "controls",
+        "tasks-only",
+        "api-costs",
+        "no-sources"
+      ],
+      "records": [
+        {
+          "effectiveAppearance": "NSAppearanceNameAqua",
+          "increasedContrast": false,
+          "position": "appearance",
+          "reduceTransparency": true,
+          "requestedAppearance": "NSAppearanceNameAqua",
+          "resolvedAppearance": "NSAppearanceNameAqua"
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 0,
+          "position": "top",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 881.5,
+          "position": "middle",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 1763,
+          "position": "bottom",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "position": "shrunk",
+          "windowHeight": 521
+        },
+        {
+          "concurrentTaskRefresh": true,
+          "dataDrivenContent": true,
+          "offset": 200,
+          "position": "info-refresh",
+          "preservesController": true,
+          "preservesDocument": true,
+          "preservesFocus": true,
+          "updatedTotal": "≈ US$31.000"
+        },
+        {
+          "firstEscapeKeepsMenu": true,
+          "nativePopover": true,
+          "position": "info-popover",
+          "restoresTriggerFocus": true
+        },
+        {
+          "appWasActive": true,
+          "forcedRecoveryBaseline": true,
+          "keyboardDispatch": "native-window",
+          "keyboardFirstResponder": "task-disclosure",
+          "openedFromBackground": true,
+          "position": "controls",
+          "previousApplicationRestored": true,
+          "restoredVisibilityBeforeToggle": true,
+          "toggleAndEscapePassed": true,
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "escapePassed": true,
+          "openedFromBackground": true,
+          "position": "tasks-only",
+          "previousApplicationRestored": true,
+          "quotaHidden": true,
+          "runningCount": "2",
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "expanded": 5,
+          "modelCount": 12,
+          "nativePopover": true,
+          "overflow": 1163,
+          "position": "api-costs",
+          "reopenedAfterLayout": false,
+          "scrolls": [
+            {
+              "offset": 0,
+              "position": "top",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 581.5,
+              "position": "middle",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 1163,
+              "position": "bottom",
+              "windowHeight": 1836
+            }
+          ],
+          "source": "deterministic-fixtures",
+          "windowWasKey": true
+        },
+        {
+          "position": "no-sources",
+          "runningCount": "0",
+          "warning": false
+        }
+      ]
+    },
+    "dark-opaque": {
+      "appearance": {
+        "effectiveAppearance": "NSAppearanceNameDarkAqua",
+        "increasedContrast": false,
+        "position": "appearance",
+        "reduceTransparency": true,
+        "requestedAppearance": "NSAppearanceNameDarkAqua",
+        "resolvedAppearance": "NSAppearanceNameDarkAqua"
+      },
+      "positions": [
+        "appearance",
+        "top",
+        "middle",
+        "bottom",
+        "shrunk",
+        "info-refresh",
+        "info-popover",
+        "controls",
+        "tasks-only",
+        "api-costs",
+        "no-sources"
+      ],
+      "records": [
+        {
+          "effectiveAppearance": "NSAppearanceNameDarkAqua",
+          "increasedContrast": false,
+          "position": "appearance",
+          "reduceTransparency": true,
+          "requestedAppearance": "NSAppearanceNameDarkAqua",
+          "resolvedAppearance": "NSAppearanceNameDarkAqua"
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 0,
+          "position": "top",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 881.5,
+          "position": "middle",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "documentHeight": 3525,
+          "offset": 1763,
+          "position": "bottom",
+          "viewportHeight": 1762,
+          "windowHeight": 1836
+        },
+        {
+          "position": "shrunk",
+          "windowHeight": 521
+        },
+        {
+          "concurrentTaskRefresh": true,
+          "dataDrivenContent": true,
+          "offset": 200,
+          "position": "info-refresh",
+          "preservesController": true,
+          "preservesDocument": true,
+          "preservesFocus": true,
+          "updatedTotal": "≈ US$31.000"
+        },
+        {
+          "firstEscapeKeepsMenu": true,
+          "nativePopover": true,
+          "position": "info-popover",
+          "restoresTriggerFocus": true
+        },
+        {
+          "appWasActive": true,
+          "forcedRecoveryBaseline": true,
+          "keyboardDispatch": "native-window",
+          "keyboardFirstResponder": "task-disclosure",
+          "openedFromBackground": true,
+          "position": "controls",
+          "previousApplicationRestored": true,
+          "restoredVisibilityBeforeToggle": true,
+          "toggleAndEscapePassed": true,
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "escapePassed": true,
+          "openedFromBackground": true,
+          "position": "tasks-only",
+          "previousApplicationRestored": true,
+          "quotaHidden": true,
+          "runningCount": "2",
+          "windowWasKey": true
+        },
+        {
+          "appWasActive": true,
+          "expanded": 5,
+          "modelCount": 12,
+          "nativePopover": true,
+          "overflow": 1163,
+          "position": "api-costs",
+          "reopenedAfterLayout": false,
+          "scrolls": [
+            {
+              "offset": 0,
+              "position": "top",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 581.5,
+              "position": "middle",
+              "windowHeight": 1836
+            },
+            {
+              "offset": 1163,
+              "position": "bottom",
+              "windowHeight": 1836
+            }
+          ],
+          "source": "deterministic-fixtures",
+          "windowWasKey": true
+        },
+        {
+          "position": "no-sources",
+          "runningCount": "0",
+          "warning": false
+        }
+      ]
+    }
+  }
+}

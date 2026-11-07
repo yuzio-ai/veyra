@@ -1,0 +1,70 @@
+{
+  "date": "2026-11-06",
+  "candidate_manifest_sha256": "a0619afccbf7140cbbc4bbb62e6900dda61edefbdb52e68d96aaeb525a90deb9",
+  "parent_manifest_sha256": "db026f514e4ad63912384151ee654b7eee2e741e5a147dc2b82f0afa2359852d",
+  "candidate_files_verified": 21,
+  "unchanged_dependencies_verified": 13,
+  "independent_review": "completed by a different agent; 0 blocking implementation findings",
+  "TCL-R01": "closed by documentation-only correction; original reviewer required no further review for this change",
+  "reused_evidence": {
+    "xctest": 249,
+    "script_regressions": 51,
+    "menu_layouts_per_language": 148,
+    "settings_layouts_per_language": 56,
+    "native_appearances": 6,
+    "release": "unsigned universal build and configuration passed"
+  },
+  "new_runtime": {
+    "release_launch": "passed",
+    "ax_read": "passed",
+    "ax_node_count": 278,
+    "token_disclosures": 7,
+    "expanded_token_disclosures": 3,
+    "context_help_buttons": 7,
+    "roles": {
+      "AXApplication": 1,
+      "AXMenuBar": 2,
+      "AXMenuBarItem": 4,
+      "AXMenu": 5,
+      "AXMenuItem": 86,
+      "AXPopover": 1,
+      "AXGroup": 30,
+      "AXImage": 15,
+      "AXButton": 30,
+      "AXScrollArea": 1,
+      "AXStaticText": 87,
+      "AXUnknown": 14,
+      "AXScrollBar": 1,
+      "AXValueIndicator": 1
+    },
+    "raw_private_content_published": false
+  },
+  "human_confirmation": {
+    "source": "user reply in current validate turn",
+    "answer": "已检查，全部正常",
+    "scope": [
+      "material and readability across requested appearances",
+      "parent/child and statistics grouping",
+      "expand/collapse and scrolling",
+      "VoiceOver title/path/full progress and no duplicate progress speech"
+    ],
+    "recordedAt": "2026-11-06T20:12:35.848337+08:00"
+  },
+  "acceptance_by_criterion": {
+    "AC-1": "passed",
+    "AC-2": "passed",
+    "AC-3": "passed",
+    "AC-4": "passed",
+    "AC-5": "passed",
+    "AC-6": "passed",
+    "AC-7": "passed"
+  },
+  "acceptance": "passed",
+  "execution_limits": [
+    "CUA desktop connector timed out twice and supplied no visual evidence",
+    "fixed AX reader omits AXHelp/hint; path speech covered by user manual confirmation",
+    "raw AX data remains local; no private task/account text published",
+    "no new complete test/build/preview rerun; reused matching fixed-candidate evidence"
+  ],
+  "submitted_or_published": false
+}

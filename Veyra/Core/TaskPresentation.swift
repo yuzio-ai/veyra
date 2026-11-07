@@ -5,6 +5,16 @@ struct TaskProgress: Equatable, Sendable {
     let kind: Kind
     let text: String
     var label: String { kind == .message ? L10n.text("Latest progress") : L10n.text("Latest action") }
+
+    /// Fold recorded paragraphs for the compact preview without changing the original message.
+    var inlineText: String {
+        text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    var fullDescription: String { L10n.text("\(label): \(text)") }
 }
 
 /// Minimal context for ancestors that need not have an active turn or readable rollout.
@@ -109,6 +119,14 @@ enum TaskText {
     static func nonempty(_ value: String?) -> String? {
         guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
         return text
+    }
+
+    static func titleHelp(_ title: String, path: String?) -> String {
+        nonempty(path).map { "\(title)\n\($0)" } ?? title
+    }
+
+    static func pathAccessibilityDescription(_ path: String?) -> String {
+        nonempty(path).map { L10n.text("Task path: \($0)") } ?? ""
     }
 
     static func title(_ title: String?, id: String, parentID: String?, agentPath: String?, nickname: String?) -> String {

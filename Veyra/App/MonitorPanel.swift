@@ -504,15 +504,14 @@ private struct TaskRow: View {
                                sourceDetail: isSubagent ? TaskText.subagentDetail(nickname: task.agentNickname) : task.sourceDetail,
                                model: task.model,
                                activity: task.activity, startedAt: task.startedAt)
-            if let progress = task.progress { TaskProgressSection(progress: progress) }
+            if let progress = task.progress, !progress.inlineText.isEmpty {
+                TaskProgressSection(progress: progress)
+            }
             TaskContextUsageView(taskID: task.id, usage: task.contextUsage)
-                .padding(.top, 4)
             TaskTokenSummary(taskID: task.id, title: task.title, tokens: task.tokens,
                              isSubagent: isSubagent, expanded: $expanded)
-                .padding(.top, 4)
             if expanded {
                 TaskTokenDetails(task: task)
-                    .padding(.top, 4)
             }
         }
     }
@@ -531,16 +530,11 @@ private struct TaskIdentityHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true).help(title)
-                    if let path = TaskText.nonempty(path) {
-                        Text(path).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
-                            .lineLimit(1).truncationMode(.middle).help(path)
-                            .accessibilityLabel(L10n.text("Task path: \(path)"))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(TaskText.titleHelp(title, path: path))
+                    .accessibilityHint(TaskText.pathAccessibilityDescription(path))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Circle().fill(activity == .running ? monitorAccent : .orange)
                     .frame(width: 6, height: 6).padding(.top, 5)
                     .accessibilityLabel(activity == .running ? L10n.text("Running") : L10n.text("Unconfirmed status"))
@@ -605,14 +599,14 @@ private struct TaskProgressSection: View {
     let progress: TaskProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(progress.label).font(.system(size: 11, weight: .medium))
-            Text(progress.text).font(.system(size: 11)).foregroundStyle(.secondary)
-                .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(progress.text)
-        }
+        Text("\(Text(progress.label).fontWeight(.medium)): \(Text(progress.inlineText).foregroundStyle(.secondary))")
+        .font(.system(size: 11))
+        .lineLimit(2).truncationMode(.tail)
+        .fixedSize(horizontal: false, vertical: true)
+        .help(progress.fullDescription)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(L10n.text("\(progress.label): \(progress.text)"))
+        .accessibilityLabel(progress.fullDescription)
     }
 }
 
@@ -720,7 +714,7 @@ private struct TaskTokenDetails: View {
     private var tokens: TokenUsage { task.tokens }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if let role = TaskText.nonempty(task.agentRole) {
                 Text(L10n.text("\(L10n.text("Role")): \(role)"))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -733,7 +727,6 @@ private struct TaskTokenDetails: View {
                 TaskOutputDetailLine(tokens: tokens)
             }
             TaskAPICostView(task: task)
-            Divider().padding(.vertical, 2)
             TaskSessionStatisticsView(taskID: task.id, source: task.apiCostSource,
                 updatedAt: task.rolloutModifiedAt ?? task.updatedAt, tokens: task.tokens, fixture: task.sessionStatistics)
         }

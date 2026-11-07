@@ -18,7 +18,7 @@
 - 从本次入口输出的 `build/local-verification/<run>/result.json` 确认范围与结果，再查看同目录的 `en/`、`zh/`、`layouts.json` 及原生交互 JSON。失败记录中的部分图片不能作为整轮通过证据。
 - “当前版本”跟随本次构建；新版提示采用合成的下一补丁版本。任务标题、进展、路径和额度时钟均为可重复的示例，不读取真实任务或账号。
 - 历史设计图、旧 `build/previews*` 目录和旧验证记录只对应当时快照。布局位图与合成事件不能证明系统玻璃合成、硬件输入或 VoiceOver 人工验收。
-- 任务明细的视觉定稿与实施记录见[设计记录](design/task-token-breakdown/README.md)。
+- 任务卡片的当前信息层级见[设计记录](design/task-card-hierarchy/README.md)；紧凑布局的前后截图、高度与验证边界见[本轮记录](design/task-card-hierarchy/compact-layout-validation.md)。早期任务明细设计仅作历史追溯。
 - API 参考费用的中英文菜单预览、十二组原生窗口外观、焦点与长列表滚动证据见[费用详情验收记录](history/api-cost-native-acceptance-2026-11-01.md)。系统玻璃合成及硬件输入、VoiceOver 人工验收仍与自动检查分别记录。
 - 后续[屏幕与输入补验](history/api-cost-screen-input-acceptance-2026-11-01.md)记录中文六种外观的直接屏幕观察与合成输入；用户已确认实体键鼠的收起／展开、底部滚动、Escape 关闭及焦点返回三项全部通过。声音审查按用户要求跳过。
 

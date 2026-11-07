@@ -357,6 +357,6 @@ struct TaskUsageSectionTitle: View {
             Image(systemName: symbol).foregroundStyle(.secondary).accessibilityHidden(true)
             Text(title)
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: 11, weight: .semibold))
     }
 }

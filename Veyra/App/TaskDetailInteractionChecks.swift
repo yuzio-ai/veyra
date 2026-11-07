@@ -58,11 +58,18 @@ enum TaskDetailInteractionChecks {
         try expect(parentHeight > initialHeight, "parent details grow actual content")
         try expect(try state("token-parent").contains(L10n.text("Expanded")), "parent expanded")
         try expect(try state("token-child").contains(L10n.text("Collapsed")), "child stays collapsed")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-details-parent-expanded.png"))
         try button("token-child").performClick(nil)
         try await settle()
         let bothHeight = sizing?.contentHeight ?? 0
         try expect(bothHeight > parentHeight, "child independently expands")
         try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-details-both-expanded.png"))
+        store.tasks.reverse()
+        try await settle()
+        try expect(try state("token-parent").contains(L10n.text("Expanded")), "parent expansion survives reordered snapshots")
+        try expect(try state("token-child").contains(L10n.text("Expanded")), "child expansion survives reordered snapshots")
+        store.tasks.reverse()
+        try await settle()
         try button("token-parent").performClick(nil)
         try await settle()
         try expect((sizing?.contentHeight ?? 0) < bothHeight, "parent collapse reclaims height")
@@ -76,8 +83,45 @@ enum TaskDetailInteractionChecks {
         }
         try await settle()
         try expect(try state("token-child").contains(L10n.text("Collapsed")), "Space collapses focused token disclosure")
+        guard let enter = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+            characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36) else {
+            throw CheckError.failed("Return key event")
+        }
+        child.keyDown(with: enter)
+        try await settle()
+        try expect(try state("token-child").contains(L10n.text("Expanded")), "Return expands token disclosure")
+        child.keyDown(with: enter)
+        try await settle()
+        try expect(try state("token-child").contains(L10n.text("Collapsed")), "Return collapses token disclosure")
         try expect(abs((sizing?.contentHeight ?? 0) - initialHeight) <= 1, "all collapsed returns to original height")
         try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-details-both-collapsed.png"))
+
+        let originalProgress = store.tasks[1].progress
+        store.tasks[1].progress = TaskProgress(kind: .tool, text: L10n.text("Running command"))
+        try await settle()
+        let shortProgressHeight = sizing?.contentHeight ?? 0
+        try expect(shortProgressHeight < initialHeight, "short action uses less space than long progress")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-progress-short.png"))
+        store.tasks[1].progress = TaskProgress(kind: .message,
+            text: "Checked cache and paths.\n\nReviewing nested tasks, layout boundaries, and the complete progress message without changing its original recorded text.")
+        try await settle()
+        let longProgressHeight = sizing?.contentHeight ?? 0
+        let font = NSFont.systemFont(ofSize: 11)
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        try expect(longProgressHeight <= shortProgressHeight + lineHeight + 2, "long multiline progress is bounded to two lines")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-progress-line-breaks.png"))
+        store.tasks[1].progress = TaskProgress(kind: .message, text: " \r\n\t ")
+        try await settle()
+        let blankProgressHeight = sizing?.contentHeight ?? 0
+        store.tasks[1].progress = nil
+        try await settle()
+        let absentProgressHeight = sizing?.contentHeight ?? 0
+        try expect(abs(blankProgressHeight - absentProgressHeight) <= 1, "blank progress leaves no label or spacing")
+        try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-progress-empty.png"))
+        store.tasks[1].progress = originalProgress
+        try await settle()
+        try expect(abs((sizing?.contentHeight ?? 0) - initialHeight) <= 1, "restoring progress restores measured height")
         store.tasks.append(deepTask)
         try await settle()
         try button("token-deep").performClick(nil)
@@ -87,9 +131,13 @@ enum TaskDetailInteractionChecks {
         try PreviewSupport.saveBitmap(host, to: directory.appendingPathComponent("task-details-long-values.png"))
         let record: [String: Any] = ["fixtureOnly": true, "inProcessControls": true,
             "passed": ["independent-expansion", "independent-collapse", "exact-total-help", "exact-total-accessibility",
-                       "keyboard-space", "dynamic-shrink", "nested-long-values"],
+                       "keyboard-space", "keyboard-return", "snapshot-reorder-preserves-expansion",
+                       "dynamic-shrink", "nested-long-values", "short-progress-one-line",
+                       "multiline-progress-two-lines", "blank-progress-no-spacing"],
             "collapsedContentHeight": initialHeight, "parentExpandedContentHeight": parentHeight,
-            "bothExpandedContentHeight": bothHeight]
+            "bothExpandedContentHeight": bothHeight,
+            "progressContentHeights": ["short": shortProgressHeight, "multiline": longProgressHeight,
+                                      "blank": blankProgressHeight, "absent": absentProgressHeight]]
         try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("task-detail-checks.json"))
         try await checkAPICostDisclosure(to: directory)

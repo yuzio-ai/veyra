@@ -75,4 +75,39 @@ final class TaskPresentationTests: XCTestCase {
         XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: "p", agentPath: "/root", nickname: nil), L10n.text("Subtask · \("12345678")"))
         XCTAssertEqual(TaskText.title(nil, id: metadata.id, parentID: nil, agentPath: nil, nickname: nil), L10n.text("Untitled task"))
     }
+
+    func testInlineProgressFoldsRecordedLinesWithoutChangingOriginalText() {
+        let original = "  已核对缓存\r\n\n  Checking boundaries\u{2028}\t下一步\u{2029}完成  "
+        let progress = TaskProgress(kind: .message, text: original)
+        XCTAssertEqual(progress.inlineText, "已核对缓存 Checking boundaries 下一步 完成")
+        XCTAssertEqual(progress.text, original)
+        XCTAssertEqual(TaskProgress(kind: .tool, text: "执行脚本").inlineText, "执行脚本")
+        XCTAssertEqual(TaskProgress(kind: .message, text: " \r\n\t\u{2028} ").inlineText, "")
+        XCTAssertEqual(TaskProgress(kind: .message, text: "").inlineText, "")
+    }
+
+    func testCompactIdentityHelpPreservesFullTitleAndOptionalPath() {
+        let title = "任务 · Original title"
+        XCTAssertEqual(TaskText.titleHelp(title, path: " /root/review/deep_child \n"),
+                       title + "\n/root/review/deep_child")
+        XCTAssertEqual(TaskText.titleHelp(title, path: nil), title)
+        XCTAssertEqual(TaskText.titleHelp(title, path: " \n"), title)
+        XCTAssertEqual(TaskText.pathAccessibilityDescription(nil), "")
+        XCTAssertEqual(TaskText.pathAccessibilityDescription(" \n"), "")
+    }
+
+    func testCompactProgressAndPathHelpUseLocalizedLabelsAndPreserveContent() {
+        for language in ["en", "zh-Hans"] {
+            L10n.$languageOverride.withValue(language) {
+                let chinese = language == "zh-Hans"
+                let text = "Original 内容\nSecond line"
+                XCTAssertEqual(TaskProgress(kind: .message, text: text).fullDescription,
+                               (chinese ? "最近进展：" : "Latest progress: ") + text)
+                XCTAssertEqual(TaskProgress(kind: .tool, text: text).fullDescription,
+                               (chinese ? "最近操作：" : "Latest action: ") + text)
+                XCTAssertEqual(TaskText.pathAccessibilityDescription(" /root/review "),
+                               (chinese ? "任务路径：" : "Task path: ") + "/root/review")
+            }
+        }
+    }
 }

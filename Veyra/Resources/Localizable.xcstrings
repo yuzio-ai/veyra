@@ -264,6 +264,7 @@
       }
     },
     "%@: %@" : {
+      "comment" : "Label and value. The first placeholder is the field or progress label, the second is its content. Also used for a single styled task-progress paragraph.",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
