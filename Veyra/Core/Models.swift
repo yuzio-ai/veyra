@@ -273,6 +273,47 @@ enum TaskSource: Sendable {
     }
 }
 
+/// Recorded session identity is separate from the source used for project assignment.
+enum TaskOrigin: Equatable, Sendable {
+    case desktop, cli, exec, ide, work, t3, unknown
+
+    static func resolve(originator: String?, source: String) -> TaskOrigin {
+        if let originator = TaskText.nonempty(originator) {
+            switch originator {
+            case "Codex Desktop": return .desktop
+            case "codex-tui", "codex_cli_rs": return .cli
+            case "codex_exec": return .exec
+            case "codex_vscode": return .ide
+            case "codex_work_desktop": return .work
+            case "T3 Code": return .t3
+            default: return .unknown
+            }
+        }
+        switch source {
+        case "cli": return .cli
+        case "exec": return .exec
+        default: return .unknown
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .desktop: "Codex Desktop"
+        case .cli, .exec: "Codex CLI"
+        case .ide: "Codex IDE"
+        case .work: "ChatGPT Work"
+        case .t3: "T3 Code"
+        case .unknown: "Codex"
+        }
+    }
+
+    var detail: String {
+        if self == .unknown { return L10n.text("Recorded session source is unavailable.") }
+        if self == .exec { return L10n.text("Recorded source: Codex CLI (non-interactive). The current client may differ.") }
+        return L10n.text("Recorded source: \(label). The current client may differ.")
+    }
+}
+
 struct TaskSnapshot: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
@@ -295,10 +336,11 @@ struct TaskSnapshot: Identifiable, Equatable, Sendable {
     var rolloutModifiedAt: Date?
     /// Fixture-only snapshots avoid reading real session history during previews.
     var sessionStatistics: TaskSessionStatistics?
+    var recordedOrigin: TaskOrigin?
     /// The badge stays short so the identity row keeps one line; the full
     /// product name is the badge's help and accessibility text.
-    var sourceLabel: String { source.label }
-    var sourceDetail: String { source.label }
+    var sourceLabel: String { recordedOrigin?.label ?? source.label }
+    var sourceDetail: String { recordedOrigin?.detail ?? source.label }
 }
 
 struct TaskReadResult: Sendable {

@@ -200,6 +200,25 @@ final class CoreTests: XCTestCase {
                        updatedAt: Date(timeIntervalSince1970: 1788397200), tokens: 500)
     }
 
+    func testRecordedOriginClassificationAndConservativeFallback() {
+        let cases: [(String?, String, TaskOrigin)] = [
+            ("Codex Desktop", "vscode", .desktop), ("codex_work_desktop", "vscode", .work),
+            ("codex_vscode", "vscode", .ide), ("T3 Code", "vscode", .t3),
+            ("codex-tui", "vscode", .cli), ("codex_cli_rs", "cli", .cli),
+            ("codex_exec", "exec", .exec), (nil, "cli", .cli), (nil, "exec", .exec),
+            (nil, "vscode", .unknown), ("unrecognized", "cli", .unknown)
+        ]
+        for (originator, source, expected) in cases {
+            XCTAssertEqual(TaskOrigin.resolve(originator: originator, source: source), expected)
+        }
+        XCTAssertEqual(TaskOrigin.desktop.label, "Codex Desktop")
+        XCTAssertEqual(TaskOrigin.ide.label, "Codex IDE")
+        XCTAssertEqual(TaskOrigin.work.label, "ChatGPT Work")
+        XCTAssertEqual(TaskOrigin.t3.label, "T3 Code")
+        XCTAssertEqual(TaskOrigin.exec.label, "Codex CLI")
+        XCTAssertEqual(TaskOrigin.unknown.label, "Codex")
+    }
+
     func testRunningRequiresLiveProcessAndUnfinishedTurn() {
         let meta = metadata()
         let boundary = TurnBoundary(turnID: "turn", isRunning: true, date: .now)

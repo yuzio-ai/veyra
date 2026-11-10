@@ -163,6 +163,12 @@ final class LocalizationTests: XCTestCase {
                 XCTAssertEqual(TaskSessionText.basedOn(1), chinese ? "基于1轮" : "Based on 1 turn")
                 XCTAssertEqual(TaskSource.desktop.label, "Codex")
                 XCTAssertEqual(TaskSource.cli.label, "Codex CLI")
+                XCTAssertEqual(TaskOrigin.desktop.detail, chinese
+                    ? "会话记录的来源：Codex Desktop。当前客户端可能不同。"
+                    : "Recorded source: Codex Desktop. The current client may differ.")
+                XCTAssertEqual(TaskOrigin.exec.detail, chinese
+                    ? "会话记录的来源：Codex CLI（非交互式）。当前客户端可能不同。"
+                    : "Recorded source: Codex CLI (non-interactive). The current client may differ.")
                 XCTAssertEqual(L10n.text("API cost (reference)"), chinese ? "API 费用（参考）" : "API cost (reference)")
                 XCTAssertEqual(L10n.text("Tool call time (cumulative)"), chinese ? "工具调用用时（累计）" : "Tool call time (cumulative)")
                 XCTAssertEqual(L10n.text("First token latency (average)"), chinese ? "首 Token 延时（平均）" : "First token latency (average)")

@@ -198,7 +198,7 @@ enum PreviewSupport {
                              model: "a-long-model-name-for-layout-validation", source: .desktop, parentID: nil,
                              startedAt: referenceDate.addingTimeInterval(-9_876_543), updatedAt: referenceDate,
                              tokens: TokenUsage(input: Int64.max / 2, output: Int64.max / 2, total: Int64.max - 1),
-                             activity: .running),
+                             activity: .running, recordedOrigin: .work),
                 TaskSnapshot(id: "demo-2", title: "缺失用量与开始时间的子任务", model: nil, source: .subtask,
                              parentID: "demo-1", startedAt: nil, updatedAt: referenceDate,
                              tokens: TokenUsage(), activity: .running)
@@ -320,12 +320,13 @@ enum PreviewSupport {
 
     private static func task(_ number: Int, longTitle: Bool = false, parentID: String? = nil,
                              activity: TaskActivity = .running) -> TaskSnapshot {
-        TaskSnapshot(id: "demo-\(number)",
+        let origins: [TaskOrigin] = [.desktop, .cli, .ide, .work, .t3, .unknown]
+        return TaskSnapshot(id: "demo-\(number)",
                      title: longTitle ? "检查额度读取与并行任务监控，验证非常长的任务名称能够正确换行并保持界面整齐" : "优化菜单栏弹窗与滚动体验 · \(number)",
                      model: "example-coding-model", source: parentID == nil ? .desktop : .subtask, parentID: parentID,
                      startedAt: referenceDate.addingTimeInterval(-752), updatedAt: referenceDate,
                      tokens: TokenUsage(input: 877_208, output: 6_892, cachedInput: 698_400, reasoningOutput: 2_891, total: 884_100),
-                     activity: activity)
+                     activity: activity, recordedOrigin: origins[(number - 1) % origins.count])
     }
 
     private static func panel(store: MonitorStore, scenario: Scenario, screenHeight: CGFloat = 800, increasedContrast: Bool = false,

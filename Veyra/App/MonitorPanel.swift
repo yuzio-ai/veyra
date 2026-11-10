@@ -472,7 +472,7 @@ private struct TaskGroupCard: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(row.reference.title).font(.system(size: 13, weight: .semibold))
                                 .lineLimit(2).fixedSize(horizontal: false, vertical: true).help(row.reference.title)
-                            Label("Parent task", systemImage: "arrow.triangle.branch")
+                            Text("Parent task")
                                 .font(.system(size: 11)).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -500,7 +500,6 @@ private struct TaskRow: View {
         VStack(alignment: .leading, spacing: 8) {
             TaskIdentityHeader(title: task.title, path: task.agentPath,
                                source: isSubagent ? TaskText.subagentBadge(nickname: task.agentNickname) : task.sourceLabel,
-                               sourceIcon: isSubagent ? "arrow.triangle.branch" : task.source.iconName,
                                sourceDetail: isSubagent ? TaskText.subagentDetail(nickname: task.agentNickname) : task.sourceDetail,
                                model: task.model,
                                activity: task.activity, startedAt: task.startedAt)
@@ -521,7 +520,6 @@ private struct TaskIdentityHeader: View {
     let title: String
     let path: String?
     let source: String
-    let sourceIcon: String
     let sourceDetail: String
     let model: String?
     let activity: TaskActivity
@@ -555,23 +553,22 @@ private struct TaskIdentityHeader: View {
     }
 
     private var badges: some View {
-        TaskIdentityBadges(source: source, sourceIcon: sourceIcon, sourceDetail: sourceDetail,
+        TaskIdentityBadges(source: source, sourceDetail: sourceDetail,
                            model: model)
     }
 }
 
 private struct TaskIdentityBadges: View {
     let source: String
-    let sourceIcon: String
     let sourceDetail: String
     let model: String?
 
     var body: some View {
         HStack(spacing: 6) {
-            TaskBadge(source, systemImage: sourceIcon)
+            TaskBadge(source)
                 .lineLimit(1).truncationMode(.tail).help(sourceDetail)
                 .accessibilityLabel(sourceDetail)
-            TaskBadge(model ?? L10n.text("Unknown model"), systemImage: "sparkles")
+            TaskBadge(model ?? L10n.text("Unknown model"))
                 .lineLimit(1).truncationMode(.tail).help(model ?? L10n.text("Unknown model"))
                 .accessibilityLabel(model ?? L10n.text("Unknown model"))
         }
@@ -786,32 +783,17 @@ private struct TaskOutputNumbers: View {
 
 private struct TaskBadge: View {
     let text: String
-    let systemImage: String
 
-    init(_ text: String, systemImage: String) {
+    init(_ text: String) {
         self.text = text
-        self.systemImage = systemImage
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: systemImage)
-            Text(text)
-        }
+        Text(text)
         .font(.system(size: 10, weight: .semibold, design: .rounded))
         .padding(.horizontal, 7).padding(.vertical, 3)
         .background(.primary.opacity(0.08), in: Capsule())
         .foregroundStyle(.secondary)
-    }
-}
-
-private extension TaskSource {
-    var iconName: String {
-        switch self {
-        case .cli: "terminal"
-        case .desktop: "desktopcomputer"
-        case .subtask: "arrow.triangle.branch"
-        }
     }
 }
 

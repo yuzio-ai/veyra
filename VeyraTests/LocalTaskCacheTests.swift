@@ -37,6 +37,47 @@ final class SQLiteFixture {
 }
 
 final class LocalTaskCacheTests: XCTestCase {
+    func testRecordedTUIOriginDistinguishesCLIWhenSourcesMatch() async throws {
+        let fixture = try SQLiteFixture()
+        try fixture.threads()
+        let cliPath = try fixture.log("cli"), desktopPath = try fixture.log("desktop")
+        try fixture.insert("cli", path: cliPath)
+        try fixture.insert("desktop", path: desktopPath)
+        try fixture.execute("""
+            ALTER TABLE threads ADD COLUMN originator TEXT;
+            UPDATE threads SET source='vscode', originator='codex-tui' WHERE id='cli';
+            UPDATE threads SET source='vscode', originator='Codex Desktop' WHERE id='desktop';
+            """)
+        let reader = LocalTaskReader { _ in ProcessEvidence(threadIDs: ["cli", "desktop"]) }
+        let result = try await reader.fetch(home: fixture.home)
+        let tasks = Dictionary(uniqueKeysWithValues: result.tasks.map { ($0.id, $0) })
+        XCTAssertEqual(tasks["cli"]?.recordedOrigin, .cli)
+        XCTAssertEqual(tasks["desktop"]?.recordedOrigin, .desktop)
+        XCTAssertEqual(tasks["cli"]?.source, .desktop, "Display identity must not change project assignment")
+    }
+
+    func testMissingDatabaseOriginReadsActiveSessionHeaderAndCachesIt() async throws {
+        let fixture = try SQLiteFixture()
+        try fixture.threads()
+        let path = fixture.home.appendingPathComponent("active.jsonl")
+        let header = #"{"type":"session_meta","payload":{"originator":"codex_vscode","instructions":""#
+            + String(repeating: "x", count: 70_000) + "\"}}\n"
+        let started = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}"# + "\n"
+        try (header + started).write(to: path, atomically: false, encoding: .utf8)
+        try fixture.insert("task", path: path)
+        try fixture.execute("UPDATE threads SET source='vscode' WHERE id='task'")
+        let reader = LocalTaskReader { _ in ProcessEvidence(threadIDs: ["task"]) }
+        let first = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(first.tasks.first?.recordedOrigin, .ide)
+        let cached = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(cached.tasks.first?.recordedOrigin, .ide)
+        XCTAssertEqual(cached.metrics.rolloutBytes, 0)
+        XCTAssertEqual(cached.metrics.rolloutOpens, 0)
+        try fixture.execute("ALTER TABLE threads ADD COLUMN originator TEXT; UPDATE threads SET originator='T3 Code' WHERE id='task'")
+        let updated = try await reader.fetch(home: fixture.home)
+        XCTAssertEqual(updated.tasks.first?.recordedOrigin, .t3, "Database origin takes precedence over the session header")
+    }
+
     func testCodexDatabaseInHomeIsReadableDespiteUnrelatedInvalidSQLitePath() async throws {
         let fixture = try SQLiteFixture()
         try fixture.threads()

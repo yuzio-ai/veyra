@@ -1,6 +1,30 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Recorded source: %@. The current client may differ." : {
+      "comment" : "Explains that the task badge is the recorded session origin, not necessarily its current client.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recorded source: %@. The current client may differ." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话记录的来源：%@。当前客户端可能不同。" } }
+      }
+    },
+    "Recorded source: Codex CLI (non-interactive). The current client may differ." : {
+      "comment" : "Explains the recorded source of a non-interactive Codex CLI session.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recorded source: Codex CLI (non-interactive). The current client may differ." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话记录的来源：Codex CLI（非交互式）。当前客户端可能不同。" } }
+      }
+    },
+    "Recorded session source is unavailable." : {
+      "comment" : "Explains that the task's recorded session origin cannot be identified.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recorded session source is unavailable." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法识别会话记录的来源。" } }
+      }
+    },
     "Open Settings…" : {
       "comment" : "Button that opens settings to repair unavailable Codex quota paths.",
       "extractionState" : "manual",

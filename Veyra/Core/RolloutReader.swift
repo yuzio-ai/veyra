@@ -14,6 +14,7 @@ struct RolloutState: Sendable {
     var display = RolloutDisplay()
     var context = RolloutContext()
     var modifiedAt: Date?
+    var originator: String?
 }
 
 /// Lifecycle/token data plus explicitly public progress; never reasoning or tool output.
@@ -54,6 +55,11 @@ enum RolloutEvent {
 }
 
 struct RolloutReader {
+    private struct HeaderCursor {
+        var data = Data()
+        var offset: UInt64 = 0
+        var checked = false
+    }
     private struct Cursor {
         var identity: String
         var offset: UInt64
@@ -61,13 +67,14 @@ struct RolloutReader {
         var partial: Data
         var state: RolloutState
         var didReachStart: Bool
+        var header: HeaderCursor?
     }
     private var cursors: [String: Cursor] = [:]
     private let chunkSize = 256 * 1_024
     private(set) var lastReadByteCount = 0
     private(set) var lastOpenCount = 0
 
-    mutating func read(_ url: URL, requireBoundary: Bool = true) throws -> RolloutState {
+    mutating func read(_ url: URL, requireBoundary: Bool = true, readOriginator: Bool = false) throws -> RolloutState {
         lastReadByteCount = 0
         lastOpenCount = 0
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
@@ -81,7 +88,7 @@ struct RolloutReader {
         }
         if var cursor = previous,
            cursor.didReachStart || hasRequiredFields(cursor.state, requireBoundary: requireBoundary) {
-            if size > cursor.offset {
+            if size > cursor.offset || (readOriginator && (cursor.header == nil || (!cursor.header!.checked && size > cursor.header!.offset))) {
                 let file = try FileHandle(forReadingFrom: url)
                 lastOpenCount = 1
                 defer { try? file.close() }
@@ -94,6 +101,11 @@ struct RolloutReader {
                     remaining -= UInt64(data.count); cursor.offset += UInt64(data.count)
                     cursor.partial.append(data)
                     consumeLines(from: &cursor.partial, state: &cursor.state)
+                }
+                if readOriginator {
+                    var header = cursor.header ?? HeaderCursor()
+                    if !header.checked { try readHeader(file, size: size, header: &header, state: &cursor.state) }
+                    cursor.header = header
                 }
             }
             cursor.modified = modified
@@ -130,10 +142,37 @@ struct RolloutReader {
             position = start
             if hasRequiredFields(state, requireBoundary: requireBoundary) { break }
         }
+        var header: HeaderCursor?
+        if readOriginator {
+            var current = HeaderCursor()
+            try readHeader(file, size: size, header: &current, state: &state)
+            header = current
+        }
         state.modifiedAt = modified
         cursors[url.path] = Cursor(identity: identity, offset: size, modified: modified, partial: partial,
-                                   state: state, didReachStart: position == 0)
+                                   state: state, didReachStart: position == 0, header: header)
         return state
+    }
+
+    /// Read the first line in bounded chunks, retaining incomplete headers for later appends.
+    private mutating func readHeader(_ file: FileHandle, size: UInt64, header: inout HeaderCursor, state: inout RolloutState) throws {
+        try file.seek(toOffset: header.offset)
+        while header.offset < size {
+            let data = try file.read(upToCount: Int(min(64 * 1024, size - header.offset))) ?? Data()
+            lastReadByteCount += data.count
+            guard !data.isEmpty else { return }
+            if let end = data.firstIndex(of: 0x0a) {
+                header.data.append(data[..<end])
+                if let event = try? JSONValue.decode(header.data), event["type"].string == "session_meta" {
+                    state.originator = TaskText.nonempty(event["payload"]["originator"].string)
+                }
+                header.data = Data()
+                header.checked = true
+                return
+            }
+            header.data.append(data)
+            header.offset += UInt64(data.count)
+        }
     }
 
     private func hasRequiredFields(_ state: RolloutState, requireBoundary: Bool) -> Bool {

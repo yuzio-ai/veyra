@@ -14,6 +14,7 @@ struct ThreadMetadata: Sendable {
     var storedAgentRole: String?
     var workingDirectory: String?
     var projectID: String?
+    var originator: String?
     private var spawn: JSONValue {
         guard let data = source.data(using: .utf8), let value = try? JSONValue.decode(data) else { return .null }
         return value["subagent"]["thread_spawn"]
@@ -93,7 +94,8 @@ enum TaskResolver {
                             progress: metadata.parentID == nil ? nil : rollout.display.progress(for: boundary),
                             workingDirectory: metadata.workingDirectory, projectID: metadata.projectID,
                             apiCostSource: .codex(URL(fileURLWithPath: metadata.rolloutPath)),
-                            contextUsage: rollout.context.usage, rolloutModifiedAt: rollout.modifiedAt)
+                            contextUsage: rollout.context.usage, rolloutModifiedAt: rollout.modifiedAt,
+                            recordedOrigin: .resolve(originator: metadata.originator ?? rollout.originator, source: metadata.source))
     }
 
     static func isExpired(metadata: ThreadMetadata, rollout: RolloutState, storedTurn: TurnBoundary?, now: Date) -> Bool {
@@ -168,6 +170,7 @@ actor LocalTaskReader {
 
         var tasks: [TaskSnapshot] = [], unreadable = false
         var readPaths: [String: RolloutState] = [:]
+        let originPaths = Set(metadata.filter { !$0.archived && $0.originator == nil && $0.parentID == nil }.map(\.rolloutPath))
         let recent = checkedAt.addingTimeInterval(-TaskResolver.recentActivityWindow)
         // Task reads go first so a shared path is never tail-read and then reopened.
         for thread in metadata where !thread.archived {
@@ -179,7 +182,8 @@ actor LocalTaskReader {
                 if let cached = readPaths[thread.rolloutPath] { rollout = cached }
                 else {
                     rollout = try rollouts.read(URL(fileURLWithPath: thread.rolloutPath),
-                                                requireBoundary: stored == nil)
+                                                requireBoundary: stored == nil,
+                                                readOriginator: originPaths.contains(thread.rolloutPath))
                     metrics.rolloutBytes += rollouts.lastReadByteCount
                     metrics.rolloutOpens += rollouts.lastOpenCount
                     readPaths[thread.rolloutPath] = rollout
@@ -239,7 +243,7 @@ actor LocalTaskReader {
         guard columns.contains("id"), columns.contains("rollout_path") else {
             throw MonitorFailure(L10n.text("This Codex database version is not supported."))
         }
-        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived", "agent_path", "agent_nickname", "agent_role", "cwd", "project_id"]
+        let optional = ["title", "name", "model", "source", "updated_at", "tokens_used", "archived", "agent_path", "agent_nickname", "agent_role", "cwd", "project_id", "originator"]
             .map { columns.contains($0) ? $0 : "NULL AS \($0)" }
         return try db.rows("SELECT id, rollout_path, \(optional.joined(separator: ", ")) FROM threads").compactMap { row in
             guard let id = row["id"], let path = row["rollout_path"] else { return nil }
@@ -248,7 +252,8 @@ actor LocalTaskReader {
                                       updatedAt: Date(timeIntervalSince1970: Double(row["updated_at"] ?? "0") ?? 0),
                                       tokens: row["tokens_used"].flatMap(Int64.init), archived: row["archived"] == "1",
                                       storedAgentPath: row["agent_path"], storedAgentNickname: row["agent_nickname"], storedAgentRole: row["agent_role"],
-                                      workingDirectory: TaskText.nonempty(row["cwd"]), projectID: TaskText.nonempty(row["project_id"]))
+                                      workingDirectory: TaskText.nonempty(row["cwd"]), projectID: TaskText.nonempty(row["project_id"]),
+                                      originator: TaskText.nonempty(row["originator"]))
             return item.isInternal ? nil : item
         }
     }

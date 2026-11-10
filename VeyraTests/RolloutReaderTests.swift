@@ -2,6 +2,34 @@ import XCTest
 import Foundation
 
 final class RolloutReaderTests: XCTestCase {
+    func testOriginatorReadsLongHeadersAndCachesResults() throws {
+        let prefix = #"{"type":"session_meta","payload":{"originator":"codex_vscode","instructions":""#
+        let suffix = "\"}}"
+        for length in [65_535, 65_536, 65_537, 300_000] {
+            let header = prefix + String(repeating: "x", count: length - prefix.utf8.count - suffix.utf8.count) + suffix
+            let url = try file(header + "\n" + start + model + token)
+            var reader = RolloutReader()
+            XCTAssertEqual(try reader.read(url, readOriginator: true).originator, "codex_vscode")
+            XCTAssertEqual(try reader.read(url, readOriginator: true).originator, "codex_vscode")
+            XCTAssertEqual(reader.lastReadByteCount, 0)
+            XCTAssertEqual(reader.lastOpenCount, 0)
+        }
+    }
+
+    func testIncompleteOriginHeaderContinuesAndReplacementResetsIt() throws {
+        let prefix = #"{"type":"session_meta","payload":{"instructions":""# + String(repeating: "x", count: 70_000)
+        let url = try file(prefix)
+        var reader = RolloutReader()
+        XCTAssertNil(try reader.read(url, readOriginator: true).originator)
+        XCTAssertNil(try reader.read(url, readOriginator: true).originator)
+        XCTAssertEqual(reader.lastReadByteCount, 0)
+        XCTAssertEqual(reader.lastOpenCount, 0)
+        try append("\",\"originator\":\"codex_vscode\"}}\n", to: url)
+        XCTAssertEqual(try reader.read(url, readOriginator: true).originator, "codex_vscode")
+        try #"{"type":"session_meta","payload":{"originator":"T3 Code"}}"#.appending("\n").write(to: url, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try reader.read(url, readOriginator: true).originator, "T3 Code")
+    }
+
     private let start = #"{"type":"event_msg","payload":{"type":"task_started","turn_id":"turn"}}"# + "\n"
     private let model = #"{"type":"turn_context","payload":{"model":"log-model"}}"# + "\n"
     private let token = #"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}}"# + "\n"
