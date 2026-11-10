@@ -400,7 +400,8 @@ final class CoreTests: XCTestCase {
                 homePath: "",
                 executablePath: "",
                 environment: ["PATH": "/usr/bin:/bin"],
-                homeDirectory: homeDirectory
+                homeDirectory: homeDirectory,
+                isExecutable: { $0.hasPrefix(homeDirectory.path + "/") && FileManager.default.isExecutableFile(atPath: $0) }
             )
             XCTAssertEqual(location.executable?.path, executable.path, relative)
         }
@@ -419,7 +420,8 @@ final class CoreTests: XCTestCase {
             homePath: "",
             executablePath: "",
             environment: [:],
-            homeDirectory: homeDirectory
+            homeDirectory: homeDirectory,
+            isExecutable: { $0.hasPrefix(homeDirectory.path + "/") && FileManager.default.isExecutableFile(atPath: $0) }
         )
         XCTAssertEqual(discovered.executable?.path, desktop.path)
 
@@ -458,7 +460,8 @@ final class CoreTests: XCTestCase {
             homePath: "",
             executablePath: "",
             environment: ["PATH": homeDirectory.path],
-            homeDirectory: homeDirectory
+            homeDirectory: homeDirectory,
+            isExecutable: { $0.hasPrefix(homeDirectory.path + "/") && FileManager.default.isExecutableFile(atPath: $0) }
         )
         XCTAssertNil(location.executable)
     }
@@ -473,7 +476,8 @@ final class CoreTests: XCTestCase {
             homePath: "",
             executablePath: "",
             environment: ["PATH": pathEntry.path],
-            homeDirectory: homeDirectory
+            homeDirectory: homeDirectory,
+            isExecutable: { ($0.hasPrefix(homeDirectory.path + "/") || $0.hasPrefix(pathEntry.path + "/")) && FileManager.default.isExecutableFile(atPath: $0) }
         )
         XCTAssertEqual(location.executable?.path, fixed.path)
     }
@@ -485,7 +489,8 @@ final class CoreTests: XCTestCase {
             homePath: "",
             executablePath: "",
             environment: ["PATH": pathEntry.path],
-            homeDirectory: homeDirectory
+            homeDirectory: homeDirectory,
+            isExecutable: { ($0.hasPrefix(homeDirectory.path + "/") || $0.hasPrefix(pathEntry.path + "/")) && FileManager.default.isExecutableFile(atPath: $0) }
         )
         XCTAssertEqual(location.executable?.path, onPath.path)
     }

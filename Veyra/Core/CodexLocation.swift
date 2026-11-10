@@ -6,7 +6,8 @@ struct CodexLocation: Equatable, Sendable {
 
     static func resolve(homePath: String = "", executablePath: String = "",
                         environment: [String: String] = ProcessInfo.processInfo.environment,
-                        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> CodexLocation {
+                        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+                        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> CodexLocation {
         // A blank CODEX_HOME counts as unset: URL(fileURLWithPath: "") resolves to the process
         // working directory, which for a Finder-launched app is the filesystem root.
         let environmentHome = environment["CODEX_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -17,7 +18,7 @@ struct CodexLocation: Equatable, Sendable {
             return CodexLocation(home: home, executable: URL(fileURLWithPath: (executablePath as NSString).expandingTildeInPath))
         }
         let executable = executableCandidates(environment: environment, homeDirectory: homeDirectory)
-            .first { FileManager.default.isExecutableFile(atPath: $0) }
+            .first(where: isExecutable)
             .map { URL(fileURLWithPath: $0) }
         return CodexLocation(home: home, executable: executable)
     }
