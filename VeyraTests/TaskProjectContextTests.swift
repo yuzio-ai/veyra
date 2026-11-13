@@ -93,6 +93,26 @@ final class TaskProjectContextTests: XCTestCase {
         XCTAssertEqual(updated.projects["p"]?.roots, ["/moved"])
     }
 
+    func testPrimaryRootRequiresZeroPositionOrSingleUnorderedRoot() throws {
+        let fixture = try SQLiteFixture()
+        try fixture.execute("""
+            CREATE TABLE projects(id TEXT, name TEXT);
+            CREATE TABLE project_roots(project_id TEXT, position INTEGER, path TEXT);
+            INSERT INTO projects VALUES ('p', 'Project');
+            INSERT INTO project_roots VALUES ('p', 1, '/secondary');
+            """)
+        let reader = TaskProjectContextReader()
+        XCTAssertNil(reader.read(home: fixture.home).projects["p"]?.primaryRoot)
+        try fixture.execute("INSERT INTO project_roots VALUES ('p', 0, '/primary')")
+        XCTAssertEqual(reader.read(home: fixture.home).projects["p"]?.primaryRoot, "/primary")
+        try fixture.execute("INSERT INTO project_roots VALUES ('p', 0, '/duplicate')")
+        XCTAssertNil(reader.read(home: fixture.home).projects["p"]?.primaryRoot)
+        try fixture.execute("DROP TABLE project_roots; CREATE TABLE project_roots(project_id TEXT, path TEXT); INSERT INTO project_roots VALUES ('p', ' '), ('p', '/one')")
+        XCTAssertEqual(reader.read(home: fixture.home).projects["p"]?.primaryRoot, "/one")
+        try fixture.execute("INSERT INTO project_roots VALUES ('p', '/two')")
+        XCTAssertNil(reader.read(home: fixture.home).projects["p"]?.primaryRoot)
+    }
+
     func testOptionalTaskMetadataReachesSnapshotsAndAncestors() async throws {
         let fixture = try SQLiteFixture(); try fixture.threads()
         try fixture.execute("ALTER TABLE threads ADD COLUMN cwd TEXT; ALTER TABLE threads ADD COLUMN project_id TEXT")
@@ -129,7 +149,7 @@ final class TaskProjectContextTests: XCTestCase {
                       pending: completed ? nil : ["thread"])
             let resolved = await resolver.resolve(tasks: read.tasks, ancestors: read.ancestors, home: fixture.home)
             let assignments = Dictionary(uniqueKeysWithValues: resolved.tasks.map { ($0.id, $0.projectAssignment) })
-            XCTAssertEqual(assignments["missing"], .project(TaskProject(id: "new", name: "Database", roots: ["/repo", "/second"])))
+            XCTAssertEqual(assignments["missing"], .project(TaskProject(id: "new", name: "Database", roots: ["/repo", "/second"], primaryRoot: "/repo")))
             XCTAssertEqual(assignments["explicit"], .unassigned)
             let groups = TaskProjectGroup.make(groups: TaskGroup.make(tasks: resolved.tasks, ancestors: resolved.ancestors))
             XCTAssertEqual(groups.map(\.project?.id), ["new", nil])

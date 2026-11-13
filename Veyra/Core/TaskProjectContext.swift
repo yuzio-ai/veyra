@@ -102,7 +102,8 @@ final class TaskProjectContextReader {
         context.membershipHosts = desktop.membershipHosts
         for project in desktop.projects.values where migration?.projectsMigrated != true {
             let id = context.aliases[project.id] ?? project.id
-            context.projects[id] = TaskProject(id: id, name: project.name, roots: project.rootPaths)
+            let roots = project.rootPaths.compactMap(TaskText.nonempty)
+            context.projects[id] = TaskProject(id: id, name: project.name, roots: roots)
         }
         // Until the project catalog migration completes, legacy names/roots win.
         for project in databaseProjects {
@@ -122,16 +123,25 @@ final class TaskProjectContextReader {
         let columns = try db.columns(in: "projects")
         guard columns.contains("id"), columns.contains("name") else { return [] }
         let rootColumns = try db.columns(in: "project_roots")
+        let hasPosition = rootColumns.contains("position")
         var roots: [String: [String]] = [:]
+        var primaryRoots: [String: [String]] = [:]
         if rootColumns.contains("project_id"), rootColumns.contains("path") {
-            let order = rootColumns.contains("position") ? "project_id, position" : "project_id, path"
-            for row in try db.rows("SELECT project_id, path FROM project_roots ORDER BY \(order)") {
-                if let id = row["project_id"], let path = row["path"] { roots[id, default: []].append(path) }
+            let order = hasPosition ? "project_id, position" : "project_id, path"
+            let position = hasPosition ? "position" : "NULL AS position"
+            for row in try db.rows("SELECT project_id, path, \(position) FROM project_roots ORDER BY \(order)") {
+                guard let id = TaskText.nonempty(row["project_id"]),
+                      let path = TaskText.nonempty(row["path"]) else { continue }
+                roots[id, default: []].append(path)
+                if row["position"] == "0" { primaryRoots[id, default: []].append(path) }
             }
         }
         return try db.rows("SELECT id, name FROM projects").compactMap { row in
             guard let id = TaskText.nonempty(row["id"]), let name = TaskText.nonempty(row["name"]) else { return nil }
-            return TaskProject(id: id, name: name, roots: roots[id] ?? [])
+            let paths = roots[id] ?? []
+            let candidates = hasPosition ? (primaryRoots[id] ?? []) : paths
+            let primary = candidates.count == 1 ? candidates.first : nil
+            return TaskProject(id: id, name: name, roots: paths, primaryRoot: primary)
         }
     }
 }

@@ -4,6 +4,18 @@ struct TaskProject: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     let roots: [String]
+    let primaryRoot: String?
+
+    init(id: String, name: String, roots: [String]) {
+        self.init(id: id, name: name, roots: roots, primaryRoot: roots.first.flatMap(TaskText.nonempty))
+    }
+
+    init(id: String, name: String, roots: [String], primaryRoot: String?) {
+        self.id = id
+        self.name = name
+        self.roots = roots
+        self.primaryRoot = primaryRoot
+    }
 }
 
 /// Unavailable metadata allows inference; an explicit projectless choice does not.
@@ -198,17 +210,15 @@ actor TaskProjectResolver {
         guard let path = TaskRepositoryIdentity.canonicalPath(path) else { return .unavailable }
         var matches: [TaskProject] = [], longest = -1
         for project in context.projects.values {
-            for root in project.roots {
-                guard let root = TaskRepositoryIdentity.canonicalPath(root),
-                      path == root || path.hasPrefix(root == "/" ? "/" : root + "/") else { continue }
-                if root.count > longest { longest = root.count; matches = [project] }
-                else if root.count == longest { matches.append(project) }
-            }
+            guard let root = TaskRepositoryIdentity.canonicalPath(project.primaryRoot),
+                  path == root || path.hasPrefix(root == "/" ? "/" : root + "/") else { continue }
+            if root.count > longest { longest = root.count; matches = [project] }
+            else if root.count == longest { matches.append(project) }
         }
         if longest >= 0 { return unique(matches) }
         guard let repository = repositories.identity(for: path, now: now) else { return .unavailable }
         for project in context.projects.values {
-            if project.roots.contains(where: { repositories.identity(for: $0, now: now) == repository }) {
+            if let root = project.primaryRoot, repositories.identity(for: root, now: now) == repository {
                 matches.append(project)
             }
         }

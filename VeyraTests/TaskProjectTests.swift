@@ -80,15 +80,33 @@ final class TaskProjectTests: XCTestCase {
         let broad = project("broad", roots: ["/workspace", "/shared"])
         let nested = project("nested", roots: ["/workspace/app", "/other"])
         let overlap = project("overlap", roots: ["/shared"])
-        let context = TaskProjectContext(projects: [broad.id: broad, nested.id: nested, overlap.id: overlap])
+        let tiedA = project("tied-a", roots: ["/tied"])
+        let tiedB = project("tied-b", roots: ["/tied"])
+        let context = TaskProjectContext(projects: [
+            broad.id: broad, nested.id: nested, overlap.id: overlap, tiedA.id: tiedA, tiedB.id: tiedB])
         let result = await TaskProjectResolver().resolve(tasks: [
             task("nested", path: "/workspace/app/src"), task("prefix", path: "/workspace/application"),
-            task("ambiguous", path: "/shared/sub"), task("outside", path: "/workspaces"),
-            task("other", path: "/other/sub"),
+            task("shared", path: "/shared/sub"), task("ambiguous", path: "/tied/sub"),
+            task("outside", path: "/workspaces"), task("other", path: "/other/sub"),
             task("relative", path: "workspace/app"), task("no-path")], ancestors: [], context: context, now: date)
         XCTAssertEqual(result.tasks.map(\.projectAssignment), [
-            .project(nested), .project(broad), .unavailable, .unavailable,
-            .project(nested), .unavailable, .unavailable])
+            .project(nested), .project(broad), .project(overlap), .unavailable,
+            .unavailable, .unavailable, .unavailable, .unavailable])
+    }
+
+    func testPrimaryDirectoryExcludesOtherProjectsSecondaryDirectories() async {
+        let veyra = project("veyra", roots: ["/veyra"])
+        let website = project("website", roots: ["/website", "/veyra"])
+        let duplicate = project("duplicate", roots: ["/veyra"])
+        let resolver = TaskProjectResolver()
+        let context = TaskProjectContext(projects: [veyra.id: veyra, website.id: website])
+        let result = await resolver.resolve(tasks: [task("t3", path: "/veyra/src"),
+                                                   task("explicit", path: "/veyra", projectID: "website")],
+                                            ancestors: [], context: context, now: date)
+        XCTAssertEqual(result.tasks.map(\.projectAssignment), [.project(veyra), .project(website)])
+        let ambiguous = await resolver.resolve(tasks: [task("ambiguous", path: "/veyra")], ancestors: [],
+            context: TaskProjectContext(projects: [veyra.id: veyra, duplicate.id: duplicate]), now: date)
+        XCTAssertEqual(ambiguous.tasks.first?.projectAssignment, .unavailable)
     }
 
     func testCorruptDesktopMappingDoesNotGuessDesktopMembershipButOtherSourcesCanInfer() async {
